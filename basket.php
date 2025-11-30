@@ -64,7 +64,9 @@ if (!empty($basket)) {
 
                 // How many units already booked in that time range?
                 $sql = "
-                    SELECT COALESCE(SUM(ri.quantity), 0) AS booked_qty
+                    SELECT
+                        COALESCE(SUM(CASE WHEN r.status IN ('pending','confirmed') THEN ri.quantity END), 0) AS pending_qty,
+                        COALESCE(SUM(CASE WHEN r.status = 'completed' THEN ri.quantity END), 0) AS completed_qty
                     FROM reservation_items ri
                     JOIN reservations r ON r.id = ri.reservation_id
                     WHERE ri.model_id = :model_id
@@ -77,8 +79,18 @@ if (!empty($basket)) {
                     ':start'    => $previewStart,
                     ':end'      => $previewEnd,
                 ]);
-                $row = $stmt->fetch();
-                $booked = $row ? (int)$row['booked_qty'] : 0;
+                $row          = $stmt->fetch();
+                $pendingQty   = $row ? (int)$row['pending_qty'] : 0;
+                $completedQty = $row ? (int)$row['completed_qty'] : 0;
+
+                // For completed reservations, only count what is still checked out in Snipe-IT
+                $activeCheckedOut = count_checked_out_assets_by_model($mid);
+                $bookedFromCompleted = min($completedQty, $activeCheckedOut);
+
+                $booked = $pendingQty + $completedQty;
+                if ($bookedFromCompleted < $completedQty) {
+                    $booked = $pendingQty + $bookedFromCompleted;
+                }
 
                 // Total physical units in Snipe-IT
                 $totalHardware = get_model_hardware_count($mid);

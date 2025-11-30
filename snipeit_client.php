@@ -378,6 +378,32 @@ function list_assets_by_model(int $modelId, int $maxResults = 300): array
 }
 
 /**
+ * Count how many assets for a model are currently checked out/assigned.
+ *
+ * @param int $modelId
+ * @return int
+ * @throws Exception
+ */
+function count_checked_out_assets_by_model(int $modelId): int
+{
+    $assets = list_assets_by_model($modelId, 500);
+    $count = 0;
+    foreach ($assets as $a) {
+        $assigned = $a['assigned_to'] ?? ($a['assigned_to_fullname'] ?? '');
+        $statusRaw = $a['status_label'] ?? '';
+        if (is_array($statusRaw)) {
+            $statusRaw = $statusRaw['name'] ?? ($statusRaw['status_meta'] ?? '');
+        }
+        $status = strtolower((string)$statusRaw);
+
+        if (!empty($assigned) || strpos($status, 'checked out') !== false) {
+            $count++;
+        }
+    }
+    return $count;
+}
+
+/**
  * Find a single Snipe-IT user by email or name.
  *
  * Uses /users?search=... and tries to reduce to a single match:
