@@ -84,6 +84,8 @@ try {
                    class="app-nav-link <?= $active === 'staff_checkout.php' ? 'active' : '' ?>">Checkout</a>
                 <a href="quick_checkout.php"
                    class="app-nav-link <?= $active === 'quick_checkout.php' ? 'active' : '' ?>">Quick Checkout</a>
+                <a href="quick_checkin.php"
+                   class="app-nav-link <?= $active === 'quick_checkin.php' ? 'active' : '' ?>">Quick Checkin</a>
             <?php endif; ?>
         </nav>
 

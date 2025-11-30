@@ -492,3 +492,44 @@ function checkout_asset_to_user(int $assetId, int $userId, string $note = ''): v
         throw new Exception('Snipe-IT checkout did not succeed: ' . $message);
     }
 }
+
+/**
+ * Check in a single asset in Snipe-IT by ID.
+ *
+ * @param int    $assetId
+ * @param string $note
+ * @return void
+ * @throws Exception
+ */
+function checkin_asset(int $assetId, string $note = ''): void
+{
+    if ($assetId <= 0) {
+        throw new InvalidArgumentException('Invalid asset ID for checkin.');
+    }
+
+    $payload = [];
+    if ($note !== '') {
+        $payload['note'] = $note;
+    }
+
+    $resp = snipeit_request('POST', 'hardware/' . $assetId . '/checkin', $payload);
+
+    $status = $resp['status'] ?? 'success';
+    $messagesField = $resp['messages'] ?? ($resp['message'] ?? '');
+    $flatMessages  = [];
+    if (is_array($messagesField)) {
+        array_walk_recursive($messagesField, function ($val) use (&$flatMessages) {
+            if (is_string($val) && trim($val) !== '') {
+                $flatMessages[] = $val;
+            }
+        });
+    } elseif (is_string($messagesField) && trim($messagesField) !== '') {
+        $flatMessages[] = $messagesField;
+    }
+    $message = $flatMessages ? implode('; ', $flatMessages) : 'Unknown API response';
+    $hasExplicitError = is_array($messagesField) && isset($messagesField['error']);
+
+    if ($status !== 'success' || $hasExplicitError) {
+        throw new Exception('Snipe-IT checkin did not succeed: ' . $message);
+    }
+}
