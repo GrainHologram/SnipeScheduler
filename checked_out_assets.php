@@ -103,6 +103,9 @@ try {
                                 $name = $a['name'] ?? '';
                                 $model = $a['model']['name'] ?? '';
                                 $user  = $a['assigned_to'] ?? ($a['assigned_to_fullname'] ?? '');
+                                if (is_array($user)) {
+                                    $user = $user['name'] ?? ($user['username'] ?? '');
+                                }
                                 $checkedOut = $a['last_checkout'] ?? '';
                                 $expected   = $a['expected_checkin'] ?? '';
                             ?>
