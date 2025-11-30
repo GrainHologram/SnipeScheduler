@@ -638,14 +638,26 @@ function list_checked_out_assets(bool $overdueOnly = false): array
             continue;
         }
 
+        // Normalize date fields
+        $lastCheckout = $row['last_checkout'] ?? '';
+        if (is_array($lastCheckout)) {
+            $lastCheckout = $lastCheckout['date'] ?? '';
+        }
+        $expectedCheckin = $row['expected_checkin'] ?? '';
+        if (is_array($expectedCheckin)) {
+            $expectedCheckin = $expectedCheckin['date'] ?? '';
+        }
+
         // Overdue check
         if ($overdueOnly) {
-            $exp = $row['expected_checkin'] ?? '';
-            $expTs = $exp ? strtotime($exp) : null;
+            $expTs = $expectedCheckin ? strtotime($expectedCheckin) : null;
             if (!$expTs || $expTs > $now) {
                 continue;
             }
         }
+
+        $row['_last_checkout_norm']   = $lastCheckout;
+        $row['_expected_checkin_norm'] = $expectedCheckin;
 
         $filtered[] = $row;
     }

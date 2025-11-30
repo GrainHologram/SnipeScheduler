@@ -4,6 +4,22 @@ require_once __DIR__ . '/snipeit_client.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/footer.php';
 
+function format_display_date($val): string
+{
+    if (is_array($val)) {
+        $val = $val['date'] ?? '';
+    }
+    if (empty($val)) {
+        return '';
+    }
+    try {
+        $dt = new DateTime($val);
+        return $dt->format('d/m/Y');
+    } catch (Throwable $e) {
+        return $val;
+    }
+}
+
 $active  = basename($_SERVER['PHP_SELF']);
 $isStaff = !empty($currentUser['is_admin']);
 
@@ -106,23 +122,17 @@ try {
                                 if (is_array($user)) {
                                     $user = $user['name'] ?? ($user['username'] ?? '');
                                 }
-                                $checkedOut = $a['last_checkout'] ?? '';
-                                if (is_array($checkedOut)) {
-                                    $checkedOut = $checkedOut['date'] ?? '';
-                                }
-                                $expected   = $a['expected_checkin'] ?? '';
-                                if (is_array($expected)) {
-                                    $expected = $expected['date'] ?? '';
-                                }
+                                $checkedOut = $a['_last_checkout_norm'] ?? ($a['last_checkout'] ?? '');
+                                $expected   = $a['_expected_checkin_norm'] ?? ($a['expected_checkin'] ?? '');
                             ?>
                             <tr>
                                 <td><?= h($atag) ?></td>
                                 <td><?= h($name) ?></td>
                                 <td><?= h($model) ?></td>
                                 <td><?= h($user) ?></td>
-                                <td><?= h($checkedOut) ?></td>
+                                <td><?= h(format_display_date($checkedOut)) ?></td>
                                 <td class="<?= ($tab === 'overdue' ? 'text-danger fw-semibold' : '') ?>">
-                                    <?= h($expected) ?>
+                                    <?= h(format_display_date($expected)) ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
