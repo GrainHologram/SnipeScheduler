@@ -4,10 +4,12 @@ require_once __DIR__ . '/snipeit_client.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/footer.php';
 
+$config   = require __DIR__ . '/config.php';
+$isStaff  = !empty($currentUser['is_admin']);
+
 $bookingOverride = $_SESSION['booking_user_override'] ?? null;
 $activeUser      = $bookingOverride ?: $currentUser;
 
-$config   = require __DIR__ . '/config.php';
 $ldapCfg  = $config['ldap'] ?? [];
 $appCfg   = $config['app'] ?? [];
 $debugOn  = !empty($appCfg['debug']);
@@ -95,11 +97,8 @@ if ($isStaff && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') 
     exit;
 }
 
-$config = require __DIR__ . '/config.php';
-
 // Active nav + staff flag
 $active  = basename($_SERVER['PHP_SELF']);
-$isStaff = !empty($currentUser['is_admin']);
 
 // ---------------------------------------------------------------------
 // Helper: decode Snipe-IT strings safely
