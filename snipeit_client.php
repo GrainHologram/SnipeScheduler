@@ -383,6 +383,36 @@ function list_assets_by_model(int $modelId, int $maxResults = 300): array
 }
 
 /**
+ * Count requestable assets for a model (asset-level requestable flag).
+ *
+ * @param int $modelId
+ * @return int
+ * @throws Exception
+ */
+function count_requestable_assets_by_model(int $modelId): int
+{
+    static $cache = [];
+    if ($modelId <= 0) {
+        throw new InvalidArgumentException('Model ID must be positive.');
+    }
+    if (isset($cache[$modelId])) {
+        return $cache[$modelId];
+    }
+
+    $assets = list_assets_by_model($modelId, 500);
+    $count  = 0;
+
+    foreach ($assets as $a) {
+        if (!empty($a['requestable'])) {
+            $count++;
+        }
+    }
+
+    $cache[$modelId] = $count;
+    return $count;
+}
+
+/**
  * Count how many assets for a model are currently checked out/assigned.
  *
  * @param int $modelId

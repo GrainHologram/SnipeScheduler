@@ -220,7 +220,12 @@ try {
                     $manuName   = $model['manufacturer']['name'] ?? '';
                     $catName    = $model['category']['name'] ?? '';
                     $imagePath  = $model['image'] ?? '';
-                    $assetCount = isset($model['assets_count']) ? (int)$model['assets_count'] : null;
+                    $assetCount = null;
+                    try {
+                        $assetCount = count_requestable_assets_by_model($modelId);
+                    } catch (Throwable $e) {
+                        $assetCount = isset($model['assets_count']) ? (int)$model['assets_count'] : null;
+                    }
                     $maxQty     = ($assetCount && $assetCount > 0) ? $assetCount : 10;
                     $notes      = $model['notes'] ?? '';
                     if (is_array($notes)) {

@@ -48,10 +48,19 @@ if (!empty($basket)) {
             $modelId = (int)$modelId;
             $qty     = (int)$qty;
 
+            // Count requestable assets for limits/availability
+            $requestableCount = null;
+            try {
+                $requestableCount = count_requestable_assets_by_model($modelId);
+            } catch (Throwable $e) {
+                $requestableCount = null;
+            }
+
             $models[] = [
-                'id'    => $modelId,
-                'data'  => get_model($modelId),
-                'qty'   => $qty,
+                'id'                => $modelId,
+                'data'              => get_model($modelId),
+                'qty'               => $qty,
+                'requestable_count' => $requestableCount,
             ];
             $totalItems     += $qty;
             $distinctModels += 1;
@@ -61,6 +70,7 @@ if (!empty($basket)) {
         if ($previewStart && $previewEnd) {
             foreach ($models as $entry) {
                 $mid = (int)$entry['id'];
+                $requestableTotal = $entry['requestable_count'] ?? null;
 
                 // How many units already booked in that time range?
                 $sql = "
@@ -92,17 +102,23 @@ if (!empty($basket)) {
                     $booked = $pendingQty + $bookedFromCompleted;
                 }
 
-                // Total physical units in Snipe-IT
-                $totalHardware = get_model_hardware_count($mid);
+                // Total requestable units in Snipe-IT
+                if ($requestableTotal === null) {
+                    try {
+                        $requestableTotal = count_requestable_assets_by_model($mid);
+                    } catch (Throwable $e) {
+                        $requestableTotal = 0;
+                    }
+                }
 
-                if ($totalHardware > 0) {
-                    $free = max(0, $totalHardware - $booked);
+                if ($requestableTotal > 0) {
+                    $free = max(0, $requestableTotal - $booked);
                 } else {
                     $free = null; // unknown
                 }
 
                 $availability[$mid] = [
-                    'total'  => $totalHardware,
+                    'total'  => $requestableTotal,
                     'booked' => $booked,
                     'free'   => $free,
                 ];
