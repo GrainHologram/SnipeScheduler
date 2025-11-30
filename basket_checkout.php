@@ -4,7 +4,8 @@ require 'db.php';
 require 'snipeit_client.php';
 require_once __DIR__ . '/footer.php';
 
-$user   = $currentUser;
+$userOverride = $_SESSION['booking_user_override'] ?? null;
+$user   = $userOverride ?: $currentUser;
 $basket = $_SESSION['basket'] ?? [];
 
 if (empty($basket)) {

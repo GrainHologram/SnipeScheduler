@@ -4,7 +4,8 @@ require 'db.php';
 require 'snipeit_client.php';
 require_once __DIR__ . '/footer.php';
 
-$user = $currentUser;
+$userOverride = $_SESSION['booking_user_override'] ?? null;
+$user = $userOverride ?: $currentUser;
 
 $assetId  = (int)($_POST['asset_id'] ?? 0);
 $startRaw = $_POST['start_datetime'] ?? '';

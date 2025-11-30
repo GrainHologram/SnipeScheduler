@@ -4,6 +4,97 @@ require_once __DIR__ . '/snipeit_client.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/footer.php';
 
+$bookingOverride = $_SESSION['booking_user_override'] ?? null;
+$activeUser      = $bookingOverride ?: $currentUser;
+
+$config   = require __DIR__ . '/config.php';
+$ldapCfg  = $config['ldap'] ?? [];
+$appCfg   = $config['app'] ?? [];
+$debugOn  = !empty($appCfg['debug']);
+
+// Staff-only LDAP autocomplete endpoint
+if ($isStaff && ($_GET['ajax'] ?? '') === 'ldap_user_search') {
+    header('Content-Type: application/json');
+
+    $q = trim($_GET['q'] ?? '');
+    if ($q === '' || strlen($q) < 2) {
+        echo json_encode(['results' => []]);
+        exit;
+    }
+
+    try {
+        if (!empty($ldapCfg['ignore_cert'])) {
+            putenv('LDAPTLS_REQCERT=never');
+        }
+
+        $ldap = @ldap_connect($ldapCfg['host']);
+        if (!$ldap) {
+            throw new Exception('Cannot connect to LDAP host');
+        }
+
+        ldap_set_option($ldap, LDAP_OPT_PROTOCOL_VERSION, 3);
+        ldap_set_option($ldap, LDAP_OPT_REFERRALS, 0);
+
+        if (!@ldap_bind($ldap, $ldapCfg['bind_dn'], $ldapCfg['bind_password'])) {
+            throw new Exception('LDAP service bind failed: ' . ldap_error($ldap));
+        }
+
+        $filter = sprintf(
+            '(|(mail=*%1$s*)(displayName=*%1$s*)(sAMAccountName=*%1$s*))',
+            ldap_escape($q, null, LDAP_ESCAPE_FILTER)
+        );
+
+        $attrs = ['mail', 'displayName', 'givenName', 'sn', 'sAMAccountName'];
+        $search = @ldap_search($ldap, $ldapCfg['base_dn'], $filter, $attrs, 0, 20);
+        $entries = $search ? ldap_get_entries($ldap, $search) : ['count' => 0];
+
+        $results = [];
+        for ($i = 0; $i < ($entries['count'] ?? 0); $i++) {
+            $e    = $entries[$i];
+            $mail = $e['mail'][0] ?? '';
+            $dn   = $e['displayname'][0] ?? '';
+            $fn   = $e['givenname'][0] ?? '';
+            $ln   = $e['sn'][0] ?? '';
+            $name = $dn !== '' ? $dn : trim($fn . ' ' . $ln);
+            $sam  = $e['samaccountname'][0] ?? '';
+
+            $results[] = [
+                'email' => $mail,
+                'name'  => $name !== '' ? $name : $mail,
+                'sam'   => $sam,
+            ];
+        }
+
+        ldap_unbind($ldap);
+        echo json_encode(['results' => $results]);
+    } catch (Throwable $e) {
+        if (isset($ldap) && $ldap) {
+            @ldap_unbind($ldap);
+        }
+        http_response_code(500);
+        echo json_encode(['error' => $debugOn ? $e->getMessage() : 'LDAP error']);
+    }
+    exit;
+}
+
+// Handle staff override selection
+if ($isStaff && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'set_booking_user') {
+    $selEmail = trim($_POST['booking_user_email'] ?? '');
+    $selName  = trim($_POST['booking_user_name'] ?? '');
+    if ($selEmail !== '') {
+        $_SESSION['booking_user_override'] = [
+            'email'      => $selEmail,
+            'first_name' => $selName,
+            'last_name'  => '',
+            'id'         => 0,
+        ];
+    } else {
+        unset($_SESSION['booking_user_override']);
+    }
+    header('Location: catalogue.php');
+    exit;
+}
+
 $config = require __DIR__ . '/config.php';
 
 // Active nav + staff flag
@@ -187,6 +278,35 @@ if (!empty($categories)) {
         <?php endif; ?>
 
         <!-- Filters -->
+        <?php if ($isStaff): ?>
+            <div class="alert alert-info d-flex flex-column flex-md-row align-items-md-center justify-content-md-between">
+                <div class="mb-2 mb-md-0">
+                    <strong>Booking for:</strong>
+                    <?= h($activeUser['email'] ?? '') ?>
+                    <?php if (!empty($activeUser['first_name'])): ?>
+                        (<?= h(trim(($activeUser['first_name'] ?? '') . ' ' . ($activeUser['last_name'] ?? ''))) ?>)
+                    <?php endif; ?>
+                </div>
+                <form method="post" class="d-flex gap-2 mb-0 flex-wrap">
+                    <input type="hidden" name="mode" value="set_booking_user">
+                    <input type="hidden" name="booking_user_email" id="booking_user_email">
+                    <input type="hidden" name="booking_user_name" id="booking_user_name">
+                    <div class="position-relative">
+                        <input type="text"
+                               id="booking_user_input"
+                               class="form-control form-control-sm"
+                               placeholder="Start typing email or name"
+                               autocomplete="off">
+                        <div class="list-group position-absolute w-100"
+                             id="booking_user_suggestions"
+                             style="z-index: 1050; max-height: 220px; overflow-y: auto; display: none;"></div>
+                    </div>
+                    <button class="btn btn-sm btn-primary" type="submit">Use</button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" onclick="clearBookingUser()">Clear</button>
+                </form>
+            </div>
+        <?php endif; ?>
+
         <form class="row g-2 mb-3" method="get" action="catalogue.php">
             <div class="col-md-4">
                 <input type="text"
@@ -403,6 +523,12 @@ if (!empty($categories)) {
 document.addEventListener('DOMContentLoaded', function () {
     const viewBasketBtn = document.getElementById('view-basket-btn');
     const forms = document.querySelectorAll('.add-to-basket-form');
+    const bookingInput = document.getElementById('booking_user_input');
+    const bookingList  = document.getElementById('booking_user_suggestions');
+    const bookingEmail = document.getElementById('booking_user_email');
+    const bookingName  = document.getElementById('booking_user_name');
+    let bookingTimer   = null;
+    let bookingQuery   = '';
 
     forms.forEach(function (form) {
         form.addEventListener('submit', function (e) {
@@ -439,11 +565,81 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                 })
                 .catch(function () {
-                    // Fallback: if AJAX fails for any reason, do normal form submit
-                    form.submit();
-                });
-        });
+                // Fallback: if AJAX fails for any reason, do normal form submit
+                form.submit();
+            });
     });
+
+    function hideBookingSuggestions() {
+        if (!bookingList) return;
+        bookingList.style.display = 'none';
+        bookingList.innerHTML = '';
+    }
+
+    function renderBookingSuggestions(items) {
+        if (!bookingList) return;
+        bookingList.innerHTML = '';
+        if (!items || !items.length) {
+            hideBookingSuggestions();
+            return;
+        }
+        items.forEach(function (item) {
+            const email = item.email || '';
+            const name = item.name || '';
+            const label = (name && email && name !== email) ? (name + ' (' + email + ')') : (name || email);
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'list-group-item list-group-item-action';
+            btn.textContent = label;
+            btn.addEventListener('click', function () {
+                bookingInput.value = label;
+                bookingEmail.value = email;
+                bookingName.value  = name || email;
+                hideBookingSuggestions();
+            });
+            bookingList.appendChild(btn);
+        });
+        bookingList.style.display = 'block';
+    }
+
+    if (bookingInput && bookingList) {
+        bookingInput.addEventListener('input', function () {
+            const q = bookingInput.value.trim();
+            if (q.length < 2) {
+                hideBookingSuggestions();
+                return;
+            }
+            if (bookingTimer) clearTimeout(bookingTimer);
+            bookingTimer = setTimeout(function () {
+                bookingQuery = q;
+                fetch('catalogue.php?ajax=ldap_user_search&q=' + encodeURIComponent(q), {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                    .then(function (res) { return res.ok ? res.json() : null; })
+                    .then(function (data) {
+                        if (bookingQuery !== q) return;
+                        renderBookingSuggestions(data && data.results ? data.results : []);
+                    })
+                    .catch(function () {
+                        hideBookingSuggestions();
+                    });
+            }, 250);
+        });
+
+        bookingInput.addEventListener('blur', function () {
+            setTimeout(hideBookingSuggestions, 150);
+        });
+    }
+});
+
+function clearBookingUser() {
+    const email = document.getElementById('booking_user_email');
+    const name  = document.getElementById('booking_user_name');
+    const input = document.getElementById('booking_user_input');
+    if (email) email.value = '';
+    if (name) name.value = '';
+    if (input) input.value = '';
+}
 });
 </script>
 <?php reserveit_footer(); ?>
