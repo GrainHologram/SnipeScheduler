@@ -650,11 +650,9 @@ $isStaff = !empty($currentUser['is_admin']);
                                                 $aid   = (int)($opt['id'] ?? 0);
                                                 $atag  = $opt['asset_tag'] ?? ('ID ' . $aid);
                                                 $aname = $opt['name'] ?? '';
-                                                $astat = $opt['status_label'] ?? '';
-                                                if (is_array($astat)) {
-                                                    $astat = $astat['name'] ?? ($astat['status_meta'] ?? $astat['label'] ?? '');
-                                                }
-                                                $label = trim($atag . ' – ' . $aname . ($astat ? " ({$astat})" : ''));
+                                                $label = $aname !== ''
+                                                    ? trim($atag . ' – ' . $aname)
+                                                    : $atag;
                                                 ?>
                                                 <option value="<?= $aid ?>"><?= h($label) ?></option>
                                             <?php endforeach; ?>
