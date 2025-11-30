@@ -126,7 +126,7 @@ $isStaff = !empty($currentUser['is_admin']);
                     <?= h($reservation['status'] ?? '') ?><br>
 
                     <?php if (!empty($reservation['asset_name_cache'])): ?>
-                        <strong>Cached summary:</strong>
+                        <strong>Checked-out assets:</strong>
                         <?= h($reservation['asset_name_cache']) ?><br>
                     <?php endif; ?>
                 </p>

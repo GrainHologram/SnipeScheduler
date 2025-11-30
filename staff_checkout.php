@@ -384,9 +384,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $checkoutMessages[] = "Checked out asset {$a['asset_tag']} to {$userName}.";
                     }
 
-                    // Mark reservation as checked out (use existing status values)
-                    $upd = $pdo->prepare("UPDATE reservations SET status = 'completed' WHERE id = :id");
-                    $upd->execute([':id' => $selectedReservationId]);
+                    // Mark reservation as checked out and store asset tags
+                    $assetTags = array_map(function ($a) {
+                        return $a['asset_tag'];
+                    }, $assetsToCheckout);
+                    $assetsText = 'Assets checked out: ' . implode(', ', $assetTags);
+
+                    $upd = $pdo->prepare("
+                        UPDATE reservations
+                           SET status = 'completed',
+                               asset_name_cache = :assets_text
+                         WHERE id = :id
+                    ");
+                    $upd->execute([
+                        ':id'          => $selectedReservationId,
+        ':assets_text' => $assetsText,
+                    ]);
                     $checkoutMessages[] = 'Reservation marked as checked out.';
 
                     // Clear selected reservation to avoid repeat

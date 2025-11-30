@@ -133,7 +133,12 @@ try {
 
                             <?php if ($summary !== ''): ?>
                                 <strong>Items:</strong>
-                                <?= h($summary) ?>
+                                <?= h($summary) ?><br>
+                            <?php endif; ?>
+
+                            <?php if (!empty($res['asset_name_cache'])): ?>
+                                <strong>Checked-out assets:</strong>
+                                <?= h($res['asset_name_cache']) ?>
                             <?php endif; ?>
                         </p>
 

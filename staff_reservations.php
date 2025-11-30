@@ -204,8 +204,9 @@ try {
                             <?php
                                 $items      = get_reservation_items_with_names($pdo, (int)$r['id']);
                                 $itemsText  = build_items_summary_text($items);
-                                if ($itemsText === '' && !empty($r['asset_name_cache'])) {
-                                    $itemsText = $r['asset_name_cache']; // fallback
+                                if (!empty($r['asset_name_cache'])) {
+                                    $extra = 'Assets: ' . $r['asset_name_cache'];
+                                    $itemsText = $itemsText ? $itemsText . ' | ' . $extra : $extra;
                                 }
                             ?>
                             <tr>
