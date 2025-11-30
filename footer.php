@@ -11,7 +11,8 @@ if (!function_exists('reserveit_footer')) {
         $versionEsc  = htmlspecialchars($version, ENT_QUOTES, 'UTF-8');
 
         echo '<footer class="text-center text-muted mt-4 small">'
-            . 'ReserveIT Version ' . $versionEsc . ' - Created by Ben Pirozzolo'
+            . 'ReserveIT Version ' . $versionEsc . ' - Created by '
+            . '<a href="https://www.linkedin.com/in/ben-pirozzolo-76212a88" target="_blank" rel="noopener noreferrer">Ben Pirozzolo</a>'
             . '</footer>';
     }
 }
