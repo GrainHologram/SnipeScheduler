@@ -62,5 +62,6 @@ return [
     'app' => [
         'timezone' => 'Europe/Jersey',
         'debug'    => true,
+        'missed_cutoff_minutes' => 60, // minutes after start time before marking reservation as missed
     ],
 ];
