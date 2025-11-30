@@ -2,6 +2,7 @@
 require 'auth.php';
 require 'db.php';
 require 'snipeit_client.php';
+require_once __DIR__ . '/footer.php';
 
 $user = $currentUser;
 
@@ -84,7 +85,7 @@ $insert->execute([
     ':student_id'       => $studentId,
     ':snipeit_user_id'  => $user['id'],
     ':asset_id'         => $assetId,
-    ':asset_name_cache' => $assetName,
+    ':asset_name_cache' => 'Pending checkout',
     ':start_datetime'   => $start,
     ':end_datetime'     => $end,
 ]);
@@ -106,5 +107,6 @@ $insert->execute([
         <a href="my_bookings.php" class="btn btn-secondary">View my bookings</a>
     </p>
 </div>
+<?php reserveit_footer(); ?>
 </body>
 </html>

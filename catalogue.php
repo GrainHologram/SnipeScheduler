@@ -2,6 +2,7 @@
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/snipeit_client.php';
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/footer.php';
 
 $config = require __DIR__ . '/config.php';
 
@@ -121,7 +122,11 @@ try {
                class="app-nav-link <?= $active === 'my_bookings.php' ? 'active' : '' ?>">My bookings</a>
             <?php if ($isStaff): ?>
                 <a href="staff_reservations.php"
-                   class="app-nav-link <?= $active === 'staff_reservations.php' ? 'active' : '' ?>">Admin</a>
+                   class="app-nav-link <?= $active === 'staff_reservations.php' ? 'active' : '' ?>">Booking History</a>
+                <a href="staff_checkout.php"
+                   class="app-nav-link <?= $active === 'staff_checkout.php' ? 'active' : '' ?>">Checkout</a>
+                <a href="quick_checkout.php"
+                   class="app-nav-link <?= $active === 'quick_checkout.php' ? 'active' : '' ?>">Quick Checkout</a>
             <?php endif; ?>
         </nav>
 
@@ -354,5 +359,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 </script>
+<?php reserveit_footer(); ?>
 </body>
 </html>

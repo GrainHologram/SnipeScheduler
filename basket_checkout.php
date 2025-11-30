@@ -2,6 +2,7 @@
 require 'auth.php';
 require 'db.php';
 require 'snipeit_client.php';
+require_once __DIR__ . '/footer.php';
 
 $user   = $currentUser;
 $basket = $_SESSION['basket'] ?? [];
@@ -119,7 +120,7 @@ try {
         ':student_email'    => $studentEmail,
         ':student_id'       => $studentId,
         ':snipeit_user_id'  => $user['id'],
-        ':asset_name_cache' => $label,
+        ':asset_name_cache' => 'Pending checkout',
         ':start_datetime'   => $start,
         ':end_datetime'     => $end,
     ]);
@@ -172,5 +173,6 @@ try {
         <a href="my_bookings.php" class="btn btn-secondary">View my bookings</a>
     </p>
 </div>
+<?php reserveit_footer(); ?>
 </body>
 </html>

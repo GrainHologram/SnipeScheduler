@@ -2,6 +2,7 @@
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/booking_helpers.php';
+require_once __DIR__ . '/footer.php';
 
 /**
  * Convert YYYY-MM-DD → DD/MM/YYYY.
@@ -78,7 +79,11 @@ try {
                class="app-nav-link <?= $active === 'my_bookings.php' ? 'active' : '' ?>">My bookings</a>
             <?php if ($isStaff): ?>
                 <a href="staff_reservations.php"
-                   class="app-nav-link <?= $active === 'staff_reservations.php' ? 'active' : '' ?>">Admin</a>
+                   class="app-nav-link <?= $active === 'staff_reservations.php' ? 'active' : '' ?>">Booking History</a>
+                <a href="staff_checkout.php"
+                   class="app-nav-link <?= $active === 'staff_checkout.php' ? 'active' : '' ?>">Checkout</a>
+                <a href="quick_checkout.php"
+                   class="app-nav-link <?= $active === 'quick_checkout.php' ? 'active' : '' ?>">Quick Checkout</a>
             <?php endif; ?>
         </nav>
 
@@ -131,7 +136,12 @@ try {
 
                             <?php if ($summary !== ''): ?>
                                 <strong>Items:</strong>
-                                <?= h($summary) ?>
+                                <?= h($summary) ?><br>
+                            <?php endif; ?>
+
+                            <?php if (!empty($res['asset_name_cache'])): ?>
+                                <strong>Checked-out assets:</strong>
+                                <?= h($res['asset_name_cache']) ?>
                             <?php endif; ?>
                         </p>
 
@@ -163,5 +173,6 @@ try {
 
     </div>
 </div>
+<?php reserveit_footer(); ?>
 </body>
 </html>

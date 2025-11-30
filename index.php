@@ -1,6 +1,7 @@
 <?php
 require 'auth.php';
 require 'db.php';
+require_once __DIR__ . '/footer.php';
 
 $active  = basename($_SERVER['PHP_SELF']);
 $isStaff = !empty($currentUser['is_admin']);
@@ -28,14 +29,18 @@ $isStaff = !empty($currentUser['is_admin']);
             <a href="index.php"
                class="app-nav-link <?= $active === 'index.php' ? 'active' : '' ?>">Dashboard</a>
             <a href="catalogue.php"
-               class="app-nav-link <?= $active === 'catalogue.php' ? 'active' : '' ?>">Catalogue</a>
-            <a href="my_bookings.php"
-               class="app-nav-link <?= $active === 'my_bookings.php' ? 'active' : '' ?>">My bookings</a>
-            <?php if ($isStaff): ?>
-                <a href="staff_reservations.php"
-                   class="app-nav-link <?= $active === 'staff_reservations.php' ? 'active' : '' ?>">Admin</a>
-            <?php endif; ?>
-        </nav>
+           class="app-nav-link <?= $active === 'catalogue.php' ? 'active' : '' ?>">Catalogue</a>
+        <a href="my_bookings.php"
+           class="app-nav-link <?= $active === 'my_bookings.php' ? 'active' : '' ?>">My bookings</a>
+        <?php if ($isStaff): ?>
+            <a href="staff_reservations.php"
+               class="app-nav-link <?= $active === 'staff_reservations.php' ? 'active' : '' ?>">Booking History</a>
+            <a href="staff_checkout.php"
+               class="app-nav-link <?= $active === 'staff_checkout.php' ? 'active' : '' ?>">Checkout</a>
+            <a href="quick_checkout.php"
+               class="app-nav-link <?= $active === 'quick_checkout.php' ? 'active' : '' ?>">Quick Checkout</a>
+        <?php endif; ?>
+    </nav>
 
         <div class="top-bar mb-3">
             <div class="top-bar-user">
@@ -86,13 +91,40 @@ $isStaff = !empty($currentUser['is_admin']);
                 <div class="col-md-6">
                     <div class="card h-100">
                         <div class="card-body d-flex flex-column">
-                            <h5 class="card-title">Admin – reservations overview</h5>
+                            <h5 class="card-title">Booking History</h5>
                             <p class="card-text">
-                                View all student reservations, see what’s coming up today and this week,
-                                and coordinate which physical assets to hand out.
+                                See all past and current bookings, and coordinate which assets to hand out.
                             </p>
                             <a href="staff_reservations.php" class="btn btn-outline-primary mt-auto">
-                                Open admin view
+                                View booking history
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-body d-flex flex-column">
+                            <h5 class="card-title">Reservation Checkout</h5>
+                            <p class="card-text">
+                                Select a booking for today and check out specific assets against its models.
+                            </p>
+                            <a href="staff_checkout.php" class="btn btn-outline-primary mt-auto">
+                                Go to reservation checkout
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-body d-flex flex-column">
+                            <h5 class="card-title">Quick Checkout</h5>
+                            <p class="card-text">
+                                Perform ad-hoc bulk checkouts via Snipe-IT without selecting a reservation.
+                            </p>
+                            <a href="quick_checkout.php" class="btn btn-outline-primary mt-auto">
+                                Go to quick checkout
                             </a>
                         </div>
                     </div>
@@ -107,5 +139,6 @@ $isStaff = !empty($currentUser['is_admin']);
         </div>
     </div>
 </div>
+<?php reserveit_footer(); ?>
 </body>
 </html>

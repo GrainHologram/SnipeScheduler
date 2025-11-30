@@ -42,6 +42,16 @@ if ($email === '' || $password === '') {
 // ------------------------------------------------------------------
 // Connect to LDAP
 // ------------------------------------------------------------------
+if (!empty($ldapCfg['ignore_cert'])) {
+    putenv('LDAPTLS_REQCERT=never');
+    if (defined('LDAP_OPT_X_TLS_REQUIRE_CERT')) {
+        ldap_set_option(null, LDAP_OPT_X_TLS_REQUIRE_CERT, LDAP_OPT_X_TLS_NEVER);
+    }
+    if (defined('LDAP_OPT_X_TLS_NEWCTX')) {
+        ldap_set_option(null, LDAP_OPT_X_TLS_NEWCTX, 0); // reset TLS context per request
+    }
+}
+
 $ldap = @ldap_connect($ldapCfg['host']);
 if (!$ldap) {
     $_SESSION['login_error'] = 'Login system is currently unavailable (cannot connect to LDAP).';
@@ -51,15 +61,14 @@ if (!$ldap) {
 
 ldap_set_option($ldap, LDAP_OPT_PROTOCOL_VERSION, 3);
 ldap_set_option($ldap, LDAP_OPT_REFERRALS, 0);
-
-if (!empty($ldapCfg['ignore_cert'])) {
-    putenv('LDAPTLS_REQCERT=never');
-}
+ldap_set_option($ldap, LDAP_OPT_NETWORK_TIMEOUT, 5);
 
 // ------------------------------------------------------------------
 // Service bind (bind as service account)
 // ------------------------------------------------------------------
 if (!@ldap_bind($ldap, $ldapCfg['bind_dn'], $ldapCfg['bind_password'])) {
+    ldap_get_option($ldap, LDAP_OPT_DIAGNOSTIC_MESSAGE, $diagMsg);
+    error_log('LDAP service bind failed: ' . ldap_error($ldap) . ' (' . ($diagMsg ?? 'no detail') . ')');
     $_SESSION['login_error'] = $debugOn
         ? 'LDAP service bind failed: ' . ldap_error($ldap)
         : 'Login system is currently unavailable.';
@@ -109,6 +118,8 @@ if (empty($userDn)) {
 // Bind as user (check password)
 // ------------------------------------------------------------------
 if (!@ldap_bind($ldap, $userDn, $password)) {
+    ldap_get_option($ldap, LDAP_OPT_DIAGNOSTIC_MESSAGE, $diagMsg);
+    error_log('LDAP user bind failed for ' . $email . ': ' . ldap_error($ldap) . ' (' . ($diagMsg ?? 'no detail') . ')');
     $_SESSION['login_error'] = 'Incorrect email address or password.';
     header('Location: login.php');
     exit;

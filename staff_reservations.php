@@ -2,6 +2,10 @@
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/booking_helpers.php';
+require_once __DIR__ . '/footer.php';
+
+$active  = basename($_SERVER['PHP_SELF']);
+$isStaff = !empty($currentUser['is_admin']);
 
 /**
  * Convert YYYY-MM-DD → DD/MM/YYYY.
@@ -116,7 +120,13 @@ try {
             <a href="my_bookings.php"
                class="app-nav-link <?= $active === 'my_bookings.php' ? 'active' : '' ?>">My bookings</a>
             <a href="staff_reservations.php"
-               class="app-nav-link <?= $active === 'staff_reservations.php' ? 'active' : '' ?>">Admin</a>
+               class="app-nav-link <?= $active === 'staff_reservations.php' ? 'active' : '' ?>">Booking History</a>
+            <?php if ($isStaff): ?>
+            <a href="staff_checkout.php"
+               class="app-nav-link <?= $active === 'staff_checkout.php' ? 'active' : '' ?>">Checkout</a>
+            <a href="quick_checkout.php"
+               class="app-nav-link <?= $active === 'quick_checkout.php' ? 'active' : '' ?>">Quick Checkout</a>
+            <?php endif; ?>
         </nav>
 
         <!-- Top bar -->
@@ -197,8 +207,9 @@ try {
                             <?php
                                 $items      = get_reservation_items_with_names($pdo, (int)$r['id']);
                                 $itemsText  = build_items_summary_text($items);
-                                if ($itemsText === '' && !empty($r['asset_name_cache'])) {
-                                    $itemsText = $r['asset_name_cache']; // fallback
+                                if (!empty($r['asset_name_cache'])) {
+                                    $extra = 'Assets: ' . $r['asset_name_cache'];
+                                    $itemsText = $itemsText ? $itemsText . ' | ' . $extra : $extra;
                                 }
                             ?>
                             <tr>
@@ -235,5 +246,6 @@ try {
 
     </div>
 </div>
+<?php reserveit_footer(); ?>
 </body>
 </html>

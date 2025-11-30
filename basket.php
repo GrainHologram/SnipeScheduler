@@ -2,6 +2,10 @@
 require 'auth.php';
 require 'snipeit_client.php';
 require 'db.php';
+require_once __DIR__ . '/footer.php';
+
+$active  = basename($_SERVER['PHP_SELF']);
+$isStaff = !empty($currentUser['is_admin']);
 
 // Basket: model_id => quantity
 $basket = $_SESSION['basket'] ?? [];
@@ -129,7 +133,11 @@ $isStaff = !empty($currentUser['is_admin']);
                class="app-nav-link <?= $active === 'my_bookings.php' ? 'active' : '' ?>">My bookings</a>
             <?php if ($isStaff): ?>
                 <a href="staff_reservations.php"
-                   class="app-nav-link <?= $active === 'staff_reservations.php' ? 'active' : '' ?>">Admin</a>
+                   class="app-nav-link <?= $active === 'staff_reservations.php' ? 'active' : '' ?>">Booking History</a>
+                <a href="staff_checkout.php"
+                   class="app-nav-link <?= $active === 'staff_checkout.php' ? 'active' : '' ?>">Checkout</a>
+                <a href="quick_checkout.php"
+                   class="app-nav-link <?= $active === 'quick_checkout.php' ? 'active' : '' ?>">Quick Checkout</a>
             <?php endif; ?>
         </nav>
 
@@ -288,5 +296,6 @@ $isStaff = !empty($currentUser['is_admin']);
         <?php endif; ?>
     </div>
 </div>
+<?php reserveit_footer(); ?>
 </body>
 </html>

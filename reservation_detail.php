@@ -3,6 +3,9 @@
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/booking_helpers.php';
+require_once __DIR__ . '/footer.php';
+
+$isStaff = !empty($currentUser['is_admin']);
 
 /**
  * Convert YYYY-MM-DD → DD/MM/YYYY.
@@ -89,7 +92,11 @@ $isStaff = !empty($currentUser['is_admin']);
             <a href="index.php" class="app-nav-link">Dashboard</a>
             <a href="catalogue.php" class="app-nav-link">Catalogue</a>
             <a href="my_bookings.php" class="app-nav-link">My bookings</a>
-            <a href="staff_reservations.php" class="app-nav-link active">Admin</a>
+            <?php if ($isStaff): ?>
+            <a href="staff_reservations.php" class="app-nav-link active">Booking History</a>
+            <a href="staff_checkout.php" class="app-nav-link">Checkout</a>
+            <a href="quick_checkout.php" class="app-nav-link">Quick Checkout</a>
+            <?php endif; ?>
         </nav>
 
         <div class="top-bar mb-3">
@@ -121,7 +128,7 @@ $isStaff = !empty($currentUser['is_admin']);
                     <?= h($reservation['status'] ?? '') ?><br>
 
                     <?php if (!empty($reservation['asset_name_cache'])): ?>
-                        <strong>Cached summary:</strong>
+                        <strong>Checked-out assets:</strong>
                         <?= h($reservation['asset_name_cache']) ?><br>
                     <?php endif; ?>
                 </p>
@@ -166,5 +173,6 @@ $isStaff = !empty($currentUser['is_admin']);
 
     </div>
 </div>
+<?php reserveit_footer(); ?>
 </body>
 </html>
