@@ -222,6 +222,10 @@ try {
                     $imagePath  = $model['image'] ?? '';
                     $assetCount = isset($model['assets_count']) ? (int)$model['assets_count'] : null;
                     $maxQty     = ($assetCount && $assetCount > 0) ? $assetCount : 10;
+                    $notes      = $model['notes'] ?? '';
+                    if (is_array($notes)) {
+                        $notes = $notes['text'] ?? '';
+                    }
 
                     $proxiedImage = '';
                     if ($imagePath !== '') {
@@ -257,6 +261,11 @@ try {
                                     <?php endif; ?>
                                     <?php if ($assetCount !== null): ?>
                                         <span><strong>Units in total:</strong> <?= $assetCount ?></span>
+                                    <?php endif; ?>
+                                    <?php if (!empty($notes)): ?>
+                                        <div class="mt-2 text-muted">
+                                            <?= label_safe($notes) ?>
+                                        </div>
                                     <?php endif; ?>
                                 </p>
 
