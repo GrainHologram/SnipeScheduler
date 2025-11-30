@@ -119,7 +119,7 @@ try {
         ':student_email'    => $studentEmail,
         ':student_id'       => $studentId,
         ':snipeit_user_id'  => $user['id'],
-        ':asset_name_cache' => $label,
+        ':asset_name_cache' => 'Pending checkout',
         ':start_datetime'   => $start,
         ':end_datetime'     => $end,
     ]);
