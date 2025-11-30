@@ -616,7 +616,6 @@ function checkin_asset(int $assetId, string $note = ''): void
 function list_checked_out_assets(bool $overdueOnly = false): array
 {
     $params = [
-        'status' => 'checkedout',
         'limit'  => 500,
     ];
 
@@ -630,6 +629,16 @@ function list_checked_out_assets(bool $overdueOnly = false): array
     foreach ($data['rows'] as $row) {
         // Only requestable assets
         if (empty($row['requestable'])) {
+            continue;
+        }
+
+        // Require checked-out status
+        $statusRaw = $row['status_label'] ?? '';
+        if (is_array($statusRaw)) {
+            $statusRaw = $statusRaw['name'] ?? ($statusRaw['status_meta'] ?? '');
+        }
+        $status = strtolower((string)$statusRaw);
+        if (strpos($status, 'checked') === false) {
             continue;
         }
 

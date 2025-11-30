@@ -97,6 +97,7 @@ $isStaff = !empty($currentUser['is_admin']);
             <a href="staff_reservations.php" class="app-nav-link active">Booking History</a>
             <a href="staff_checkout.php" class="app-nav-link">Checkout</a>
             <a href="quick_checkout.php" class="app-nav-link">Quick Checkout</a>
+            <a href="checked_out_assets.php" class="app-nav-link">Checked Out Assets</a>
             <a href="quick_checkin.php" class="app-nav-link">Quick Checkin</a>
             <?php endif; ?>
         </nav>
