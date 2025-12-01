@@ -319,6 +319,14 @@ form .form-select {
     border: 1px solid rgba(var(--primary-rgb), 0.5);
 }
 
+.btn-primary:hover,
+.btn-primary:active,
+.btn-primary:focus-visible {
+    background: linear-gradient(120deg, var(--primary-strong), var(--primary-soft));
+    border-color: rgba(var(--primary-rgb), 0.55);
+    color: #ffffff;
+}
+
 .btn-primary:focus {
     box-shadow: 0 0 0 0.25rem rgba(var(--primary-rgb), 0.25);
 }
@@ -326,6 +334,14 @@ form .form-select {
 .btn-success {
     background: linear-gradient(120deg, #22c55e, #16a34a);
     border: 1px solid rgba(34, 197, 94, 0.5);
+}
+
+.btn-outline-primary:hover,
+.btn-outline-primary:active,
+.btn-outline-primary:focus-visible {
+    background: rgba(var(--primary-rgb), 0.12);
+    border-color: rgba(var(--primary-rgb), 0.65);
+    color: var(--accent);
 }
 
 /* --------------------------------------------------
