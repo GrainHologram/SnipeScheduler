@@ -181,32 +181,6 @@ $staffGroupText = implode("\n", $staffGroupList);
             <div class="col-12">
                 <div class="card">
                     <div class="card-body">
-                        <h5 class="card-title mb-1">Pagination & limits</h5>
-                        <p class="text-muted small mb-3">Controls how many models are fetched and displayed per page to avoid heavy Snipe-IT calls.</p>
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <label class="form-label">Snipe-IT API page limit</label>
-                                <input type="number" name="snipeit_api_page_limit" min="1" class="form-control" value="<?= (int)$definedValues['SNIPEIT_API_PAGE_LIMIT'] ?>">
-                                <div class="form-text">How many rows to request per page from Snipe-IT.</div>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Catalogue items per page</label>
-                                <input type="number" name="catalogue_items_per_page" min="1" class="form-control" value="<?= (int)$definedValues['CATALOGUE_ITEMS_PER_PAGE'] ?>">
-                                <div class="form-text">Pagination size for the user-facing catalogue.</div>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Snipe-IT max models fetch</label>
-                                <input type="number" name="snipeit_max_models_fetch" min="10" class="form-control" value="<?= (int)$definedValues['SNIPEIT_MAX_MODELS_FETCH'] ?>">
-                                <div class="form-text">Safety cap on total models pulled when sorting before pagination.</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-body">
                         <h5 class="card-title mb-1">Database</h5>
                         <p class="text-muted small mb-3">Connection for the booking app tables (not the Snipe-IT DB). Password is optional to update; leave blank to keep the current value.</p>
                         <div class="row g-3">
@@ -233,6 +207,33 @@ $staffGroupText = implode("\n", $staffGroupList);
                             <div class="col-md-2">
                                 <label class="form-label">Charset</label>
                                 <input type="text" name="db_charset" class="form-control" value="<?= h($cfg(['db_booking', 'charset'], 'utf8mb4')) ?>">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-1">Snipe-IT API</h5>
+                        <p class="text-muted small mb-3">Connection details for the Snipe-IT instance.</p>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Base URL</label>
+                                <input type="text" name="snipe_base_url" class="form-control" value="<?= h($cfg(['snipeit', 'base_url'], '')) ?>">
+                                <div class="form-text">Example: https://snipeit.example.com</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">API token</label>
+                                <input type="password" name="snipe_api_token" class="form-control" placeholder="Leave blank to keep">
+                                <div class="form-text">Token stays unchanged if left blank.</div>
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="snipe_verify_ssl" id="snipe_verify_ssl" <?= $cfg(['snipeit', 'verify_ssl'], false) ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="snipe_verify_ssl">Verify SSL certificate</label>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -275,26 +276,9 @@ $staffGroupText = implode("\n", $staffGroupList);
             <div class="col-12">
                 <div class="card">
                     <div class="card-body">
-                        <h5 class="card-title mb-1">Snipe-IT API</h5>
-                        <p class="text-muted small mb-3">Connection details for the Snipe-IT instance.</p>
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Base URL</label>
-                                <input type="text" name="snipe_base_url" class="form-control" value="<?= h($cfg(['snipeit', 'base_url'], '')) ?>">
-                                <div class="form-text">Example: https://snipeit.example.com</div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">API token</label>
-                                <input type="password" name="snipe_api_token" class="form-control" placeholder="Leave blank to keep">
-                                <div class="form-text">Token stays unchanged if left blank.</div>
-                            </div>
-                            <div class="col-md-4 d-flex align-items-end">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="snipe_verify_ssl" id="snipe_verify_ssl" <?= $cfg(['snipeit', 'verify_ssl'], false) ? 'checked' : '' ?>>
-                                    <label class="form-check-label" for="snipe_verify_ssl">Verify SSL certificate</label>
-                                </div>
-                            </div>
-                        </div>
+                        <h5 class="card-title mb-1">Auth (staff group)</h5>
+                        <p class="text-muted small mb-3">Comma or newline separated CNs that count as staff/admins.</p>
+                        <textarea name="staff_group_cn" rows="3" class="form-control" placeholder="ICT Staff&#10;Another Group"><?= reserveit_textarea_value($staffGroupText) ?></textarea>
                     </div>
                 </div>
             </div>
@@ -302,9 +286,25 @@ $staffGroupText = implode("\n", $staffGroupList);
             <div class="col-12">
                 <div class="card">
                     <div class="card-body">
-                        <h5 class="card-title mb-1">Auth (staff group)</h5>
-                        <p class="text-muted small mb-3">Comma or newline separated CNs that count as staff/admins.</p>
-                        <textarea name="staff_group_cn" rows="3" class="form-control" placeholder="ICT Staff&#10;Another Group"><?= reserveit_textarea_value($staffGroupText) ?></textarea>
+                        <h5 class="card-title mb-1">Pagination & limits</h5>
+                        <p class="text-muted small mb-3">Controls how many models are fetched and displayed per page to avoid heavy Snipe-IT calls.</p>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Snipe-IT API page limit</label>
+                                <input type="number" name="snipeit_api_page_limit" min="1" class="form-control" value="<?= (int)$definedValues['SNIPEIT_API_PAGE_LIMIT'] ?>">
+                                <div class="form-text">How many rows to request per page from Snipe-IT.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Catalogue items per page</label>
+                                <input type="number" name="catalogue_items_per_page" min="1" class="form-control" value="<?= (int)$definedValues['CATALOGUE_ITEMS_PER_PAGE'] ?>">
+                                <div class="form-text">Pagination size for the user-facing catalogue.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Snipe-IT max models fetch</label>
+                                <input type="number" name="snipeit_max_models_fetch" min="10" class="form-control" value="<?= (int)$definedValues['SNIPEIT_MAX_MODELS_FETCH'] ?>">
+                                <div class="form-text">Safety cap on total models pulled when sorting before pagination.</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

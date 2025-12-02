@@ -43,18 +43,18 @@ return [
         'charset'  => 'utf8mb4',
     ],
 
+    'snipeit' => [
+        'base_url'  => '',
+        'api_token' => '',     // keep your existing token
+        'verify_ssl' => false,
+    ],
+
     'ldap' => [
         'host'          => 'ldaps://',
         'base_dn'       => '',
         'bind_dn'       => '',
         'bind_password' => '', // keep your existing password
         'ignore_cert'   => true,
-    ],
-
-    'snipeit' => [
-        'base_url'  => '',
-        'api_token' => '',     // keep your existing token
-        'verify_ssl' => false,
     ],
 
     'auth' => [
