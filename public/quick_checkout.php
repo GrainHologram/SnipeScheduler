@@ -134,24 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
 
-        <nav class="app-nav">
-            <a href="index.php"
-               class="app-nav-link <?= $active === 'index.php' ? 'active' : '' ?>">Dashboard</a>
-            <a href="catalogue.php"
-               class="app-nav-link <?= $active === 'catalogue.php' ? 'active' : '' ?>">Catalogue</a>
-            <a href="my_bookings.php"
-               class="app-nav-link <?= $active === 'my_bookings.php' ? 'active' : '' ?>">My bookings</a>
-            <a href="staff_reservations.php"
-               class="app-nav-link <?= $active === 'staff_reservations.php' ? 'active' : '' ?>">Booking History</a>
-            <a href="staff_checkout.php"
-               class="app-nav-link <?= $active === 'staff_checkout.php' ? 'active' : '' ?>">Checkout</a>
-            <a href="quick_checkout.php"
-               class="app-nav-link <?= $active === 'quick_checkout.php' ? 'active' : '' ?>">Quick Checkout</a>
-            <a href="quick_checkin.php"
-               class="app-nav-link <?= $active === 'quick_checkin.php' ? 'active' : '' ?>">Quick Checkin</a>
-            <a href="checked_out_assets.php"
-               class="app-nav-link <?= $active === 'checked_out_assets.php' ? 'active' : '' ?>">Checked Out Assets</a>
-        </nav>
+        <?= reserveit_render_nav($active, $isStaff) ?>
 
         <?php if (!empty($messages)): ?>
             <div class="alert alert-success">

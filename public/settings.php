@@ -1,0 +1,354 @@
+<?php
+require_once __DIR__ . '/../src/bootstrap.php';
+require_once SRC_PATH . '/auth.php';
+require_once SRC_PATH . '/footer.php';
+require_once SRC_PATH . '/config_writer.php';
+
+$active  = basename($_SERVER['PHP_SELF']);
+$isStaff = !empty($currentUser['is_admin']);
+
+if (!$isStaff) {
+    http_response_code(403);
+    echo 'Access denied.';
+    exit;
+}
+
+$configPath  = CONFIG_PATH . '/config.php';
+$examplePath = CONFIG_PATH . '/config.example.php';
+
+$messages = [];
+$errors   = [];
+
+try {
+    $config = load_config();
+} catch (Throwable $e) {
+    // Fall back to example config if we can't load a real one yet.
+    $config = is_file($examplePath) ? require $examplePath : [];
+    $errors[] = 'Config file missing – showing defaults from config.example.php.';
+}
+
+$definedValues = [
+    'SNIPEIT_API_PAGE_LIMIT'    => defined('SNIPEIT_API_PAGE_LIMIT') ? SNIPEIT_API_PAGE_LIMIT : 12,
+    'CATALOGUE_ITEMS_PER_PAGE'  => defined('CATALOGUE_ITEMS_PER_PAGE') ? CATALOGUE_ITEMS_PER_PAGE : 12,
+    'SNIPEIT_MAX_MODELS_FETCH'  => defined('SNIPEIT_MAX_MODELS_FETCH') ? SNIPEIT_MAX_MODELS_FETCH : 1000,
+];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $post = static function (string $key, $fallback = '') {
+        return trim($_POST[$key] ?? $fallback);
+    };
+
+    $pageLimit   = max(1, (int)$post('snipeit_api_page_limit', $definedValues['SNIPEIT_API_PAGE_LIMIT']));
+    $cataloguePP = max(1, (int)$post('catalogue_items_per_page', $definedValues['CATALOGUE_ITEMS_PER_PAGE']));
+    $maxModels   = max(10, (int)$post('snipeit_max_models_fetch', $definedValues['SNIPEIT_MAX_MODELS_FETCH']));
+
+    $db = $config['db_booking'] ?? [];
+    $db['host']     = $post('db_host', $db['host'] ?? 'localhost');
+    $db['port']     = (int)$post('db_port', $db['port'] ?? 3306);
+    $db['dbname']   = $post('db_name', $db['dbname'] ?? '');
+    $db['username'] = $post('db_username', $db['username'] ?? '');
+    $dbPassInput    = $_POST['db_password'] ?? '';
+    $db['password'] = $dbPassInput === '' ? ($db['password'] ?? '') : $dbPassInput;
+    $db['charset']  = $post('db_charset', $db['charset'] ?? 'utf8mb4');
+
+    $ldap = $config['ldap'] ?? [];
+    $ldap['host']          = $post('ldap_host', $ldap['host'] ?? 'ldaps://');
+    $ldap['base_dn']       = $post('ldap_base_dn', $ldap['base_dn'] ?? '');
+    $ldap['bind_dn']       = $post('ldap_bind_dn', $ldap['bind_dn'] ?? '');
+    $ldapPassInput         = $_POST['ldap_bind_password'] ?? '';
+    $ldap['bind_password'] = $ldapPassInput === '' ? ($ldap['bind_password'] ?? '') : $ldapPassInput;
+    $ldap['ignore_cert']   = isset($_POST['ldap_ignore_cert']);
+
+    $snipe = $config['snipeit'] ?? [];
+    $snipe['base_url']  = $post('snipe_base_url', $snipe['base_url'] ?? '');
+    $snipeTokenInput    = $_POST['snipe_api_token'] ?? '';
+    $snipe['api_token'] = $snipeTokenInput === '' ? ($snipe['api_token'] ?? '') : $snipeTokenInput;
+    $snipe['verify_ssl'] = isset($_POST['snipe_verify_ssl']);
+
+    $auth = $config['auth'] ?? [];
+    $staffCnsRaw   = $post('staff_group_cn', '');
+    $staffGroupCns = array_values(array_filter(array_map('trim', preg_split('/[\r\n,]+/', $staffCnsRaw))));
+    $auth['staff_group_cn'] = $staffGroupCns;
+
+    $app = $config['app'] ?? [];
+    $app['timezone']              = $post('app_timezone', $app['timezone'] ?? 'Europe/Jersey');
+    $app['debug']                 = isset($_POST['app_debug']);
+    $app['logo_url']              = $post('app_logo_url', $app['logo_url'] ?? '');
+    $app['primary_color']         = $post('app_primary_color', $app['primary_color'] ?? '#660000');
+    $app['missed_cutoff_minutes'] = max(0, (int)$post('app_missed_cutoff', $app['missed_cutoff_minutes'] ?? 60));
+
+    $newConfig = $config;
+    $newConfig['db_booking'] = $db;
+    $newConfig['ldap']       = $ldap;
+    $newConfig['snipeit']    = $snipe;
+    $newConfig['auth']       = $auth;
+    $newConfig['app']        = $app;
+
+    $content = reserveit_build_config_file($newConfig, [
+        'SNIPEIT_API_PAGE_LIMIT'   => $pageLimit,
+        'CATALOGUE_ITEMS_PER_PAGE' => $cataloguePP,
+        'SNIPEIT_MAX_MODELS_FETCH' => $maxModels,
+    ]);
+
+    if (!is_dir(CONFIG_PATH)) {
+        @mkdir(CONFIG_PATH, 0755, true);
+    }
+
+    if (@file_put_contents($configPath, $content, LOCK_EX) === false) {
+        $errors[] = 'Could not write config.php. Check file permissions on the config/ directory.';
+    } else {
+        $messages[]   = 'Config saved successfully.';
+        $config       = $newConfig;
+        $definedValues = [
+            'SNIPEIT_API_PAGE_LIMIT'   => $pageLimit,
+            'CATALOGUE_ITEMS_PER_PAGE' => $cataloguePP,
+            'SNIPEIT_MAX_MODELS_FETCH' => $maxModels,
+        ];
+    }
+}
+
+// Convenience helpers for output
+$cfg = static function (array $path, $fallback = '') use ($config) {
+    $ref = $config;
+    foreach ($path as $key) {
+        if (!is_array($ref) || !array_key_exists($key, $ref)) {
+            return $fallback;
+        }
+        $ref = $ref[$key];
+    }
+    return $ref === null ? $fallback : $ref;
+};
+
+function reserveit_textarea_value(string $value): string
+{
+    return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+}
+
+$staffGroupList = $cfg(['auth', 'staff_group_cn'], []);
+if (!is_array($staffGroupList)) {
+    $staffGroupList = [];
+}
+$staffGroupText = implode("\n", $staffGroupList);
+
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Settings – ReserveIT</title>
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="assets/style.css">
+    <?= reserveit_theme_styles($config) ?>
+</head>
+<body class="p-4">
+<div class="container">
+    <div class="page-shell">
+        <?= reserveit_logo_tag($config) ?>
+        <div class="page-header">
+            <h1>Settings</h1>
+            <div class="page-subtitle">
+                Staff-only configuration for database, LDAP, Snipe-IT, and app options. Leave secret fields blank to keep existing values.
+            </div>
+        </div>
+
+        <?= reserveit_render_nav($active, $isStaff) ?>
+
+        <div class="top-bar mb-3">
+            <div class="top-bar-user">
+                Logged in as:
+                <strong><?= h(trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''))) ?></strong>
+                (<?= h($currentUser['email'] ?? '') ?>)
+            </div>
+            <div class="top-bar-actions">
+                <a href="logout.php" class="btn btn-link btn-sm">Log out</a>
+            </div>
+        </div>
+
+        <?php if ($messages): ?>
+            <div class="alert alert-success">
+                <?= implode('<br>', array_map('h', $messages)) ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($errors): ?>
+            <div class="alert alert-danger">
+                <?= implode('<br>', array_map('h', $errors)) ?>
+            </div>
+        <?php endif; ?>
+
+        <form method="post" class="row g-3">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-1">Pagination & limits</h5>
+                        <p class="text-muted small mb-3">Controls how many models are fetched and displayed per page to avoid heavy Snipe-IT calls.</p>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Snipe-IT API page limit</label>
+                                <input type="number" name="snipeit_api_page_limit" min="1" class="form-control" value="<?= (int)$definedValues['SNIPEIT_API_PAGE_LIMIT'] ?>">
+                                <div class="form-text">How many rows to request per page from Snipe-IT.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Catalogue items per page</label>
+                                <input type="number" name="catalogue_items_per_page" min="1" class="form-control" value="<?= (int)$definedValues['CATALOGUE_ITEMS_PER_PAGE'] ?>">
+                                <div class="form-text">Pagination size for the user-facing catalogue.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Snipe-IT max models fetch</label>
+                                <input type="number" name="snipeit_max_models_fetch" min="10" class="form-control" value="<?= (int)$definedValues['SNIPEIT_MAX_MODELS_FETCH'] ?>">
+                                <div class="form-text">Safety cap on total models pulled when sorting before pagination.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-1">Database</h5>
+                        <p class="text-muted small mb-3">Connection for the booking app tables (not the Snipe-IT DB). Password is optional to update; leave blank to keep the current value.</p>
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label">Host</label>
+                                <input type="text" name="db_host" class="form-control" value="<?= h($cfg(['db_booking', 'host'], 'localhost')) ?>">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Port</label>
+                                <input type="number" name="db_port" class="form-control" value="<?= (int)$cfg(['db_booking', 'port'], 3306) ?>">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Database name</label>
+                                <input type="text" name="db_name" class="form-control" value="<?= h($cfg(['db_booking', 'dbname'], '')) ?>">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Username</label>
+                                <input type="text" name="db_username" class="form-control" value="<?= h($cfg(['db_booking', 'username'], '')) ?>">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Password</label>
+                                <input type="password" name="db_password" class="form-control" placeholder="Leave blank to keep">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Charset</label>
+                                <input type="text" name="db_charset" class="form-control" value="<?= h($cfg(['db_booking', 'charset'], 'utf8mb4')) ?>">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-1">LDAP / Active Directory</h5>
+                        <p class="text-muted small mb-3">Settings used to authenticate and look up users.</p>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">LDAP host (e.g. ldaps://host)</label>
+                                <input type="text" name="ldap_host" class="form-control" value="<?= h($cfg(['ldap', 'host'], 'ldaps://')) ?>">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Base DN</label>
+                                <input type="text" name="ldap_base_dn" class="form-control" value="<?= h($cfg(['ldap', 'base_dn'], '')) ?>">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Bind DN (service account)</label>
+                                <input type="text" name="ldap_bind_dn" class="form-control" value="<?= h($cfg(['ldap', 'bind_dn'], '')) ?>">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Bind password</label>
+                                <input type="password" name="ldap_bind_password" class="form-control" placeholder="Leave blank to keep">
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="ldap_ignore_cert" id="ldap_ignore_cert" <?= $cfg(['ldap', 'ignore_cert'], false) ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="ldap_ignore_cert">Ignore SSL certificate errors</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-1">Snipe-IT API</h5>
+                        <p class="text-muted small mb-3">Connection details for the Snipe-IT instance.</p>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Base URL</label>
+                                <input type="text" name="snipe_base_url" class="form-control" value="<?= h($cfg(['snipeit', 'base_url'], '')) ?>">
+                                <div class="form-text">Example: https://snipeit.example.com</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">API token</label>
+                                <input type="password" name="snipe_api_token" class="form-control" placeholder="Leave blank to keep">
+                                <div class="form-text">Token stays unchanged if left blank.</div>
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="snipe_verify_ssl" id="snipe_verify_ssl" <?= $cfg(['snipeit', 'verify_ssl'], false) ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="snipe_verify_ssl">Verify SSL certificate</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-1">Auth (staff group)</h5>
+                        <p class="text-muted small mb-3">Comma or newline separated CNs that count as staff/admins.</p>
+                        <textarea name="staff_group_cn" rows="3" class="form-control" placeholder="ICT Staff&#10;Another Group"><?= reserveit_textarea_value($staffGroupText) ?></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-1">App preferences</h5>
+                        <p class="text-muted small mb-3">UI customisation and behaviour tweaks.</p>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Timezone (PHP identifier)</label>
+                                <input type="text" name="app_timezone" class="form-control" value="<?= h($cfg(['app', 'timezone'], 'Europe/Jersey')) ?>">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Primary colour (hex)</label>
+                                <input type="text" name="app_primary_color" class="form-control" value="<?= h($cfg(['app', 'primary_color'], '#660000')) ?>">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Missed cutoff minutes</label>
+                                <input type="number" name="app_missed_cutoff" class="form-control" min="0" value="<?= (int)$cfg(['app', 'missed_cutoff_minutes'], 60) ?>">
+                                <div class="form-text">After this many minutes past start, mark reservation as missed.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Logo URL</label>
+                                <input type="text" name="app_logo_url" class="form-control" value="<?= h($cfg(['app', 'logo_url'], '')) ?>">
+                            </div>
+                            <div class="col-md-6 d-flex align-items-end">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="app_debug" id="app_debug" <?= $cfg(['app', 'debug'], false) ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="app_debug">Enable debug mode (more verbose errors)</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 d-flex justify-content-end">
+                <button type="submit" class="btn btn-primary">Save settings</button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php reserveit_footer(); ?>
+</body>
+</html>

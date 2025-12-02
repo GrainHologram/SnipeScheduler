@@ -129,6 +129,42 @@ CSS;
     }
 }
 
+if (!function_exists('reserveit_render_nav')) {
+    /**
+     * Render the main app navigation. Highlights the active page and hides staff-only items for students.
+     */
+    function reserveit_render_nav(string $active, bool $isStaff): string
+    {
+        $links = [
+            ['href' => 'index.php',               'label' => 'Dashboard',          'staff' => false],
+            ['href' => 'catalogue.php',           'label' => 'Catalogue',          'staff' => false],
+            ['href' => 'my_bookings.php',         'label' => 'My bookings',        'staff' => false],
+            ['href' => 'staff_reservations.php',  'label' => 'Booking History',    'staff' => true],
+            ['href' => 'staff_checkout.php',      'label' => 'Checkout',           'staff' => true],
+            ['href' => 'quick_checkout.php',      'label' => 'Quick Checkout',     'staff' => true],
+            ['href' => 'quick_checkin.php',       'label' => 'Quick Checkin',      'staff' => true],
+            ['href' => 'checked_out_assets.php',  'label' => 'Checked Out Assets', 'staff' => true],
+            ['href' => 'settings.php',            'label' => 'Settings',           'staff' => true],
+        ];
+
+        $html = '<nav class="app-nav">';
+        foreach ($links as $link) {
+            if ($link['staff'] && !$isStaff) {
+                continue;
+            }
+
+            $href    = htmlspecialchars($link['href'], ENT_QUOTES, 'UTF-8');
+            $label   = htmlspecialchars($link['label'], ENT_QUOTES, 'UTF-8');
+            $classes = 'app-nav-link' . ($active === $link['href'] ? ' active' : '');
+
+            $html .= '<a href="' . $href . '" class="' . $classes . '">' . $label . '</a>';
+        }
+        $html .= '</nav>';
+
+        return $html;
+    }
+}
+
 if (!function_exists('reserveit_footer')) {
     function reserveit_footer(): void
     {
