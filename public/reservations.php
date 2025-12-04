@@ -18,32 +18,24 @@ if (!in_array($tab, $allowedTabs, true)) {
     $tab = 'today';
 }
 
-/**
- * Render the given reservations tab by embedding the existing page content.
- */
-function render_reservations_tab(string $tab): string
-{
-    $map = [
-        'today'       => __DIR__ . '/staff_checkout.php',
-        'checked_out' => __DIR__ . '/checked_out_assets.php',
-        'history'     => __DIR__ . '/staff_reservations.php',
-    ];
+$tabMap = [
+    'today'       => __DIR__ . '/staff_checkout.php',
+    'checked_out' => __DIR__ . '/checked_out_assets.php',
+    'history'     => __DIR__ . '/staff_reservations.php',
+];
 
-    $file = $map[$tab] ?? null;
-    if (!$file || !is_file($file)) {
-        return '<div class="alert alert-danger mb-0">Tab content unavailable.</div>';
-    }
-
-    if (!defined('RESERVATIONS_EMBED')) {
-        define('RESERVATIONS_EMBED', true);
-    }
-
-    ob_start();
-    include $file;
-    return ob_get_clean();
+if (!defined('RESERVATIONS_EMBED')) {
+    define('RESERVATIONS_EMBED', true);
 }
 
-$tabContent = render_reservations_tab($tab);
+$tabFile = $tabMap[$tab] ?? null;
+if (!$tabFile || !is_file($tabFile)) {
+    $tabContent = '<div class="alert alert-danger mb-0">Tab content unavailable.</div>';
+} else {
+    ob_start();
+    include $tabFile;
+    $tabContent = ob_get_clean();
+}
 ?>
 <!DOCTYPE html>
 <html>
