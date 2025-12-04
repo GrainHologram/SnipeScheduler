@@ -136,15 +136,13 @@ if (!function_exists('reserveit_render_nav')) {
     function reserveit_render_nav(string $active, bool $isStaff): string
     {
         $links = [
-            ['href' => 'index.php',               'label' => 'Dashboard',          'staff' => false],
-            ['href' => 'catalogue.php',           'label' => 'Catalogue',          'staff' => false],
-            ['href' => 'my_bookings.php',         'label' => 'My bookings',        'staff' => false],
-            ['href' => 'staff_reservations.php',  'label' => 'Booking History',    'staff' => true],
-            ['href' => 'staff_checkout.php',      'label' => 'Checkout',           'staff' => true],
-            ['href' => 'quick_checkout.php',      'label' => 'Quick Checkout',     'staff' => true],
-            ['href' => 'quick_checkin.php',       'label' => 'Quick Checkin',      'staff' => true],
-            ['href' => 'checked_out_assets.php',  'label' => 'Checked Out Assets', 'staff' => true],
-            ['href' => 'settings.php',            'label' => 'Settings',           'staff' => true],
+            ['href' => 'index.php',          'label' => 'Dashboard',           'staff' => false],
+            ['href' => 'catalogue.php',      'label' => 'Catalogue',           'staff' => false],
+            ['href' => 'my_bookings.php',    'label' => 'My Reservations',     'staff' => false],
+            ['href' => 'reservations.php',   'label' => 'Reservations',        'staff' => true],
+            ['href' => 'quick_checkout.php', 'label' => 'Quick Checkout',      'staff' => true],
+            ['href' => 'quick_checkin.php',  'label' => 'Quick Checkin',       'staff' => true],
+            ['href' => 'settings.php',       'label' => 'Settings',            'staff' => true],
         ];
 
         $html = '<nav class="app-nav">';

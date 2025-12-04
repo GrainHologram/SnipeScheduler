@@ -63,13 +63,13 @@ $isStaff = !empty($currentUser['is_admin']);
             <div class="col-md-6">
                 <div class="card h-100">
                     <div class="card-body d-flex flex-column">
-                        <h5 class="card-title">My bookings</h5>
+                        <h5 class="card-title">My Reservations</h5>
                         <p class="card-text">
-                            See all of your upcoming and past bookings, including which models you
+                            See all of your upcoming and past reservations, including which models you
                             requested, and cancel future bookings where allowed.
                         </p>
                         <a href="my_bookings.php" class="btn btn-outline-primary mt-auto">
-                            View my bookings
+                            View my reservations
                         </a>
                     </div>
                 </div>
@@ -79,26 +79,12 @@ $isStaff = !empty($currentUser['is_admin']);
                 <div class="col-md-6">
                     <div class="card h-100">
                         <div class="card-body d-flex flex-column">
-                            <h5 class="card-title">Booking History</h5>
+                            <h5 class="card-title">Reservations</h5>
                             <p class="card-text">
-                                See all past and current bookings, and coordinate which assets to hand out.
+                                Review reservation history, process today’s checkouts, and view checked-out assets.
                             </p>
-                            <a href="staff_reservations.php" class="btn btn-outline-primary mt-auto">
-                                View booking history
-                            </a>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-md-6">
-                    <div class="card h-100">
-                        <div class="card-body d-flex flex-column">
-                            <h5 class="card-title">Reservation Checkout</h5>
-                            <p class="card-text">
-                                Select a booking for today and check out specific assets against its models.
-                            </p>
-                            <a href="staff_checkout.php" class="btn btn-outline-primary mt-auto">
-                                Go to reservation checkout
+                            <a href="reservations.php" class="btn btn-outline-primary mt-auto">
+                                Go to reservations
                             </a>
                         </div>
                     </div>

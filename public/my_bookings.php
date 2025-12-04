@@ -54,7 +54,7 @@ try {
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>My bookings</title>
+    <title>My Reservations</title>
 
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
@@ -66,9 +66,9 @@ try {
     <div class="page-shell">
         <?= reserveit_logo_tag() ?>
         <div class="page-header">
-            <h1>My bookings</h1>
+            <h1>My Reservations</h1>
             <div class="page-subtitle">
-                View all your past, current and future bookings.
+                View all your past, current and future reservations.
             </div>
         </div>
 
@@ -89,13 +89,13 @@ try {
 
         <?php if (!empty($loadError ?? '')): ?>
             <div class="alert alert-danger">
-                Error loading your bookings: <?= htmlspecialchars($loadError) ?>
+                Error loading your reservations: <?= htmlspecialchars($loadError) ?>
             </div>
         <?php endif; ?>
 
         <?php if (empty($reservations)): ?>
             <div class="alert alert-info">
-                You don’t have any bookings yet.
+                You don’t have any reservations yet.
             </div>
         <?php else: ?>
             <?php foreach ($reservations as $res): ?>
@@ -107,7 +107,7 @@ try {
                 <div class="card mb-3">
                     <div class="card-body">
                         <h5 class="card-title">
-                            Booking #<?= $resId ?>
+                            Reservation #<?= $resId ?>
                         </h5>
                         <p class="card-text">
                             <strong>Student Name:</strong>
@@ -134,7 +134,7 @@ try {
                         </p>
 
                         <?php if (!empty($items)): ?>
-                            <h6>Items in this booking</h6>
+                            <h6>Items in this reservation</h6>
                             <div class="table-responsive">
                                 <table class="table table-sm table-striped align-middle mb-0">
                                     <thead>

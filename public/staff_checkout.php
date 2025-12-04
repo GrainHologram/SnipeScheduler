@@ -15,6 +15,10 @@ require_once SRC_PATH . '/footer.php';
 
 $config   = load_config();
 $timezone = $config['app']['timezone'] ?? 'Europe/Jersey';
+$embedded = defined('RESERVATIONS_EMBED');
+$pageBase = $embedded ? 'reservations.php' : 'staff_checkout.php';
+$baseQuery = $embedded ? ['tab' => 'today'] : [];
+$selfUrl  = $pageBase . (!empty($baseQuery) ? '?' . http_build_query($baseQuery) : '');
 $active   = basename($_SERVER['PHP_SELF']);
 $isStaff  = !empty($currentUser['is_admin']);
 $tz       = new DateTimeZone($timezone);
@@ -176,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'select_
     }
     // Reset checkout basket when changing reservation
     $checkoutAssets = [];
-    header('Location: staff_checkout.php');
+    header('Location: ' . $selfUrl);
     exit;
 }
 
@@ -186,7 +190,7 @@ if (isset($_GET['remove'])) {
     if ($removeId > 0 && isset($checkoutAssets[$removeId])) {
         unset($checkoutAssets[$removeId]);
     }
-    header('Location: staff_checkout.php');
+    header('Location: ' . $selfUrl);
     exit;
 }
 
@@ -491,11 +495,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $active  = basename($_SERVER['PHP_SELF']);
 $isStaff = !empty($currentUser['is_admin']);
 ?>
+<?php if (!$embedded): ?>
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Staff checkout – Book Equipment</title>
+    <title>Today’s Reservations (Checkout)</title>
 
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
@@ -506,32 +511,40 @@ $isStaff = !empty($currentUser['is_admin']);
 <div class="container">
     <div class="page-shell">
         <?= reserveit_logo_tag() ?>
+<?php endif; ?>
         <div class="page-header">
-            <h1>Staff checkout</h1>
+            <h1>Today’s Reservations (Checkout)</h1>
             <div class="page-subtitle">
-                View today’s bookings and perform bulk checkouts via Snipe-IT.
+                View today’s reservations and perform bulk checkouts via Snipe-IT.
             </div>
         </div>
 
         <!-- App navigation -->
-        <?= reserveit_render_nav($active, $isStaff) ?>
+        <?php if (!$embedded): ?>
+            <?= reserveit_render_nav($active, $isStaff) ?>
+        <?php endif; ?>
 
         <!-- Top bar -->
-        <div class="top-bar mb-3">
-            <div class="top-bar-user">
-                Logged in as:
-                <strong><?= h(trim($currentUser['first_name'] . ' ' . $currentUser['last_name'])) ?></strong>
-                (<?= h($currentUser['email']) ?>)
+        <?php if (!$embedded): ?>
+            <div class="top-bar mb-3">
+                <div class="top-bar-user">
+                    Logged in as:
+                    <strong><?= h(trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''))) ?></strong>
+                    (<?= h($currentUser['email'] ?? '') ?>)
+                </div>
+                <div class="top-bar-actions">
+                    <a href="logout.php" class="btn btn-link btn-sm">Log out</a>
+                </div>
             </div>
-            <div class="top-bar-actions">
-                <a href="logout.php" class="btn btn-link btn-sm">Log out</a>
-            </div>
-        </div>
+        <?php endif; ?>
 
         <!-- Reservation selector (today only) -->
         <div class="card mb-3">
             <div class="card-body">
-                <form method="post" class="row g-3 align-items-end">
+                <form method="post" class="row g-3 align-items-end" action="<?= h($selfUrl) ?>">
+                    <?php foreach ($baseQuery as $k => $v): ?>
+                        <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
+                    <?php endforeach; ?>
                     <input type="hidden" name="mode" value="select_reservation">
                     <div class="col-md-8">
                         <label class="form-label">Select today’s reservation to check out</label>
@@ -601,8 +614,11 @@ $isStaff = !empty($currentUser['is_admin']);
                         Choose assets for each model in reservation #<?= (int)$selectedReservation['id'] ?>.
                     </p>
 
-                    <form method="post">
+                    <form method="post" action="<?= h($selfUrl) ?>">
                         <input type="hidden" name="mode" value="reservation_checkout">
+                        <?php foreach ($baseQuery as $k => $v): ?>
+                            <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
+                        <?php endforeach; ?>
 
                         <div class="row g-3 mb-3">
                             <div class="col-md-6">
@@ -666,8 +682,14 @@ $isStaff = !empty($currentUser['is_admin']);
             </div>
         <?php endif; ?>
 
+<?php if (!$embedded): ?>
     </div>
 </div>
+<?php endif; ?>
+
+<?php
+    $ajaxBase = $selfUrl . (strpos($selfUrl, '?') !== false ? '&' : '?');
+?>
 
 <script>
 (function () {
@@ -696,7 +718,7 @@ $isStaff = !empty($currentUser['is_admin']);
 
         function fetchSuggestions(q) {
             lastQuery = q;
-            fetch('staff_checkout.php?ajax=user_search&q=' + encodeURIComponent(q), {
+            fetch('<?= h($ajaxBase) ?>ajax=user_search&q=' + encodeURIComponent(q), {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             })
                 .then((res) => res.ok ? res.json() : Promise.reject())
@@ -781,6 +803,8 @@ $isStaff = !empty($currentUser['is_admin']);
     Object.keys(groups).forEach(syncGroup);
 })();
 </script>
+<?php if (!$embedded): ?>
 <?php reserveit_footer(); ?>
 </body>
 </html>
+<?php endif; ?>
