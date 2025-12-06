@@ -94,6 +94,8 @@ function reserveit_test_snipe_api(array $snipe): string
         ],
         CURLOPT_SSL_VERIFYPEER => $verify,
         CURLOPT_SSL_VERIFYHOST => $verify ? 2 : 0,
+        CURLOPT_TIMEOUT        => 8,
+        CURLOPT_CONNECTTIMEOUT => 4,
     ]);
     $raw = curl_exec($ch);
     if ($raw === false) {
@@ -139,6 +141,9 @@ function reserveit_test_ldap(array $ldap): string
     }
     @ldap_set_option($conn, LDAP_OPT_PROTOCOL_VERSION, 3);
     @ldap_set_option($conn, LDAP_OPT_REFERRALS, 0);
+    if (defined('LDAP_OPT_NETWORK_TIMEOUT')) {
+        @ldap_set_option($conn, LDAP_OPT_NETWORK_TIMEOUT, 5);
+    }
 
     $bindOk = $bindDn !== ''
         ? @ldap_bind($conn, $bindDn, $bindPwd)
@@ -172,13 +177,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $cataloguePP = max(1, (int)$post('catalogue_items_per_page', $definedValues['CATALOGUE_ITEMS_PER_PAGE']));
     $maxModels   = $definedValues['SNIPEIT_MAX_MODELS_FETCH'];
 
+    $useRawSecrets = $action !== 'save';
+
     $db = $config['db_booking'] ?? [];
     $db['host']     = $post('db_host', $db['host'] ?? 'localhost');
     $db['port']     = (int)$post('db_port', $db['port'] ?? 3306);
     $db['dbname']   = $post('db_name', $db['dbname'] ?? '');
     $db['username'] = $post('db_username', $db['username'] ?? '');
     $dbPassInput    = $_POST['db_password'] ?? '';
-    $db['password'] = $dbPassInput === '' ? ($loadedConfig['db_booking']['password'] ?? '') : $dbPassInput;
+    if ($useRawSecrets) {
+        $db['password'] = $dbPassInput;
+    } else {
+        $db['password'] = $dbPassInput === '' ? ($loadedConfig['db_booking']['password'] ?? '') : $dbPassInput;
+    }
     $db['charset']  = $post('db_charset', $db['charset'] ?? 'utf8mb4');
 
     $ldap = $config['ldap'] ?? [];
@@ -186,13 +197,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $ldap['base_dn']       = $post('ldap_base_dn', $ldap['base_dn'] ?? '');
     $ldap['bind_dn']       = $post('ldap_bind_dn', $ldap['bind_dn'] ?? '');
     $ldapPassInput         = $_POST['ldap_bind_password'] ?? '';
-    $ldap['bind_password'] = $ldapPassInput === '' ? ($loadedConfig['ldap']['bind_password'] ?? '') : $ldapPassInput;
+    if ($useRawSecrets) {
+        $ldap['bind_password'] = $ldapPassInput;
+    } else {
+        $ldap['bind_password'] = $ldapPassInput === '' ? ($loadedConfig['ldap']['bind_password'] ?? '') : $ldapPassInput;
+    }
     $ldap['ignore_cert']   = isset($_POST['ldap_ignore_cert']);
 
     $snipe = $config['snipeit'] ?? [];
     $snipe['base_url']  = $post('snipe_base_url', $snipe['base_url'] ?? '');
     $snipeTokenInput    = $_POST['snipe_api_token'] ?? '';
-    $snipe['api_token'] = $snipeTokenInput === '' ? ($loadedConfig['snipeit']['api_token'] ?? '') : $snipeTokenInput;
+    if ($useRawSecrets) {
+        $snipe['api_token'] = $snipeTokenInput;
+    } else {
+        $snipe['api_token'] = $snipeTokenInput === '' ? ($loadedConfig['snipeit']['api_token'] ?? '') : $snipeTokenInput;
+    }
     $snipe['verify_ssl'] = isset($_POST['snipe_verify_ssl']);
 
     $auth = $config['auth'] ?? [];
