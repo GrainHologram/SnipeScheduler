@@ -19,6 +19,8 @@ $examplePath = CONFIG_PATH . '/config.example.php';
 
 $messages = [];
 $errors   = [];
+$isAjax   = strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'xmlhttprequest'
+    || (isset($_POST['ajax']) && $_POST['ajax'] == '1');
 
 try {
     $config = load_config();
@@ -268,6 +270,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $messages[] = 'Config saved successfully.';
         }
     }
+
+    if ($isAjax && $action !== 'save') {
+        header('Content-Type: application/json');
+        echo json_encode([
+            'ok'       => empty($errors),
+            'messages' => $messages,
+            'errors'   => $errors,
+        ]);
+        exit;
+    }
 }
 
 // Convenience helpers for output
@@ -346,7 +358,7 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
             </div>
         <?php endif; ?>
 
-        <form method="post" class="row g-3">
+        <form method="post" class="row g-3" id="settings-form">
             <div class="col-12">
                 <div class="card">
                     <div class="card-body">
@@ -378,8 +390,9 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                                 <input type="text" name="db_charset" class="form-control" value="<?= h($cfg(['db_booking', 'charset'], 'utf8mb4')) ?>">
                             </div>
                         </div>
-                        <div class="d-flex justify-content-end mt-3">
-                            <button type="submit" name="action" value="test_db" class="btn btn-outline-primary btn-sm">Test database connection</button>
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <div class="small text-muted" id="db-test-result"></div>
+                            <button type="submit" name="action" value="test_db" class="btn btn-outline-primary btn-sm" data-test-action="test_db" data-target="db-test-result">Test database connection</button>
                         </div>
                     </div>
                 </div>
@@ -408,8 +421,9 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                                 </div>
                             </div>
                         </div>
-                        <div class="d-flex justify-content-end mt-3">
-                            <button type="submit" name="action" value="test_api" class="btn btn-outline-primary btn-sm">Test Snipe-IT API</button>
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <div class="small text-muted" id="api-test-result"></div>
+                            <button type="submit" name="action" value="test_api" class="btn btn-outline-primary btn-sm" data-test-action="test_api" data-target="api-test-result">Test Snipe-IT API</button>
                         </div>
                     </div>
                 </div>
@@ -444,8 +458,9 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                                 </div>
                             </div>
                         </div>
-                        <div class="d-flex justify-content-end mt-3">
-                            <button type="submit" name="action" value="test_ldap" class="btn btn-outline-primary btn-sm">Test LDAP connection</button>
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <div class="small text-muted" id="ldap-test-result"></div>
+                            <button type="submit" name="action" value="test_ldap" class="btn btn-outline-primary btn-sm" data-test-action="test_ldap" data-target="ldap-test-result">Test LDAP connection</button>
                         </div>
                     </div>
                 </div>
@@ -565,5 +580,62 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
     </div>
 </div>
 <?php reserveit_footer(); ?>
+<script>
+(function () {
+    const form = document.getElementById('settings-form');
+    if (!form) return;
+
+    const clearStatus = (el) => {
+        if (!el) return;
+        el.textContent = '';
+        el.classList.remove('text-success', 'text-danger');
+        el.classList.add('text-muted');
+    };
+
+    const setStatus = (el, text, isError) => {
+        if (!el) return;
+        el.textContent = text;
+        el.classList.remove('text-muted');
+        el.classList.toggle('text-success', !isError);
+        el.classList.toggle('text-danger', isError);
+    };
+
+    form.querySelectorAll('[data-test-action]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const action = btn.getAttribute('data-test-action');
+            const targetId = btn.getAttribute('data-target');
+            const target = targetId ? document.getElementById(targetId) : null;
+            clearStatus(target);
+            setStatus(target, 'Testing...', false);
+
+            const fd = new FormData(form);
+            fd.set('action', action);
+            fd.set('ajax', '1');
+
+            fetch(form.action || window.location.href, {
+                method: 'POST',
+                body: fd,
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+            })
+                .then((res) => res.ok ? res.json() : Promise.reject(new Error('Request failed')))
+                .then((data) => {
+                    const errs = Array.isArray(data.errors) ? data.errors : [];
+                    const msgs = Array.isArray(data.messages) ? data.messages : [];
+                    if (errs.length) {
+                        setStatus(target, errs.join(' | '), true);
+                    } else if (msgs.length) {
+                        setStatus(target, msgs.join(' | '), false);
+                    } else {
+                        setStatus(target, 'No response received.', true);
+                    }
+                })
+                .catch((err) => {
+                    setStatus(target, err.message || 'Test failed.', true);
+                });
+        });
+    });
+})();
+</script>
 </body>
 </html>
