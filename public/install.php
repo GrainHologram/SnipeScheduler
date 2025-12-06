@@ -210,18 +210,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$installLocked) {
         $ldapPass    = $ldapPassRaw;
         $ldapIgnore  = isset($_POST['ldap_ignore_cert']);
 
-        $staffRaw   = $post('staff_group_cn', '');
-        $staffCns   = array_values(array_filter(array_map('trim', preg_split('/[\r\n,]+/', $staffRaw))));
-
-        $timezone   = $post('app_timezone', 'Europe/Jersey');
-        $debug      = isset($_POST['app_debug']);
-        $logoUrl    = $post('app_logo_url', '');
-        $primary    = $post('app_primary_color', '#660000');
-        $missed     = max(0, (int)$post('app_missed_cutoff', '60'));
-
-        $pageLimit   = max(1, (int)$post('snipeit_api_page_limit', (string)$definedValues['SNIPEIT_API_PAGE_LIMIT']));
-        $cataloguePP = max(1, (int)$post('catalogue_items_per_page', (string)$definedValues['CATALOGUE_ITEMS_PER_PAGE']));
-        $maxModels   = max(10, (int)$post('snipeit_max_models_fetch', (string)$definedValues['SNIPEIT_MAX_MODELS_FETCH']));
+        // Defaults for omitted settings
+        $staffCns   = [];
+        $timezone   = 'Europe/Jersey';
+        $debug      = false;
+        $logoUrl    = '';
+        $primary    = '#660000';
+        $missed     = 60;
+        $pageLimit  = $definedValues['SNIPEIT_API_PAGE_LIMIT'];
+        $cataloguePP = $definedValues['CATALOGUE_ITEMS_PER_PAGE'];
+        $maxModels  = $definedValues['SNIPEIT_MAX_MODELS_FETCH'];
 
         $newConfig = $defaultConfig;
         $newConfig['db_booking'] = [
@@ -519,69 +517,7 @@ $staffText = implode("\n", $staffPref);
             </div>
 
             <div class="col-12">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title mb-1">Auth (staff group)</h5>
-                        <p class="text-muted small mb-3">Comma or newline separated CNs that count as staff/admins.</p>
-                        <textarea name="staff_group_cn" rows="3" class="form-control" placeholder="ICT Staff&#10;Another Group"><?= installer_h($staffText) ?></textarea>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title mb-1">Pagination & limits</h5>
-                        <p class="text-muted small mb-3">Controls how many models are fetched and displayed per page.</p>
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <label class="form-label">Snipe-IT API page limit</label>
-                                <input type="number" name="snipeit_api_page_limit" min="1" class="form-control" value="<?= (int)$definedValues['SNIPEIT_API_PAGE_LIMIT'] ?>">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Catalogue items per page</label>
-                                <input type="number" name="catalogue_items_per_page" min="1" class="form-control" value="<?= (int)$definedValues['CATALOGUE_ITEMS_PER_PAGE'] ?>">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Snipe-IT max models fetch</label>
-                                <input type="number" name="snipeit_max_models_fetch" min="10" class="form-control" value="<?= (int)$definedValues['SNIPEIT_MAX_MODELS_FETCH'] ?>">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title mb-1">App preferences</h5>
-                        <p class="text-muted small mb-3">UI customisation and behaviour tweaks.</p>
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <label class="form-label">Timezone</label>
-                                <input type="text" name="app_timezone" class="form-control" value="<?= installer_h($pref(['app', 'timezone'], 'Europe/Jersey')) ?>">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Primary colour (hex)</label>
-                                <input type="text" name="app_primary_color" class="form-control" value="<?= installer_h($pref(['app', 'primary_color'], '#660000')) ?>">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Missed cutoff minutes</label>
-                                <input type="number" name="app_missed_cutoff" class="form-control" min="0" value="<?= (int)$pref(['app', 'missed_cutoff_minutes'], 60) ?>">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Logo URL</label>
-                                <input type="text" name="app_logo_url" class="form-control" value="<?= installer_h($pref(['app', 'logo_url'], '')) ?>">
-                            </div>
-                            <div class="col-md-6 d-flex align-items-end">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="app_debug" id="app_debug" <?= $pref(['app', 'debug'], false) ? 'checked' : '' ?>>
-                                    <label class="form-check-label" for="app_debug">Enable debug mode</label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <!-- Non-essential settings removed; defaults will be generated in config.php -->
             </div>
 
             <div class="col-12 d-flex justify-content-end">
