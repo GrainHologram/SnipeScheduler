@@ -443,41 +443,6 @@ $staffText = implode("\n", $staffPref);
         <?php endif; ?>
 
         <?php if (!$installLocked): ?>
-        <div class="card mb-3">
-            <div class="card-body">
-                <h5 class="card-title mb-2">System requirements</h5>
-                <p class="text-muted small mb-3">The installer checks common requirements below. Please resolve any missing items before continuing.</p>
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th style="width: 40%;">Requirement</th>
-                                <th>Status</th>
-                                <th>Details</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($requirements as $req): ?>
-                                <tr>
-                                    <td><?= installer_h($req['label']) ?></td>
-                                    <td>
-                                        <?php if ($req['passing']): ?>
-                                            <span class="badge bg-success">OK</span>
-                                        <?php else: ?>
-                                            <span class="badge bg-danger">Missing</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td><?= installer_h($req['detail']) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        <?php endif; ?>
-
-        <?php if (!$installLocked): ?>
         <form method="post" action="install.php" class="row g-3" id="installer-form">
             <?php if ($configExists): ?>
                 <div class="col-12">
@@ -487,6 +452,41 @@ $staffText = implode("\n", $staffPref);
                     </div>
                 </div>
             <?php endif; ?>
+
+            <div class="col-12">
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title mb-2">System requirements</h5>
+                        <p class="text-muted small mb-3">The installer checks common requirements below. Please resolve any missing items before continuing.</p>
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40%;">Requirement</th>
+                                        <th>Status</th>
+                                        <th>Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($requirements as $req): ?>
+                                        <tr>
+                                            <td><?= installer_h($req['label']) ?></td>
+                                            <td>
+                                                <?php if ($req['passing']): ?>
+                                                    <span class="badge bg-success">OK</span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-danger">Missing</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td><?= installer_h($req['detail']) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <div class="col-12">
                 <div class="card">
