@@ -63,6 +63,50 @@ $errors   = [];
 $installLocked = is_file($installedFlag);
 $installCompleted = false;
 $redirectTo = null;
+$serverSoftware = $_SERVER['SERVER_SOFTWARE'] ?? '';
+
+$requirements = [
+    [
+        'label'   => 'PHP version (>= 8.0)',
+        'detail'  => 'Detected: ' . PHP_VERSION,
+        'passing' => version_compare(PHP_VERSION, '8.0.0', '>='),
+    ],
+    [
+        'label'   => 'Web server (Apache or Nginx)',
+        'detail'  => $serverSoftware !== '' ? $serverSoftware : 'Unknown',
+        'passing' => stripos($serverSoftware, 'apache') !== false || stripos($serverSoftware, 'nginx') !== false,
+    ],
+    [
+        'label'   => 'PHP extension: pdo_mysql',
+        'detail'  => extension_loaded('pdo_mysql') ? 'Loaded' : 'Missing',
+        'passing' => extension_loaded('pdo_mysql'),
+    ],
+    [
+        'label'   => 'PHP extension: curl',
+        'detail'  => extension_loaded('curl') ? 'Loaded' : 'Missing',
+        'passing' => extension_loaded('curl'),
+    ],
+    [
+        'label'   => 'PHP extension: ldap',
+        'detail'  => extension_loaded('ldap') ? 'Loaded' : 'Missing',
+        'passing' => extension_loaded('ldap'),
+    ],
+    [
+        'label'   => 'PHP extension: mbstring',
+        'detail'  => extension_loaded('mbstring') ? 'Loaded' : 'Missing',
+        'passing' => extension_loaded('mbstring'),
+    ],
+    [
+        'label'   => 'PHP extension: openssl',
+        'detail'  => extension_loaded('openssl') ? 'Loaded' : 'Missing',
+        'passing' => extension_loaded('openssl'),
+    ],
+    [
+        'label'   => 'PHP extension: json',
+        'detail'  => extension_loaded('json') ? 'Loaded' : 'Missing',
+        'passing' => extension_loaded('json'),
+    ],
+];
 
 function installer_test_db(array $db): string
 {
@@ -396,6 +440,41 @@ $staffText = implode("\n", $staffPref);
             <div class="alert alert-danger">
                 <?= implode('<br>', $errors) ?>
             </div>
+        <?php endif; ?>
+
+        <?php if (!$installLocked): ?>
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="card-title mb-2">System requirements</h5>
+                <p class="text-muted small mb-3">The installer checks common requirements below. Please resolve any missing items before continuing.</p>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 40%;">Requirement</th>
+                                <th>Status</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($requirements as $req): ?>
+                                <tr>
+                                    <td><?= installer_h($req['label']) ?></td>
+                                    <td>
+                                        <?php if ($req['passing']): ?>
+                                            <span class="badge bg-success">OK</span>
+                                        <?php else: ?>
+                                            <span class="badge bg-danger">Missing</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td><?= installer_h($req['detail']) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
         <?php endif; ?>
 
         <?php if (!$installLocked): ?>
