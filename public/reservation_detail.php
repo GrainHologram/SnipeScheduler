@@ -65,7 +65,7 @@ if (!$reservation) {
 // Load items via shared helper
 $items = get_reservation_items_with_names($pdo, $id);
 
-$active  = basename($_SERVER['PHP_SELF']);
+$active  = 'staff_reservations.php'; // Treat detail view as part of booking history.
 $isStaff = !empty($currentUser['is_admin']);
 ?>
 <!DOCTYPE html>
@@ -91,18 +91,7 @@ $isStaff = !empty($currentUser['is_admin']);
         </div>
 
         <!-- App navigation -->
-        <nav class="app-nav">
-            <a href="index.php" class="app-nav-link">Dashboard</a>
-            <a href="catalogue.php" class="app-nav-link">Catalogue</a>
-            <a href="my_bookings.php" class="app-nav-link">My bookings</a>
-            <?php if ($isStaff): ?>
-            <a href="staff_reservations.php" class="app-nav-link active">Booking History</a>
-            <a href="staff_checkout.php" class="app-nav-link">Checkout</a>
-            <a href="quick_checkout.php" class="app-nav-link">Quick Checkout</a>
-            <a href="checked_out_assets.php" class="app-nav-link">Checked Out Assets</a>
-            <a href="quick_checkin.php" class="app-nav-link">Quick Checkin</a>
-            <?php endif; ?>
-        </nav>
+        <?= reserveit_render_nav($active, $isStaff) ?>
 
         <div class="top-bar mb-3">
             <div class="top-bar-user">

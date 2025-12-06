@@ -5,8 +5,11 @@ require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/booking_helpers.php';
 require_once SRC_PATH . '/footer.php';
 
-$active  = basename($_SERVER['PHP_SELF']);
-$isStaff = !empty($currentUser['is_admin']);
+$active    = basename($_SERVER['PHP_SELF']);
+$isStaff   = !empty($currentUser['is_admin']);
+$embedded  = defined('RESERVATIONS_EMBED');
+$pageBase  = $embedded ? 'reservations.php' : 'staff_reservations.php';
+$baseQuery = $embedded ? ['tab' => 'history'] : [];
 
 /**
  * Convert YYYY-MM-DD → DD/MM/YYYY.
@@ -38,9 +41,6 @@ if (empty($currentUser['is_admin'])) {
     echo 'Access denied.';
     exit;
 }
-
-$active  = basename($_SERVER['PHP_SELF']);
-$isStaff = !empty($currentUser['is_admin']);
 
 $deletedMsg = '';
 if (!empty($_GET['deleted'])) {
@@ -92,11 +92,12 @@ try {
     $loadError = $e->getMessage();
 }
 ?>
+<?php if (!$embedded): ?>
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Admin – All Bookings</title>
+    <title>Reservation History – Admin</title>
 
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
@@ -107,46 +108,32 @@ try {
 <div class="container">
     <div class="page-shell">
         <?= reserveit_logo_tag() ?>
+<?php endif; ?>
         <div class="page-header">
-            <h1>All bookings (admin)</h1>
+            <h1>Reservation History</h1>
             <div class="page-subtitle">
-                View, filter, and delete any past, present or future booking.
+                View, filter, and delete any past, present or future reservation.
             </div>
         </div>
 
         <!-- App navigation -->
-        <nav class="app-nav">
-            <a href="index.php"
-               class="app-nav-link <?= $active === 'index.php' ? 'active' : '' ?>">Dashboard</a>
-            <a href="catalogue.php"
-               class="app-nav-link <?= $active === 'catalogue.php' ? 'active' : '' ?>">Catalogue</a>
-            <a href="my_bookings.php"
-               class="app-nav-link <?= $active === 'my_bookings.php' ? 'active' : '' ?>">My bookings</a>
-            <a href="staff_reservations.php"
-               class="app-nav-link <?= $active === 'staff_reservations.php' ? 'active' : '' ?>">Booking History</a>
-            <?php if ($isStaff): ?>
-            <a href="staff_checkout.php"
-               class="app-nav-link <?= $active === 'staff_checkout.php' ? 'active' : '' ?>">Checkout</a>
-            <a href="quick_checkout.php"
-               class="app-nav-link <?= $active === 'quick_checkout.php' ? 'active' : '' ?>">Quick Checkout</a>
-            <a href="quick_checkin.php"
-               class="app-nav-link <?= $active === 'quick_checkin.php' ? 'active' : '' ?>">Quick Checkin</a>
-            <a href="checked_out_assets.php"
-               class="app-nav-link <?= $active === 'checked_out_assets.php' ? 'active' : '' ?>">Checked Out Assets</a>
-            <?php endif; ?>
-        </nav>
+        <?php if (!$embedded): ?>
+            <?= reserveit_render_nav($active, $isStaff) ?>
+        <?php endif; ?>
 
         <!-- Top bar -->
-        <div class="top-bar mb-3">
-            <div class="top-bar-user">
-                Logged in as:
-                <strong><?= h(trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''))) ?></strong>
-                (<?= h($currentUser['email'] ?? '') ?>)
+        <?php if (!$embedded): ?>
+            <div class="top-bar mb-3">
+                <div class="top-bar-user">
+                    Logged in as:
+                    <strong><?= h(trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''))) ?></strong>
+                    (<?= h($currentUser['email'] ?? '') ?>)
+                </div>
+                <div class="top-bar-actions">
+                    <a href="logout.php" class="btn btn-link btn-sm">Log out</a>
+                </div>
             </div>
-            <div class="top-bar-actions">
-                <a href="logout.php" class="btn btn-link btn-sm">Log out</a>
-            </div>
-        </div>
+        <?php endif; ?>
 
         <?php if (!empty($deletedMsg)): ?>
             <div class="alert alert-success">
@@ -160,8 +147,17 @@ try {
             </div>
         <?php endif; ?>
 
+        <?php
+            $actionUrl = $pageBase;
+            if (!empty($baseQuery)) {
+                $actionUrl .= '?' . http_build_query($baseQuery);
+            }
+        ?>
         <!-- Filters -->
-        <form class="row g-2 mb-3" method="get" action="staff_reservations.php">
+        <form class="row g-2 mb-3" method="get" action="<?= h($actionUrl) ?>">
+            <?php foreach ($baseQuery as $k => $v): ?>
+                <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
+            <?php endforeach; ?>
             <div class="col-md-4">
                 <input type="text"
                        name="q"
@@ -187,13 +183,19 @@ try {
                 <button class="btn btn-primary w-100" type="submit">Filter</button>
             </div>
             <div class="col-md-2 d-flex gap-2">
-                <a href="staff_reservations.php" class="btn btn-outline-secondary w-100">Clear</a>
+                <?php
+                    $clearUrl = $pageBase;
+                    if (!empty($baseQuery)) {
+                        $clearUrl .= '?' . http_build_query($baseQuery);
+                    }
+                ?>
+                <a href="<?= h($clearUrl) ?>" class="btn btn-outline-secondary w-100">Clear</a>
             </div>
         </form>
 
         <?php if (empty($reservations)): ?>
             <div class="alert alert-info">
-                There are no bookings matching your filters.
+                There are no reservations matching your filters.
             </div>
         <?php else: ?>
             <div class="table-responsive">
@@ -234,7 +236,7 @@ try {
                                         </a>
                                         <form method="post"
                                               action="delete_reservation.php"
-                                              onsubmit="return confirm('Delete this booking and all its items? This cannot be undone.');">
+                                              onsubmit="return confirm('Delete this reservation and all its items? This cannot be undone.');">
                                             <input type="hidden"
                                                    name="reservation_id"
                                                    value="<?= (int)$r['id'] ?>">
@@ -251,8 +253,10 @@ try {
             </div>
         <?php endif; ?>
 
+<?php if (!$embedded): ?>
     </div>
 </div>
 <?php reserveit_footer(); ?>
 </body>
 </html>
+<?php endif; ?>

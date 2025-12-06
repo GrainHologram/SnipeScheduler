@@ -21,8 +21,11 @@ function format_display_date($val): string
     }
 }
 
-$active  = basename($_SERVER['PHP_SELF']);
-$isStaff = !empty($currentUser['is_admin']);
+$active    = basename($_SERVER['PHP_SELF']);
+$isStaff   = !empty($currentUser['is_admin']);
+$embedded  = defined('RESERVATIONS_EMBED');
+$pageBase  = $embedded ? 'reservations.php' : 'checked_out_assets.php';
+$baseQuery = $embedded ? ['tab' => 'checked_out'] : [];
 
 if (!$isStaff) {
     http_response_code(403);
@@ -30,10 +33,11 @@ if (!$isStaff) {
     exit;
 }
 
-$tab = ($_GET['tab'] ?? 'all') === 'overdue' ? 'overdue' : 'all';
-$error = '';
-$assets = [];
-$search = trim($_GET['q'] ?? '');
+$viewRaw = $_GET['view'] ?? ($_GET['tab'] ?? 'all');
+$view    = $viewRaw === 'overdue' ? 'overdue' : 'all';
+$error   = '';
+$assets  = [];
+$search  = trim($_GET['q'] ?? '');
 
 try {
     $assets = list_checked_out_assets($tab === 'overdue');
@@ -61,11 +65,19 @@ try {
     $error = $e->getMessage();
 }
 ?>
+<?php
+function reserveit_checked_out_url(string $base, array $params): string
+{
+    $query = http_build_query($params);
+    return $query === '' ? $base : ($base . '?' . $query);
+}
+?>
+<?php if (!$embedded): ?>
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Checked Out Assets – ReserveIT</title>
+    <title>Checked Out Reservations – ReserveIT</title>
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="assets/style.css">
@@ -75,45 +87,73 @@ try {
 <div class="container">
     <div class="page-shell">
         <?= reserveit_logo_tag() ?>
+<?php endif; ?>
+        <style>
+            /* Make sub-tabs pop within the reservations area */
+            .reservations-subtabs {
+                border-bottom: 3px solid var(--primary-strong);
+                gap: 0.25rem;
+            }
+            .reservations-subtabs .nav-link {
+                border: 1px solid transparent;
+                color: var(--primary-strong);
+                font-weight: 600;
+                padding: 0.8rem 1.1rem;
+                border-radius: 0.5rem 0.5rem 0 0;
+                background: linear-gradient(180deg, rgba(var(--primary-soft-rgb),0.18), rgba(255,255,255,0));
+                transition: all 120ms ease;
+            }
+            .reservations-subtabs .nav-link:hover {
+                color: var(--primary);
+                background: linear-gradient(180deg, rgba(var(--primary-soft-rgb),0.36), rgba(255,255,255,0.08));
+                border-color: rgba(var(--primary-rgb),0.25);
+            }
+            .reservations-subtabs .nav-link.active {
+                color: #fff;
+                background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+                border-color: var(--primary-strong) var(--primary-strong) #fff;
+                box-shadow: 0 8px 18px rgba(var(--primary-rgb), 0.2);
+            }
+        </style>
         <div class="page-header">
-            <h1>Checked Out Assets</h1>
+            <h1>Checked Out Reservations</h1>
             <div class="page-subtitle">
                 Showing requestable assets currently checked out in Snipe-IT.
             </div>
         </div>
 
-        <nav class="app-nav">
-            <a href="index.php"
-               class="app-nav-link <?= $active === 'index.php' ? 'active' : '' ?>">Dashboard</a>
-            <a href="catalogue.php"
-               class="app-nav-link <?= $active === 'catalogue.php' ? 'active' : '' ?>">Catalogue</a>
-            <a href="my_bookings.php"
-               class="app-nav-link <?= $active === 'my_bookings.php' ? 'active' : '' ?>">My bookings</a>
-            <a href="staff_reservations.php"
-               class="app-nav-link <?= $active === 'staff_reservations.php' ? 'active' : '' ?>">Booking History</a>
-            <a href="staff_checkout.php"
-               class="app-nav-link <?= $active === 'staff_checkout.php' ? 'active' : '' ?>">Checkout</a>
-            <a href="quick_checkout.php"
-               class="app-nav-link <?= $active === 'quick_checkout.php' ? 'active' : '' ?>">Quick Checkout</a>
-            <a href="quick_checkin.php"
-               class="app-nav-link <?= $active === 'quick_checkin.php' ? 'active' : '' ?>">Quick Checkin</a>
-            <a href="checked_out_assets.php"
-               class="app-nav-link <?= $active === 'checked_out_assets.php' ? 'active' : '' ?>">Checked Out Assets</a>
-        </nav>
+        <?php if (!$embedded): ?>
+            <?= reserveit_render_nav($active, $isStaff) ?>
+        <?php endif; ?>
 
-        <ul class="nav nav-tabs mb-3">
+        <?php
+            $tabBaseParams = $baseQuery;
+            $allParams     = array_merge($tabBaseParams, ['view' => 'all']);
+            $overdueParams = array_merge($tabBaseParams, ['view' => 'overdue']);
+            if ($search !== '') {
+                $allParams['q']     = $search;
+                $overdueParams['q'] = $search;
+            }
+            $allUrl     = reserveit_checked_out_url($pageBase, $allParams);
+            $overdueUrl = reserveit_checked_out_url($pageBase, $overdueParams);
+        ?>
+
+        <ul class="nav nav-tabs reservations-subtabs mb-3">
             <li class="nav-item">
-                <a class="nav-link <?= $tab === 'all' ? 'active' : '' ?>"
-                   href="?tab=all<?= $search !== '' ? '&q=' . urlencode($search) : '' ?>">All checked out</a>
+                <a class="nav-link <?= $view === 'all' ? 'active' : '' ?>"
+                   href="<?= h($allUrl) ?>">All checked out</a>
             </li>
             <li class="nav-item">
-                <a class="nav-link <?= $tab === 'overdue' ? 'active' : '' ?>"
-                   href="?tab=overdue<?= $search !== '' ? '&q=' . urlencode($search) : '' ?>">Overdue</a>
+                <a class="nav-link <?= $view === 'overdue' ? 'active' : '' ?>"
+                   href="<?= h($overdueUrl) ?>">Overdue</a>
             </li>
         </ul>
 
-        <form method="get" class="row g-2 mb-3">
-            <input type="hidden" name="tab" value="<?= htmlspecialchars($tab) ?>">
+        <form method="get" class="row g-2 mb-3" action="<?= h($pageBase) ?>">
+            <?php foreach ($baseQuery as $k => $v): ?>
+                <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
+            <?php endforeach; ?>
+            <input type="hidden" name="view" value="<?= htmlspecialchars($view) ?>">
             <div class="col-md-6">
                 <input type="text"
                        name="q"
@@ -134,7 +174,7 @@ try {
 
         <?php if (empty($assets) && !$error): ?>
             <div class="alert alert-secondary">
-                No <?= $tab === 'overdue' ? 'overdue ' : '' ?>checked-out requestable assets.
+                No <?= $view === 'overdue' ? 'overdue ' : '' ?>checked-out requestable assets.
             </div>
         <?php else: ?>
             <div class="table-responsive">
@@ -168,7 +208,7 @@ try {
                                 <td><?= h($model) ?></td>
                                 <td><?= h($user) ?></td>
                                 <td><?= h(format_display_date($checkedOut)) ?></td>
-                                <td class="<?= ($tab === 'overdue' ? 'text-danger fw-semibold' : '') ?>">
+                                <td class="<?= ($view === 'overdue' ? 'text-danger fw-semibold' : '') ?>">
                                     <?= h(format_display_date($expected)) ?>
                                 </td>
                             </tr>
@@ -177,8 +217,10 @@ try {
                 </table>
             </div>
         <?php endif; ?>
+<?php if (!$embedded): ?>
     </div>
 </div>
 <?php reserveit_footer(); ?>
 </body>
 </html>
+<?php endif; ?>

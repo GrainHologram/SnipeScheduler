@@ -43,18 +43,18 @@ return [
         'charset'  => 'utf8mb4',
     ],
 
+    'snipeit' => [
+        'base_url'  => '',
+        'api_token' => '',     // keep your existing token
+        'verify_ssl' => false,
+    ],
+
     'ldap' => [
         'host'          => 'ldaps://',
         'base_dn'       => '',
         'bind_dn'       => '',
         'bind_password' => '', // keep your existing password
         'ignore_cert'   => true,
-    ],
-
-    'snipeit' => [
-        'base_url'  => '',
-        'api_token' => '',     // keep your existing token
-        'verify_ssl' => false,
     ],
 
     'auth' => [
@@ -71,5 +71,12 @@ return [
         'logo_url' => '', // optional: full URL or relative path to logo image
         'primary_color' => '#660000', // main UI colour for gradients/buttons
         'missed_cutoff_minutes' => 60, // minutes after start time before marking reservation as missed
+        'api_cache_ttl_seconds' => 60, // cache Snipe-IT GET responses for this many seconds
+    ],
+
+    'catalogue' => [
+        // Restrict which categories appear in the catalogue filter.
+        // Leave empty to show all categories returned by Snipe-IT.
+        'allowed_categories' => [],
     ],
 ];

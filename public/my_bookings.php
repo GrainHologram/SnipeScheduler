@@ -54,7 +54,7 @@ try {
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>My bookings</title>
+    <title>My Reservations</title>
 
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
@@ -66,33 +66,14 @@ try {
     <div class="page-shell">
         <?= reserveit_logo_tag() ?>
         <div class="page-header">
-            <h1>My bookings</h1>
+            <h1>My Reservations</h1>
             <div class="page-subtitle">
-                View all your past, current and future bookings.
+                View all your past, current and future reservations.
             </div>
         </div>
 
         <!-- App navigation -->
-        <nav class="app-nav">
-            <a href="index.php"
-               class="app-nav-link <?= $active === 'index.php' ? 'active' : '' ?>">Dashboard</a>
-            <a href="catalogue.php"
-               class="app-nav-link <?= $active === 'catalogue.php' ? 'active' : '' ?>">Catalogue</a>
-            <a href="my_bookings.php"
-               class="app-nav-link <?= $active === 'my_bookings.php' ? 'active' : '' ?>">My bookings</a>
-            <?php if ($isStaff): ?>
-                <a href="staff_reservations.php"
-                   class="app-nav-link <?= $active === 'staff_reservations.php' ? 'active' : '' ?>">Booking History</a>
-                <a href="staff_checkout.php"
-                   class="app-nav-link <?= $active === 'staff_checkout.php' ? 'active' : '' ?>">Checkout</a>
-                <a href="quick_checkout.php"
-                   class="app-nav-link <?= $active === 'quick_checkout.php' ? 'active' : '' ?>">Quick Checkout</a>
-                <a href="quick_checkin.php"
-                   class="app-nav-link <?= $active === 'quick_checkin.php' ? 'active' : '' ?>">Quick Checkin</a>
-                <a href="checked_out_assets.php"
-                   class="app-nav-link <?= $active === 'checked_out_assets.php' ? 'active' : '' ?>">Checked Out Assets</a>
-            <?php endif; ?>
-        </nav>
+        <?= reserveit_render_nav($active, $isStaff) ?>
 
         <!-- Top bar -->
         <div class="top-bar mb-3">
@@ -108,13 +89,13 @@ try {
 
         <?php if (!empty($loadError ?? '')): ?>
             <div class="alert alert-danger">
-                Error loading your bookings: <?= htmlspecialchars($loadError) ?>
+                Error loading your reservations: <?= htmlspecialchars($loadError) ?>
             </div>
         <?php endif; ?>
 
         <?php if (empty($reservations)): ?>
             <div class="alert alert-info">
-                You don’t have any bookings yet.
+                You don’t have any reservations yet.
             </div>
         <?php else: ?>
             <?php foreach ($reservations as $res): ?>
@@ -126,7 +107,7 @@ try {
                 <div class="card mb-3">
                     <div class="card-body">
                         <h5 class="card-title">
-                            Booking #<?= $resId ?>
+                            Reservation #<?= $resId ?>
                         </h5>
                         <p class="card-text">
                             <strong>Student Name:</strong>
@@ -153,7 +134,7 @@ try {
                         </p>
 
                         <?php if (!empty($items)): ?>
-                            <h6>Items in this booking</h6>
+                            <h6>Items in this reservation</h6>
                             <div class="table-responsive">
                                 <table class="table table-sm table-striped align-middle mb-0">
                                     <thead>
