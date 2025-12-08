@@ -110,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $staffEmail = $currentUser['email'] ?? '';
                     $staffName  = trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''));
                     $assetList  = array_map(function ($a) {
-                        return $a['asset_tag'] ?? '';
+                        return trim(($a['asset_tag'] ?? '') . ' ' . ($a['name'] ?? ''));
                     }, $checkoutAssets);
                     $assetLines = implode(', ', array_filter($assetList));
                     $bodyLines = [

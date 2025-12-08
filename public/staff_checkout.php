@@ -431,6 +431,7 @@ $checkoutTo = trim($selectedReservation['user_name'] ?? '');
                         "Reservation #{$selectedReservationId} has been checked out.",
                         "Items: {$assetLines}",
                         "Return by: {$dueDisplay}",
+                        "Checked out by: {$staffName}",
                     ];
                     if ($userEmail !== '') {
                         reserveit_send_notification($userEmail, $userName, 'Your reservation has been checked out', $bodyLines);

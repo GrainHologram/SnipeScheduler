@@ -100,7 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 try {
                     checkin_asset($assetId, $note);
                     $messages[] = "Checked in asset {$assetTag}.";
-                    $assetTags[] = $assetTag;
+                    $assetTags[] = trim($assetTag . ' ' . ($asset['name'] ?? ''));
 
                     $assignedEmail = $asset['assigned_email'] ?? '';
                     $assignedName  = $asset['assigned_name'] ?? '';

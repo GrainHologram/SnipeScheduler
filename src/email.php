@@ -11,10 +11,11 @@ require_once __DIR__ . '/bootstrap.php';
  * @param string      $toName
  * @param string      $subject
  * @param string      $body      Plaintext body (UTF-8)
+ * @param string|null $htmlBody  Optional HTML body (UTF-8); when provided, sends multipart/alternative
  * @param array|null  $cfg       Override config array (uses load_config() if null)
  * @return bool                   True on success, false on failure.
  */
-function reserveit_send_mail(string $toEmail, string $toName, string $subject, string $body, ?array $cfg = null): bool
+function reserveit_send_mail(string $toEmail, string $toName, string $subject, string $body, ?array $cfg = null, ?string $htmlBody = null): bool
 {
     $config = $cfg ?? load_config();
     $smtp   = $config['smtp'] ?? [];
@@ -117,17 +118,35 @@ function reserveit_send_mail(string $toEmail, string $toName, string $subject, s
         $write('DATA');
         $expectOk('354', $read);
 
-        $headers = [];
-        $headers[] = 'From: ' . encode_header($fromNm) . " <{$from}>";
-        $headers[] = 'To: ' . encode_header($toName) . " <{$toEmail}>";
-        $headers[] = 'Subject: ' . encode_header($subject);
-        $headers[] = 'MIME-Version: 1.0';
+    $headers = [];
+    $headers[] = 'From: ' . encode_header($fromNm) . " <{$from}>";
+    $headers[] = 'To: ' . encode_header($toName) . " <{$toEmail}>";
+    $headers[] = 'Subject: ' . encode_header($subject);
+    $headers[] = 'MIME-Version: 1.0';
+
+    if ($htmlBody !== null) {
+        $boundary = 'b' . bin2hex(random_bytes(8));
+        $headers[] = 'Content-Type: multipart/alternative; boundary="' . $boundary . '"';
+
+        $parts  = "--{$boundary}\r\n";
+        $parts .= "Content-Type: text/plain; charset=UTF-8\r\n";
+        $parts .= "Content-Transfer-Encoding: 8bit\r\n\r\n";
+        $parts .= $body . "\r\n";
+        $parts .= "--{$boundary}\r\n";
+        $parts .= "Content-Type: text/html; charset=UTF-8\r\n";
+        $parts .= "Content-Transfer-Encoding: 8bit\r\n\r\n";
+        $parts .= $htmlBody . "\r\n";
+        $parts .= "--{$boundary}--\r\n";
+
+        $payload = implode("\r\n", $headers) . "\r\n\r\n" . $parts . "\r\n.";
+    } else {
         $headers[] = 'Content-Type: text/plain; charset=UTF-8';
         $headers[] = 'Content-Transfer-Encoding: 8bit';
-
         $payload = implode("\r\n", $headers) . "\r\n\r\n" . $body . "\r\n.";
-        $write($payload);
-        $expectOk('250', $read);
+    }
+
+    $write($payload);
+    $expectOk('250', $read);
         $write('QUIT');
         fclose($fp);
         return true;
@@ -148,12 +167,36 @@ function reserveit_send_mail(string $toEmail, string $toName, string $subject, s
  * @param array|null $cfg
  * @return bool
  */
-function reserveit_send_notification(string $toEmail, string $toName, string $subject, array $lines, ?array $cfg = null): bool
+function reserveit_send_notification(string $toEmail, string $toName, string $subject, array $lines, ?array $cfg = null, bool $includeHtml = true): bool
 {
-    $body = implode("\n", array_filter($lines, static function ($line) {
+    $bodyLines = array_filter($lines, static function ($line) {
         return $line !== null && $line !== '';
-    }));
-    return reserveit_send_mail($toEmail, $toName, $subject, $body, $cfg);
+    });
+    $body = implode("\n", $bodyLines);
+
+    $htmlBody = null;
+    if ($includeHtml) {
+        $config = $cfg ?? load_config();
+        $logoUrl = trim($config['app']['logo_url'] ?? '');
+
+        $htmlParts = [];
+        $htmlParts[] = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:Arial,sans-serif;line-height:1.5;color:#222;} .logo{margin-bottom:12px;} .card{border:1px solid #e5e5e5;border-radius:8px;padding:12px;background:#fafafa;} .muted{color:#666;font-size:12px;}</style></head><body>';
+        if ($logoUrl !== '') {
+            $logoEsc = htmlspecialchars($logoUrl, ENT_QUOTES, 'UTF-8');
+            $htmlParts[] = '<div class="logo"><img src="' . $logoEsc . '" alt="Logo" style="max-height:60px;"></div>';
+        }
+        $htmlParts[] = '<div class="card">';
+        $htmlParts[] = '<h2 style="margin:0 0 10px 0; font-size:18px;">' . htmlspecialchars($subject, ENT_QUOTES, 'UTF-8') . '</h2>';
+        foreach ($bodyLines as $line) {
+            $htmlParts[] = '<p style="margin:6px 0;">' . nl2br(htmlspecialchars($line, ENT_QUOTES, 'UTF-8')) . '</p>';
+        }
+        $htmlParts[] = '</div>';
+        $htmlParts[] = '<div class="muted" style="margin-top:12px;">This message was sent by ReserveIT.</div>';
+        $htmlParts[] = '</body></html>';
+        $htmlBody = implode('', $htmlParts);
+    }
+
+    return reserveit_send_mail($toEmail, $toName, $subject, $body, $cfg, $htmlBody);
 }
 
 function encode_header(string $str): string
