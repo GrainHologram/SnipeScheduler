@@ -37,9 +37,6 @@ $isStaff = !empty($currentUser['is_admin']);
                 (<?= h($currentUser['email'] ?? '') ?>)
             </div>
             <div class="top-bar-actions">
-                <a href="basket.php" class="btn btn-outline-primary">
-                    View basket
-                </a>
                 <a href="logout.php" class="btn btn-link btn-sm">Log out</a>
             </div>
         </div>
