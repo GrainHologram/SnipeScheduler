@@ -33,10 +33,10 @@ function reserveit_send_mail(string $toEmail, string $toName, string $subject, s
         return false;
     }
 
-    $remoteHost = ($enc === 'ssl' || $enc === 'tls') ? "ssl://{$host}" : $host;
+    $remoteHost = ($enc === 'ssl') ? "ssl://{$host}" : $host; // STARTTLS uses plain host, SSL wraps immediately
     $fp = @stream_socket_client("{$remoteHost}:{$port}", $errno, $errstr, 10, STREAM_CLIENT_CONNECT);
     if (!$fp) {
-        error_log("ReserveIT SMTP connect failed: {$errstr}");
+        error_log("ReserveIT SMTP connect failed: " . ($errstr ?? 'unknown'));
         return false;
     }
 
