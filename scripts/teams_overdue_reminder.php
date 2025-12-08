@@ -5,22 +5,18 @@
 //
 // Requirements:
 // - Configure Microsoft Graph app with application permissions: Chat.Create, Chat.ReadWrite.All, User.Read.All
-// - Environment variables:
-//     GRAPH_TENANT_ID
-//     GRAPH_CLIENT_ID
-//     GRAPH_CLIENT_SECRET
-//     GRAPH_SCOPE (optional, defaults to https://graph.microsoft.com/.default)
+// - Set the Graph credentials and scope below (hard-coded for clarity).
 // - ReserveIT config present (load_config) and Snipe-IT credentials set.
 //
 // Usage (cron):
-//     * * * * * GRAPH_TENANT_ID=... GRAPH_CLIENT_ID=... GRAPH_CLIENT_SECRET=... /usr/bin/php /path/to/scripts/teams_overdue_reminder.php >> /var/log/reserveit_teams_reminder.log 2>&1
+//     * * * * * /usr/bin/php /path/to/scripts/teams_overdue_reminder.php >> /var/log/reserveit_teams_reminder.log 2>&1
 //
 // Azure setup (for chats):
 // 1) Register an app in Entra ID → get Client ID and Tenant ID.
 // 2) Create a client secret.
 // 3) Add Microsoft Graph application permissions: Chat.Create, Chat.ReadWrite.All, User.Read.All.
 // 4) Grant admin consent for those permissions.
-// 5) Use the env vars above; GRAPH_SCOPE defaults to https://graph.microsoft.com/.default.
+// 5) Update the Graph config below with your tenant/client/secret/scope.
 
 declare(strict_types=1);
 
@@ -32,19 +28,24 @@ if (php_sapi_name() !== 'cli') {
 require_once __DIR__ . '/../src/bootstrap.php';
 require_once SRC_PATH . '/snipeit_client.php';
 
+// ------------------------- Graph configuration ----------------------------
+// Fill these with your app registration details.
+$graphConfig = [
+    'tenant_id'     => 'YOUR_TENANT_ID',
+    'client_id'     => 'YOUR_CLIENT_ID',
+    'client_secret' => 'YOUR_CLIENT_SECRET',
+    'scope'         => 'https://graph.microsoft.com/.default',
+];
+
 // -------------------------------------------------------------------------
 // Microsoft Graph helpers
 // -------------------------------------------------------------------------
-function graph_get_token(): string
+function graph_get_token(array $cfg): string
 {
-    $tenant = getenv('GRAPH_TENANT_ID');
-    $client = getenv('GRAPH_CLIENT_ID');
-    $secret = getenv('GRAPH_CLIENT_SECRET');
-    $scope  = getenv('GRAPH_SCOPE') ?: 'https://graph.microsoft.com/.default';
-
-    if (!$tenant || !$client || !$secret) {
-        throw new RuntimeException('GRAPH_TENANT_ID, GRAPH_CLIENT_ID, and GRAPH_CLIENT_SECRET must be set.');
-    }
+    $tenant = $cfg['tenant_id'] ?? '';
+    $client = $cfg['client_id'] ?? '';
+    $secret = $cfg['client_secret'] ?? '';
+    $scope  = $cfg['scope'] ?? 'https://graph.microsoft.com/.default';
 
     $tokenUrl = "https://login.microsoftonline.com/{$tenant}/oauth2/v2.0/token";
     $ch = curl_init($tokenUrl);
@@ -196,7 +197,7 @@ if (empty($buckets)) {
 }
 
 try {
-    $token = graph_get_token();
+    $token = graph_get_token($graphConfig);
 } catch (Throwable $e) {
     fwrite(STDERR, "[error] Could not obtain Graph token: {$e->getMessage()}\n");
     exit(1);

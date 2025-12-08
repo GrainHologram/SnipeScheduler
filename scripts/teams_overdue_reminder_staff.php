@@ -5,22 +5,18 @@
 //
 // Requirements:
 // - Configure Microsoft Graph app with application permissions: Chat.Create, Chat.ReadWrite.All, User.Read.All
-// - Environment variables:
-//     GRAPH_TENANT_ID
-//     GRAPH_CLIENT_ID
-//     GRAPH_CLIENT_SECRET
-//     GRAPH_SCOPE (optional, defaults to https://graph.microsoft.com/.default)
 // - Set TARGET_UPN below to the staff member’s UPN/email to receive the chat.
+// - Set Graph credentials below (hard-coded for clarity).
 //
 // Usage (cron):
-//     TARGET_UPN=staff@yourtenant.com GRAPH_TENANT_ID=... GRAPH_CLIENT_ID=... GRAPH_CLIENT_SECRET=... /usr/bin/php /path/to/scripts/teams_overdue_reminder_staff.php >> /var/log/reserveit_teams_staff.log 2>&1
+//     /usr/bin/php /path/to/scripts/teams_overdue_reminder_staff.php >> /var/log/reserveit_teams_staff.log 2>&1
 //
 // Azure setup (for chats):
 // 1) Register an app in Entra ID → get Client ID and Tenant ID.
 // 2) Create a client secret.
 // 3) Add Microsoft Graph application permissions: Chat.Create, Chat.ReadWrite.All, User.Read.All.
 // 4) Grant admin consent for those permissions.
-// 5) Use the env vars above; GRAPH_SCOPE defaults to https://graph.microsoft.com/.default.
+// 5) Update the Graph config below with your tenant/client/secret/scope.
 
 declare(strict_types=1);
 
@@ -32,25 +28,27 @@ if (php_sapi_name() !== 'cli') {
 require_once __DIR__ . '/../src/bootstrap.php';
 require_once SRC_PATH . '/snipeit_client.php';
 
-$targetUpn = getenv('TARGET_UPN') ?: '';
-if ($targetUpn === '') {
-    fwrite(STDERR, "[error] TARGET_UPN is required.\n");
-    exit(1);
-}
+// ------------------------- Graph configuration ----------------------------
+// Fill these with your app registration details.
+$graphConfig = [
+    'tenant_id'     => 'YOUR_TENANT_ID',
+    'client_id'     => 'YOUR_CLIENT_ID',
+    'client_secret' => 'YOUR_CLIENT_SECRET',
+    'scope'         => 'https://graph.microsoft.com/.default',
+];
+
+// Staff UPN/email to receive the chat
+$targetUpn = 'staff@yourtenant.com';
 
 // -------------------------------------------------------------------------
 // Microsoft Graph helpers
 // -------------------------------------------------------------------------
-function staff_graph_get_token(): string
+function staff_graph_get_token(array $cfg): string
 {
-    $tenant = getenv('GRAPH_TENANT_ID');
-    $client = getenv('GRAPH_CLIENT_ID');
-    $secret = getenv('GRAPH_CLIENT_SECRET');
-    $scope  = getenv('GRAPH_SCOPE') ?: 'https://graph.microsoft.com/.default';
-
-    if (!$tenant || !$client || !$secret) {
-        throw new RuntimeException('GRAPH_TENANT_ID, GRAPH_CLIENT_ID, and GRAPH_CLIENT_SECRET must be set.');
-    }
+    $tenant = $cfg['tenant_id'] ?? '';
+    $client = $cfg['client_id'] ?? '';
+    $secret = $cfg['client_secret'] ?? '';
+    $scope  = $cfg['scope'] ?? 'https://graph.microsoft.com/.default';
 
     $tokenUrl = "https://login.microsoftonline.com/{$tenant}/oauth2/v2.0/token";
     $ch = curl_init($tokenUrl);
@@ -187,7 +185,7 @@ foreach ($assets as $a) {
 $body = "Overdue assets report:\n- " . implode("\n- ", $lines);
 
 try {
-    $token = staff_graph_get_token();
+    $token = staff_graph_get_token($graphConfig);
     staff_graph_send_chat($token, $targetUpn, $body);
     echo "[sent] Overdue report sent to {$targetUpn}\n";
 } catch (Throwable $e) {
