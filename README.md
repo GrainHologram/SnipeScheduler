@@ -56,3 +56,7 @@ For an asset on Snipe-IT to be made available on this app for reservation, both 
 ## Setting up Admins/Staff
 
 As mentioned, this app uses LDAP for authentication. When installing this app, please make sure to add LDAP/AD Groups on the initial config that contain your users that you wish to be admins/staff. Standard users only have access to reservations, whereas LDAP/AD groups assigned to the staff section of this app can checkout/checkin equipment. 
+
+## CRON Scripts
+
+In the scripts folder of this app, there are certain PHP scripts you can run as a cron or via PHP CLI. The 'cron_mark_missed.php' script will automatically mark all reservations not checked out after a specified time period (set in the script) as missed. By default, this is set to 1 hour. The email_overdue_staff and users.php scripts will automatically email users that have overdue equipment and inform staff specified explicitly in the script of currently overdue reservations. The teams_overdue_reminder scripts will (once an app registration has been setup in Microsoft Azure, details of which are in the script) attempt to send a message to the overdue user on Microsoft Teams to remind them of overdue equipment. The MS Teams scripts have not been tested to a great degree yet, so proceed carefully :) 
