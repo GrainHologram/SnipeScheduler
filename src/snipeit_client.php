@@ -729,7 +729,12 @@ function list_checked_out_assets(bool $overdueOnly = false): array
 
         // Overdue check
         if ($overdueOnly) {
-            $expTs = $expectedCheckin ? strtotime($expectedCheckin) : null;
+            // If Snipe-IT returns only a date (no time), treat it as due by end-of-day rather than midnight.
+            $normalizedExpected = $expectedCheckin;
+            if (is_string($expectedCheckin) && preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $expectedCheckin)) {
+                $normalizedExpected = $expectedCheckin . ' 23:59:59';
+            }
+            $expTs = $normalizedExpected ? strtotime($normalizedExpected) : null;
             if (!$expTs || $expTs > $now) {
                 continue;
             }
