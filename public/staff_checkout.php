@@ -497,7 +497,8 @@ $checkoutTo = trim($selectedReservation['user_name'] ?? '');
                     }
 
                     try {
-                        checkout_asset_to_user($assetId, $userId, $note, null);
+                        // Pass expected end datetime to Snipe-IT so time is preserved
+                        checkout_asset_to_user($assetId, $userId, $note, $selectedEnd);
                         $checkoutMessages[] = "Checked out asset {$assetTag} to {$userName}.";
                     } catch (Throwable $e) {
                         $checkoutErrors[] = "Failed to check out {$assetTag}: " . $e->getMessage();
@@ -526,6 +527,7 @@ $isStaff = !empty($currentUser['is_admin']);
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Today’s Reservations (Checkout)</title>
 
     <link rel="stylesheet"

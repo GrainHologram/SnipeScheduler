@@ -91,6 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $staffEmail = $currentUser['email'] ?? '';
             $staffName  = trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''));
+            $staffDisplayName = $staffName !== '' ? $staffName : ($currentUser['email'] ?? 'Staff');
             $assetTags  = [];
             $userBuckets = [];
 
@@ -131,12 +132,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 // Notify staff performing check-in
                 if ($staffEmail !== '' && !empty($assetTags)) {
-                    $bodyLines = [
-                        'You checked in the following assets:',
-                        implode(', ', $assetTags),
-                        $note !== '' ? "Note: {$note}" : '',
-                    ];
-                    reserveit_send_notification($staffEmail, $staffName !== '' ? $staffName : $staffEmail, 'Assets checked in', $bodyLines);
+                    // Build per-user summary for staff so they can see who had the assets
+                    $perUserSummary = [];
+                    foreach ($userBuckets as $email => $info) {
+                        $perUserSummary[] = ($info['name'] ?? $email) . ': ' . implode(', ', $info['assets']);
+                    }
+
+                    $bodyLines = [];
+                    if (!empty($perUserSummary)) {
+                        $bodyLines[] = 'You checked in the following assets (by user):';
+                        $bodyLines[] = implode('; ', $perUserSummary);
+                    } else {
+                        // Fallback when we have no user information
+                        $bodyLines[] = 'You checked in the following assets:';
+                        $bodyLines[] = implode(', ', $assetTags);
+                    }
+                    if ($note !== '') {
+                        $bodyLines[] = "Note: {$note}";
+                    }
+                    reserveit_send_notification($staffEmail, $staffDisplayName, 'Assets checked in', $bodyLines);
                 }
 
                 $checkinAssets = [];
@@ -149,6 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Quick Checkin – ReserveIT</title>
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">

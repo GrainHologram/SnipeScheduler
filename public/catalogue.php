@@ -216,6 +216,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Catalogue – Book Equipment</title>
 
     <link rel="stylesheet"
@@ -246,7 +247,8 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             </div>
             <div class="top-bar-actions d-flex gap-2">
                 <a href="basket.php"
-                   class="btn btn-outline-primary"
+                   class="btn btn-lg btn-primary fw-semibold shadow-sm px-4"
+                   style="font-size:16px;"
                    id="view-basket-btn">
                     View basket<?= $basketCount > 0 ? ' (' . $basketCount . ')' : '' ?>
                 </a>
@@ -268,7 +270,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
 
         <!-- Filters -->
         <?php if ($isStaff): ?>
-            <div class="alert alert-info d-flex flex-column flex-md-row align-items-md-center justify-content-md-between">
+            <div class="alert alert-info d-flex flex-column flex-md-row align-items-md-center justify-content-md-between booking-for-alert">
                 <div class="mb-2 mb-md-0">
                     <strong>Booking for:</strong>
                     <?= h($activeUser['email'] ?? '') ?>
@@ -276,7 +278,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         (<?= h(trim(($activeUser['first_name'] ?? '') . ' ' . ($activeUser['last_name'] ?? ''))) ?>)
                     <?php endif; ?>
                 </div>
-                <form method="post" id="booking_user_form" class="d-flex gap-2 mb-0 flex-wrap">
+                <form method="post" id="booking_user_form" class="d-flex gap-2 mb-0 flex-wrap position-relative" style="z-index: 9998;">
                     <input type="hidden" name="mode" value="set_booking_user">
                     <input type="hidden" name="booking_user_email" id="booking_user_email">
                     <input type="hidden" name="booking_user_name" id="booking_user_name">
@@ -288,7 +290,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                autocomplete="off">
                         <div class="list-group position-absolute w-100"
                              id="booking_user_suggestions"
-                             style="z-index: 1050; max-height: 220px; overflow-y: auto; display: none;"></div>
+                             style="z-index: 9999; max-height: 260px; overflow-y: auto; display: none; box-shadow: 0 12px 24px rgba(0,0,0,0.18);"></div>
                     </div>
                     <button class="btn btn-sm btn-primary" type="submit">Use</button>
                     <button class="btn btn-sm btn-outline-secondary" type="submit" name="booking_user_revert" value="1">Revert to logged in user</button>

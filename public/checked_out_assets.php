@@ -21,11 +21,28 @@ function format_display_date($val): string
     }
 }
 
+function format_display_datetime($val): string
+{
+    if (is_array($val)) {
+        $val = $val['datetime'] ?? ($val['date'] ?? '');
+    }
+    if (empty($val)) {
+        return '';
+    }
+    try {
+        $dt = new DateTime($val);
+        return $dt->format('d/m/Y H:i');
+    } catch (Throwable $e) {
+        return $val;
+    }
+}
+
 $active    = basename($_SERVER['PHP_SELF']);
 $isStaff   = !empty($currentUser['is_admin']);
 $embedded  = defined('RESERVATIONS_EMBED');
 $pageBase  = $embedded ? 'reservations.php' : 'checked_out_assets.php';
 $baseQuery = $embedded ? ['tab' => 'checked_out'] : [];
+$messages  = [];
 
 if (!$isStaff) {
     http_response_code(403);
@@ -33,21 +50,89 @@ if (!$isStaff) {
     exit;
 }
 
-$viewRaw = $_GET['view'] ?? ($_GET['tab'] ?? 'all');
+$viewRaw = $_REQUEST['view'] ?? ($_REQUEST['tab'] ?? 'all');
 $view    = $viewRaw === 'overdue' ? 'overdue' : 'all';
 $error   = '';
 $assets  = [];
 $search  = trim($_GET['q'] ?? '');
+$forceRefresh = isset($_REQUEST['refresh']) && $_REQUEST['refresh'] === '1';
+if ($forceRefresh) {
+    // Disable cached Snipe-IT responses for this request
+    if (isset($cacheTtl)) {
+        $GLOBALS['_reserveit_prev_cache_ttl'] = $cacheTtl;
+    }
+    $cacheTtl = 0;
+}
+
+// Handle renew actions (overdue tab only)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $view === 'overdue') {
+    // Renew single
+    if (isset($_POST['renew_asset_id'])) {
+        $renewId = (int)$_POST['renew_asset_id'];
+        if ($renewId > 0) {
+            try {
+                $tomorrowDt = new DateTime('tomorrow');
+                $tomorrow   = $tomorrowDt->format('Y-m-d');
+                update_asset_expected_checkin($renewId, $tomorrow);
+                $messages[] = "Extended expected check-in to " . $tomorrowDt->format('d/m/Y') . " for asset #{$renewId}.";
+            } catch (Throwable $e) {
+                $error = 'Could not renew asset: ' . $e->getMessage();
+            }
+        } else {
+            $error = 'Invalid asset selected for renewal.';
+        }
+    }
+
+    // Renew all visible (filtered) items
+    if (isset($_POST['renew_all']) && $_POST['renew_all'] === '1') {
+        try {
+            // Ensure we apply the same filter when renewing all
+            $assetsToRenew = list_checked_out_assets(true);
+            if ($search !== '') {
+                $q = mb_strtolower($search);
+                $assetsToRenew = array_values(array_filter($assetsToRenew, function ($row) use ($q) {
+                    $fields = [
+                        $row['asset_tag'] ?? '',
+            $row['name'] ?? '',
+            $row['model']['name'] ?? '',
+            $row['assigned_to'] ?? ($row['assigned_to_fullname'] ?? ''),
+        ];
+                    foreach ($fields as $f) {
+                        if (is_array($f)) {
+                            $f = implode(' ', $f);
+                        }
+                        if (mb_stripos((string)$f, $q) !== false) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }));
+            }
+
+            $tomorrowDt = new DateTime('tomorrow');
+            $tomorrow   = $tomorrowDt->format('Y-m-d');
+            foreach ($assetsToRenew as $row) {
+                $aid = (int)($row['id'] ?? 0);
+                if ($aid > 0) {
+                    update_asset_expected_checkin($aid, $tomorrow);
+                }
+            }
+            $messages[] = "Extended expected check-in to " . $tomorrowDt->format('d/m/Y') . " for " . count($assetsToRenew) . " asset(s).";
+        } catch (Throwable $e) {
+            $error = 'Could not renew all overdue assets: ' . $e->getMessage();
+        }
+    }
+}
 
 try {
-    $assets = list_checked_out_assets($tab === 'overdue');
+    $assets = list_checked_out_assets($view === 'overdue');
     if ($search !== '') {
         $q = mb_strtolower($search);
-        $assets = array_values(array_filter($assets, function ($row) use ($q) {
-            $fields = [
-                $row['asset_tag'] ?? '',
-                $row['name'] ?? '',
-                $row['model']['name'] ?? '',
+    $assets = array_values(array_filter($assets, function ($row) use ($q) {
+        $fields = [
+            $row['asset_tag'] ?? '',
+            $row['name'] ?? '',
+            $row['model']['name'] ?? '',
                 $row['assigned_to'] ?? ($row['assigned_to_fullname'] ?? ''),
             ];
             foreach ($fields as $f) {
@@ -64,6 +149,12 @@ try {
 } catch (Throwable $e) {
     $error = $e->getMessage();
 }
+
+// Restore cache TTL if we temporarily disabled it
+if ($forceRefresh && isset($GLOBALS['_reserveit_prev_cache_ttl'])) {
+    $cacheTtl = $GLOBALS['_reserveit_prev_cache_ttl'];
+    unset($GLOBALS['_reserveit_prev_cache_ttl']);
+}
 ?>
 <?php
 function reserveit_checked_out_url(string $base, array $params): string
@@ -77,6 +168,7 @@ function reserveit_checked_out_url(string $base, array $params): string
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Checked Out Reservations – ReserveIT</title>
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
@@ -172,6 +264,31 @@ function reserveit_checked_out_url(string $base, array $params): string
             </div>
         <?php endif; ?>
 
+        <?php if ($view === 'overdue' && !empty($assets)): ?>
+            <div class="d-flex justify-content-end mb-2">
+                <form method="post" class="mb-0 d-flex gap-2 align-items-center">
+                    <input type="hidden" name="view" value="overdue">
+                    <input type="hidden" name="renew_all" value="1">
+                    <?php if ($search !== ''): ?>
+                        <input type="hidden" name="q" value="<?= h($search) ?>">
+                    <?php endif; ?>
+                    <button type="submit" class="btn btn-primary btn-sm px-3 shadow-sm">
+                        Renew all shown to tomorrow
+                    </button>
+                </form>
+            </div>
+        <?php endif; ?>
+
+        <?php if (!empty($messages)): ?>
+            <div class="alert alert-success">
+                <ul class="mb-0">
+                    <?php foreach ($messages as $m): ?>
+                        <li><?= h($m) ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        <?php endif; ?>
+
         <?php if (empty($assets) && !$error): ?>
             <div class="alert alert-secondary">
                 No <?= $view === 'overdue' ? 'overdue ' : '' ?>checked-out requestable assets.
@@ -187,6 +304,9 @@ function reserveit_checked_out_url(string $base, array $params): string
                             <th>User</th>
                             <th>Assigned Since</th>
                             <th>Expected Check-in</th>
+                            <?php if ($view === 'overdue'): ?>
+                                <th style="width: 140px;"></th>
+                            <?php endif; ?>
                         </tr>
                     </thead>
                     <tbody>
@@ -207,10 +327,23 @@ function reserveit_checked_out_url(string $base, array $params): string
                                 <td><?= h($name) ?></td>
                                 <td><?= h($model) ?></td>
                                 <td><?= h($user) ?></td>
-                                <td><?= h(format_display_date($checkedOut)) ?></td>
+                                <td><?= h(format_display_datetime($checkedOut)) ?></td>
                                 <td class="<?= ($view === 'overdue' ? 'text-danger fw-semibold' : '') ?>">
                                     <?= h(format_display_date($expected)) ?>
                                 </td>
+                                <?php if ($view === 'overdue'): ?>
+                                    <td>
+                                        <form method="post" class="d-inline">
+                                            <input type="hidden" name="view" value="overdue">
+                                            <input type="hidden" name="renew_asset_id" value="<?= (int)($a['id'] ?? 0) ?>">
+                                            <button type="submit"
+                                                    class="btn btn-sm btn-outline-primary"
+                                                    <?php if (empty($a['id'])): ?>disabled<?php endif; ?>>
+                                                Renew to tomorrow
+                                            </button>
+                                        </form>
+                                    </td>
+                                <?php endif; ?>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -223,4 +356,17 @@ function reserveit_checked_out_url(string $base, array $params): string
 <?php reserveit_footer(); ?>
 </body>
 </html>
+<?php endif; ?>
+<?php if (!empty($messages) && $view === 'overdue'): ?>
+<script>
+    // After showing renew success, refresh overdue list to bust any cached data.
+    setTimeout(() => {
+        const url = new URL(window.location.href);
+        url.searchParams.set('view', 'overdue');
+        url.searchParams.set('_', Date.now().toString());
+        url.searchParams.set('refresh', '1');
+        // Force no-cache reload with refresh flag
+        window.location.replace(url.toString());
+    }, 4000);
+</script>
 <?php endif; ?>
