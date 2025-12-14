@@ -570,7 +570,7 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                         <h5 class="card-title mb-1">Authentication</h5>
                         <p class="text-muted small mb-3">Configure sign-in methods below. Toggle each method on/off and add its settings.</p>
 
-                        <h6 class="mt-2">LDAP / Active Directory</h6>
+                        <h6 class="mt-2 pb-1 border-bottom">LDAP / Active Directory</h6>
                         <div class="row g-3">
                             <div class="col-md-4">
                                 <div class="form-check">
@@ -602,6 +602,11 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                                     <label class="form-check-label" for="ldap_ignore_cert">Ignore SSL certificate errors</label>
                                 </div>
                             </div>
+                            <div class="col-12">
+                                <label class="form-label">LDAP/AD Admin Group(s)</label>
+                                <textarea name="staff_group_cn" rows="3" class="form-control" placeholder="ICT Staff&#10;Another Group"><?= reserveit_textarea_value($staffGroupText) ?></textarea>
+                                <div class="form-text">Comma or newline separated group names that should be treated as staff.</div>
+                            </div>
                         </div>
                         <div class="d-flex justify-content-between align-items-center mt-3">
                             <div class="small text-muted" id="ldap-test-result"></div>
@@ -610,7 +615,7 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
 
                         <hr class="my-4">
 
-                        <h6>Google OAuth</h6>
+                        <h6 class="mt-4 pb-1 border-bottom">Google OAuth</h6>
                         <div class="row g-3">
                             <div class="col-md-4">
                                 <div class="form-check">
@@ -648,16 +653,6 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                             <div class="small text-muted" id="google-test-result"></div>
                             <button type="button" name="action" value="test_google" class="btn btn-outline-primary btn-sm" data-test-action="test_google" data-target="google-test-result">Test Google OAuth</button>
                         </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title mb-1">LDAP/AD Admin Group(s)</h5>
-                        <p class="text-muted small mb-3">Comma or newline separated LDAP/AD Group names that contain users that you wish to be Administrators/Staff on this app.</p>
-                        <textarea name="staff_group_cn" rows="3" class="form-control" placeholder="ICT Staff&#10;Another Group"><?= reserveit_textarea_value($staffGroupText) ?></textarea>
                     </div>
                 </div>
             </div>
