@@ -56,12 +56,6 @@ if (!empty($_SESSION['user']['email'])) {
             </div>
         <?php endif; ?>
 
-        <?php if ($showGoogle): ?>
-            <a href="login_process.php?provider=google" class="btn btn-outline-dark w-100 mb-3">
-                Sign in with Google
-            </a>
-        <?php endif; ?>
-
         <?php if ($showLdap): ?>
             <form method="post" action="login_process.php" class="card p-3 mt-3">
                 <input type="hidden" name="provider" value="ldap">
@@ -88,7 +82,29 @@ if (!empty($_SESSION['user']['email'])) {
                 <button type="submit" class="btn btn-primary w-100">
                     Sign in
                 </button>
+
+                <?php if ($showGoogle): ?>
+                    <a href="login_process.php?provider=google" class="btn btn-outline-dark w-100 mt-3 d-flex align-items-center justify-content-center gap-2">
+                        <svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 533.5 544.3">
+                            <path fill="#EA4335" d="M533.5 278.4c0-18.6-1.5-37.3-4.8-55.5H272v105h147.6c-6.3 34-25 62.8-53.3 82.1l86.2 67.2c50.6-46.6 80-115.3 80-198.8z"/>
+                            <path fill="#34A853" d="M272 544.3c71.8 0 132-23.5 176-64.1l-86.2-67.2c-24 16.4-54.8 26-89.8 26-69 0-127.5-46.5-148.4-108.9l-90 69.4C72.8 483.3 163.1 544.3 272 544.3z"/>
+                            <path fill="#4A90E2" d="M123.6 330.1c-10.8-32.5-10.8-67.7 0-100.2l-90-69.4c-39.2 78.4-39.2 170.6 0 249.1l90-69.5z"/>
+                            <path fill="#FBBC05" d="M272 106.1c37.8-.6 74.2 13 102 38.2l76.1-76.1C403.9 24.8 339.7.5 272 1 163.1 1 72.8 62 33.6 160.5l90 69.4C144.6 152.6 203 106.1 272 106.1z"/>
+                        </svg>
+                        <span>Sign in with Google</span>
+                    </a>
+                <?php endif; ?>
             </form>
+        <?php elseif ($showGoogle): ?>
+            <a href="login_process.php?provider=google" class="btn btn-outline-dark w-100 mt-3 d-flex align-items-center justify-content-center gap-2">
+                <svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 533.5 544.3">
+                    <path fill="#EA4335" d="M533.5 278.4c0-18.6-1.5-37.3-4.8-55.5H272v105h147.6c-6.3 34-25 62.8-53.3 82.1l86.2 67.2c50.6-46.6 80-115.3 80-198.8z"/>
+                    <path fill="#34A853" d="M272 544.3c71.8 0 132-23.5 176-64.1l-86.2-67.2c-24 16.4-54.8 26-89.8 26-69 0-127.5-46.5-148.4-108.9l-90 69.4C72.8 483.3 163.1 544.3 272 544.3z"/>
+                    <path fill="#4A90E2" d="M123.6 330.1c-10.8-32.5-10.8-67.7 0-100.2l-90-69.4c-39.2 78.4-39.2 170.6 0 249.1l90-69.5z"/>
+                    <path fill="#FBBC05" d="M272 106.1c37.8-.6 74.2 13 102 38.2l76.1-76.1C403.9 24.8 339.7.5 272 1 163.1 1 72.8 62 33.6 160.5l90 69.4C144.6 152.6 203 106.1 272 106.1z"/>
+                </svg>
+                <span>Sign in with Google</span>
+            </a>
         <?php endif; ?>
 
         <?php if (!$showGoogle && !$showLdap): ?>
