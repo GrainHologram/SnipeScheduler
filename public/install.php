@@ -174,6 +174,50 @@ function installer_test_snipe(array $snipe): string
     return 'Snipe-IT API reachable (HTTP ' . $code . ').';
 }
 
+function installer_test_google(array $google, array $auth): string
+{
+    if (!function_exists('curl_init')) {
+        throw new Exception('PHP cURL extension is not installed.');
+    }
+
+    if (empty($auth['google_oauth_enabled'])) {
+        throw new Exception('Google OAuth is disabled.');
+    }
+
+    $clientId     = trim($google['client_id'] ?? '');
+    $clientSecret = trim($google['client_secret'] ?? '');
+    $redirectUri  = trim($google['redirect_uri'] ?? '');
+
+    if ($clientId === '' || $clientSecret === '') {
+        throw new Exception('Client ID and Client Secret are required.');
+    }
+
+    if ($redirectUri !== '' && !filter_var($redirectUri, FILTER_VALIDATE_URL)) {
+        throw new Exception('Redirect URI is not a valid URL.');
+    }
+
+    $ch = curl_init('https://accounts.google.com/.well-known/openid-configuration');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 6,
+        CURLOPT_CONNECTTIMEOUT => 3,
+    ]);
+    $raw = curl_exec($ch);
+    if ($raw === false) {
+        $err = curl_error($ch);
+        curl_close($ch);
+        throw new Exception('Network check failed: ' . $err);
+    }
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($code >= 400) {
+        throw new Exception('Google OAuth endpoints unavailable (HTTP ' . $code . ').');
+    }
+
+    return 'Google OAuth settings look OK and endpoints are reachable.';
+}
+
 function installer_test_ldap(array $ldap): string
 {
     if (!function_exists('ldap_connect')) {
@@ -261,8 +305,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$installLocked) {
         $googleRedirectUri = $post('google_redirect_uri', '');
         $googleDomainsRaw  = $post('google_allowed_domains', '');
         $googleStaffRaw    = $post('google_staff_emails', '');
-        $googleAllowedDomains = array_values(array_filter(array_map('trim', preg_split('/[\r\n,]+/', $googleDomainsRaw)))));
-        $googleStaffEmails    = array_values(array_filter(array_map('trim', preg_split('/[\r\n,]+/', $googleStaffRaw)))));
+        $googleAllowedDomains = array_values(array_filter(array_map('trim', preg_split('/[\r\n,]+/', $googleDomainsRaw))));
+        $googleStaffEmails    = array_values(array_filter(array_map('trim', preg_split('/[\r\n,]+/', $googleStaffRaw))));
 
         // Defaults for omitted settings
         $staffCns    = [];
@@ -335,6 +379,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$installLocked) {
                     $messages[] = installer_test_db($newConfig['db_booking']);
                 } elseif ($action === 'test_api') {
                     $messages[] = installer_test_snipe($newConfig['snipeit']);
+                } elseif ($action === 'test_google') {
+                    $messages[] = installer_test_google($newConfig['google_oauth'], $newConfig['auth']);
                 } elseif ($action === 'test_ldap') {
                     $messages[] = installer_test_ldap($newConfig['ldap']);
                 } elseif ($action === 'test_smtp') {
@@ -626,7 +672,9 @@ $googleDomainsText = implode("\n", $googleDomainsPref);
                 <div class="card">
                     <div class="card-body">
                         <h5 class="card-title mb-1">Authentication</h5>
-                        <p class="text-muted small mb-3">Toggle login methods and provide Google OAuth details. LDAP connection settings are below.</p>
+                        <p class="text-muted small mb-3">Configure sign-in methods below. Toggle each method on/off and add its settings.</p>
+
+                        <h6 class="mt-2">LDAP / Active Directory</h6>
                         <div class="row g-3">
                             <div class="col-md-4">
                                 <div class="form-check">
@@ -634,48 +682,7 @@ $googleDomainsText = implode("\n", $googleDomainsPref);
                                     <label class="form-check-label" for="auth_ldap_enabled">Enable LDAP sign-in</label>
                                 </div>
                             </div>
-                            <div class="col-md-4">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="auth_google_enabled" id="auth_google_enabled" <?= $pref(['auth', 'google_oauth_enabled'], false) ? 'checked' : '' ?>>
-                                    <label class="form-check-label" for="auth_google_enabled">Enable Google OAuth sign-in</label>
-                                </div>
-                            </div>
                         </div>
-
-                        <div class="row g-3 mt-1">
-                            <div class="col-md-6">
-                                <label class="form-label">Google Client ID</label>
-                                <input type="text" name="google_client_id" class="form-control" value="<?= installer_h($pref(['google_oauth', 'client_id'], '')) ?>">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Google Client Secret</label>
-                                <input type="password" name="google_client_secret" class="form-control">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Redirect URI (optional)</label>
-                                <input type="text" name="google_redirect_uri" class="form-control" value="<?= installer_h($pref(['google_oauth', 'redirect_uri'], '')) ?>" placeholder="https://your-app/login_process.php?provider=google">
-                                <div class="form-text">Leave blank to auto-detect the login_process.php?provider=google URL.</div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Allowed Google domains (optional)</label>
-                                <textarea name="google_allowed_domains" rows="3" class="form-control" placeholder="example.com&#10;sub.example.com"><?= installer_h($googleDomainsText) ?></textarea>
-                                <div class="form-text">Comma or newline separated. Leave empty to allow any Google account.</div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Google staff/admin emails (optional)</label>
-                                <textarea name="google_staff_emails" rows="3" class="form-control" placeholder="admin1@example.com&#10;admin2@example.com"><?= installer_h($googleStaffText) ?></textarea>
-                                <div class="form-text">Comma or newline separated addresses that should be treated as staff when signing in with Google.</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title mb-1">LDAP / Active Directory</h5>
-                        <p class="text-muted small mb-3">Authentication lookup settings.</p>
                         <div class="row g-3">
                             <div class="col-md-4">
                                 <label class="form-label">LDAP host (e.g. ldaps://host)</label>
@@ -703,6 +710,47 @@ $googleDomainsText = implode("\n", $googleDomainsPref);
                         <div class="d-flex justify-content-between align-items-center mt-3">
                             <div class="small text-muted" id="ldap-test-result"></div>
                             <button type="button" class="btn btn-outline-primary btn-sm" data-test-action="test_ldap" data-target="ldap-test-result">Test LDAP connection</button>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <h6>Google OAuth</h6>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="auth_google_enabled" id="auth_google_enabled" <?= $pref(['auth', 'google_oauth_enabled'], false) ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="auth_google_enabled">Enable Google OAuth sign-in</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row g-3 mt-1">
+                            <div class="col-md-6">
+                                <label class="form-label">Google Client ID</label>
+                                <input type="text" name="google_client_id" class="form-control" value="<?= installer_h($pref(['google_oauth', 'client_id'], '')) ?>">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Google Client Secret</label>
+                                <input type="password" name="google_client_secret" class="form-control">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Redirect URI (optional)</label>
+                                <input type="text" name="google_redirect_uri" class="form-control" value="<?= installer_h($pref(['google_oauth', 'redirect_uri'], '')) ?>" placeholder="https://your-app/login_process.php?provider=google">
+                                <div class="form-text">Leave blank to auto-detect the login_process.php?provider=google URL.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Allowed Google domains (optional)</label>
+                                <textarea name="google_allowed_domains" rows="3" class="form-control" placeholder="example.com&#10;sub.example.com"><?= installer_h($googleDomainsText) ?></textarea>
+                                <div class="form-text">Comma or newline separated. Leave empty to allow any Google account.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Google staff/admin emails (optional)</label>
+                                <textarea name="google_staff_emails" rows="3" class="form-control" placeholder="admin1@example.com&#10;admin2@example.com"><?= installer_h($googleStaffText) ?></textarea>
+                                <div class="form-text">Comma or newline separated addresses that should be treated as staff when signing in with Google.</div>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <div class="small text-muted" id="google-test-result"></div>
+                            <button type="button" class="btn btn-outline-primary btn-sm" data-test-action="test_google" data-target="google-test-result">Test Google OAuth</button>
                         </div>
                     </div>
                 </div>
