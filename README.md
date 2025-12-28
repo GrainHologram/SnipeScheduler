@@ -1,4 +1,4 @@
-# SnipeScheduler
+# SnipeScheduler - An Asset Reservation/Checkout System for Snipe-IT
 
 Please note - this app is still in an alpha stage of development as a product. It has been built for production on a single site and has been working without issue, however please consider this an in-development product for now. Please do try it, report issues and request features, but consider it unsuitable for a production environment until any bugs have been ironed out.  
 
