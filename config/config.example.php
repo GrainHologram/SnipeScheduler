@@ -87,6 +87,15 @@ return [
         ],
     ],
 
+    // Optional: Google Workspace directory search (requires Admin SDK + service account)
+    'google_directory' => [
+        // Provide either a raw JSON string or a filesystem path to the JSON file
+        'service_account_json' => '',
+        'service_account_path' => '',
+        // Admin user email to impersonate for directory read access
+        'impersonated_user'     => '',
+    ],
+
     'microsoft_oauth' => [
         'client_id'     => '',
         'client_secret' => '',
@@ -98,6 +107,13 @@ return [
         'allowed_domains' => [
             // 'example.com',
         ],
+    ],
+
+    // Optional: Entra directory search (defaults to microsoft_oauth client_id/secret/tenant)
+    'entra_directory' => [
+        'client_id'     => '',
+        'client_secret' => '',
+        'tenant'        => '',
     ],
 
     'app' => [
