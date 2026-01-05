@@ -199,9 +199,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         return $model !== '' ? "{$tag} ({$model})" : $tag;
                     }, $checkoutAssets);
                     $assetLines = implode(', ', array_filter($assetList));
+                    $dueDisplay = date('d/m/Y h:i A', $endTs);
                     $bodyLines = [
                         'Assets checked out:',
                         $assetLines,
+                        "Return by: {$dueDisplay}",
                         $note !== '' ? "Note: {$note}" : '',
                     ];
                     if ($userEmail !== '') {

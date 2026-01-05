@@ -85,6 +85,18 @@ function uk_datetime_display(?string $iso): string
     return $dt->format('d/m/Y H:i');
 }
 
+function uk_datetime_display_12h(?string $iso): string
+{
+    if (!$iso) {
+        return '';
+    }
+    $dt = DateTime::createFromFormat('Y-m-d H:i:s', $iso);
+    if (!$dt) {
+        return $iso;
+    }
+    return $dt->format('d/m/Y h:i A');
+}
+
 /**
  * Check if a model is booked in another reservation overlapping the window.
  */
@@ -427,13 +439,14 @@ $checkoutTo = trim($selectedReservation['user_name'] ?? '');
                     $staffEmail = $currentUser['email'] ?? '';
                     $staffName  = trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''));
                     $dueDate    = $selectedReservation['end_datetime'] ?? '';
-                    $dueDisplay = $dueDate ? uk_datetime_display($dueDate) : 'N/A';
+                    $dueDisplay = $dueDate ? uk_datetime_display_12h($dueDate) : 'N/A';
 
                     $assetLines = $assetsText !== '' ? $assetsText : implode(', ', array_filter($assetTags));
                     $bodyLines = [
                         "Reservation #{$selectedReservationId} has been checked out.",
                         "Items: {$assetLines}",
                         "Return by: {$dueDisplay}",
+                        $note !== '' ? "Note: {$note}" : '',
                         "Checked out by: {$staffName}",
                     ];
                     if ($userEmail !== '') {

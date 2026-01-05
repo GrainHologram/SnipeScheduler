@@ -176,10 +176,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $bodyLines = [];
                     $bodyLines[] = 'You checked in the following assets:';
-                    $bodyLines = array_merge($bodyLines, $assetLineItems);
                     if (!empty($perUserSummary)) {
-                        $bodyLines[] = 'By user:';
                         $bodyLines = array_merge($bodyLines, $perUserSummary);
+                    } else {
+                        $bodyLines = array_merge($bodyLines, $assetLineItems);
                     }
                     if ($note !== '') {
                         $bodyLines[] = "Note: {$note}";
