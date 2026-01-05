@@ -189,6 +189,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                         }
                     }
+                    if ($assignedEmail === '' && $assignedName === '' && $assignedId === 0) {
+                        try {
+                            $history = snipeit_request('GET', 'hardware/' . $assetId . '/history');
+                            $rows = $history['rows'] ?? [];
+                            foreach ($rows as $row) {
+                                $action = strtolower((string)($row['action_type'] ?? ($row['action'] ?? '')));
+                                if ($action === '' || strpos($action, 'checkout') === false) {
+                                    continue;
+                                }
+                                $target = $row['target'] ?? null;
+                                $histId = 0;
+                                $histName = '';
+                                $histEmail = '';
+                                if (is_array($target)) {
+                                    $histId = (int)($target['id'] ?? 0);
+                                    $histName = $target['name'] ?? ($target['username'] ?? '');
+                                    $histEmail = $target['email'] ?? ($target['username'] ?? '');
+                                } else {
+                                    $histId = (int)($row['target_id'] ?? 0);
+                                    $histName = $row['target_name'] ?? ($row['checkedout_to'] ?? '');
+                                    $histEmail = $row['target_email'] ?? '';
+                                }
+
+                                if ($histEmail === '' && $histId > 0) {
+                                    if (isset($userIdCache[$histId])) {
+                                        $cached = $userIdCache[$histId];
+                                        $histEmail = $cached['email'] ?? '';
+                                        $histName = $histName !== '' ? $histName : ($cached['name'] ?? '');
+                                    } else {
+                                        try {
+                                            $matchedUser = snipeit_request('GET', 'users/' . $histId);
+                                            $matchedEmail = $matchedUser['email'] ?? ($matchedUser['username'] ?? '');
+                                            $matchedName  = $matchedUser['name'] ?? ($matchedUser['username'] ?? '');
+                                            $userIdCache[$histId] = [
+                                                'email' => $matchedEmail,
+                                                'name'  => $matchedName,
+                                            ];
+                                            $histEmail = $matchedEmail;
+                                            if ($histName === '' && $matchedName !== '') {
+                                                $histName = $matchedName;
+                                            }
+                                        } catch (Throwable $e) {
+                                            // Skip lookup failure; user details may be unavailable.
+                                        }
+                                    }
+                                }
+
+                                if ($histEmail !== '' || $histName !== '') {
+                                    $assignedEmail = $histEmail !== '' ? $histEmail : $assignedEmail;
+                                    $assignedName = $histName !== '' ? $histName : $assignedName;
+                                    break;
+                                }
+                            }
+                        } catch (Throwable $e) {
+                            // Skip history lookup failure.
+                        }
+                    }
 
                     $summaryLabel = '';
                     if ($assignedEmail !== '') {
