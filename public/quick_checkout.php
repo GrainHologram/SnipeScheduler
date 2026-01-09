@@ -151,7 +151,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'model_id'   => (int)($asset['model']['id'] ?? 0),
                     'status'     => $status,
                 ];
-                $messages[] = "Added asset {$assetTag} ({$assetName}) to checkout list.";
+                $label = $modelName !== '' ? $modelName : $assetName;
+                $messages[] = "Added asset {$assetTag} ({$label}) to checkout list.";
             } catch (Throwable $e) {
                 $errors[] = 'Could not add asset: ' . $e->getMessage();
             }

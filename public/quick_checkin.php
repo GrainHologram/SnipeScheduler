@@ -110,7 +110,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'assigned_email' => $assignedEmail,
                     'assigned_name'  => $assignedName,
                 ];
-                $messages[] = "Added asset {$assetTag} ({$assetName}) to check-in list.";
+                $label = $modelName !== '' ? $modelName : $assetName;
+                $messages[] = "Added asset {$assetTag} ({$label}) to check-in list.";
             } catch (Throwable $e) {
                 $errors[] = 'Could not add asset: ' . $e->getMessage();
             }
