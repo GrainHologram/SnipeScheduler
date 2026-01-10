@@ -19,6 +19,96 @@ $ldapCfg  = $config['ldap'] ?? [];
 $appCfg   = $config['app'] ?? [];
 $debugOn  = !empty($appCfg['debug']);
 
+if (($_GET['ajax'] ?? '') === 'overdue_check') {
+    header('Content-Type: application/json');
+
+    $bookingOverride = $_SESSION['booking_user_override'] ?? null;
+    $activeUser      = $bookingOverride ?: $currentUser;
+
+    $activeUserEmail = trim($activeUser['email'] ?? '');
+    $activeUserUsername = trim($activeUser['username'] ?? '');
+    $activeUserDisplay = trim($activeUser['display_name'] ?? '');
+    $activeUserName = trim(trim($activeUser['first_name'] ?? '') . ' ' . trim($activeUser['last_name'] ?? ''));
+    $cacheKey = strtolower(trim($activeUserEmail !== '' ? $activeUserEmail : ($activeUserUsername !== '' ? $activeUserUsername : $activeUserDisplay)));
+    if ($cacheKey === '') {
+        $cacheKey = 'user_' . (int)($activeUser['id'] ?? 0);
+    }
+
+    $cacheBucket = $_SESSION['overdue_check_cache'] ?? [];
+    $cached = is_array($cacheBucket) && isset($cacheBucket[$cacheKey]) ? $cacheBucket[$cacheKey] : null;
+    if (is_array($cached) && isset($cached['ts'], $cached['data']) && (time() - (int)$cached['ts']) <= 120) {
+        echo json_encode($cached['data']);
+        exit;
+    }
+
+    try {
+        $lookupKeys = array_values(array_filter(array_unique(array_map('normalize_lookup_key', [
+            $activeUserEmail,
+            $activeUserUsername,
+            $activeUserDisplay,
+            $activeUserName,
+        ])), 'strlen'));
+
+        $snipeUserId = 0;
+        $lookupQueries = array_values(array_filter(array_unique([
+            $activeUserEmail,
+            $activeUserUsername,
+            $activeUserDisplay,
+            $activeUserName,
+        ]), 'strlen'));
+
+        foreach ($lookupQueries as $query) {
+            try {
+                $matched = find_single_user_by_email_or_name($query);
+                $snipeUserId = (int)($matched['id'] ?? 0);
+                if ($snipeUserId > 0) {
+                    break;
+                }
+            } catch (Throwable $e) {
+                // Try next identifier.
+            }
+        }
+
+        $overdueCandidates = list_checked_out_assets(true);
+        $overdueAssets = [];
+        foreach ($overdueCandidates as $row) {
+            if (row_assigned_to_matches_user($row, $lookupKeys, $snipeUserId)) {
+                $tag = $row['asset_tag'] ?? 'Unknown tag';
+                $modelName = $row['model']['name'] ?? '';
+                $expected = $row['_expected_checkin_norm'] ?? ($row['expected_checkin'] ?? '');
+                $due = format_overdue_date($expected);
+                $overdueAssets[] = [
+                    'tag'   => $tag,
+                    'model' => $modelName,
+                    'due'   => $due,
+                ];
+            }
+        }
+
+        $payload = [
+            'blocked' => !empty($overdueAssets),
+            'assets'  => $overdueAssets,
+        ];
+        $_SESSION['overdue_check_cache'][$cacheKey] = [
+            'ts'   => time(),
+            'data' => $payload,
+        ];
+        echo json_encode($payload);
+    } catch (Throwable $e) {
+        $payload = [
+            'blocked' => false,
+            'assets'  => [],
+            'error'   => $debugOn ? $e->getMessage() : 'Unable to check overdue items at the moment.',
+        ];
+        $_SESSION['overdue_check_cache'][$cacheKey] = [
+            'ts'   => time(),
+            'data' => $payload,
+        ];
+        echo json_encode($payload);
+    }
+    exit;
+}
+
 function base64url_encode(string $data): string
 {
     return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
@@ -405,56 +495,25 @@ foreach ($basket as $qty) {
 }
 
 // ---------------------------------------------------------------------
-// Block catalogue if active user has overdue assets in Snipe-IT
+// Cached overdue state (2-minute session cache)
 // ---------------------------------------------------------------------
 $overdueAssets = [];
 $overdueErr = '';
 $catalogueBlocked = false;
-
 $activeUserEmail = trim($activeUser['email'] ?? '');
 $activeUserUsername = trim($activeUser['username'] ?? '');
 $activeUserDisplay = trim($activeUser['display_name'] ?? '');
-$activeUserName = trim(trim($activeUser['first_name'] ?? '') . ' ' . trim($activeUser['last_name'] ?? ''));
-$lookupKeys = array_values(array_filter(array_unique(array_map('normalize_lookup_key', [
-    $activeUserEmail,
-    $activeUserUsername,
-    $activeUserDisplay,
-    $activeUserName,
-])), 'strlen'));
-
-try {
-    $snipeUserId = 0;
-    $lookupQueries = array_values(array_filter(array_unique([
-        $activeUserEmail,
-        $activeUserUsername,
-        $activeUserDisplay,
-        $activeUserName,
-    ]), 'strlen'));
-
-    foreach ($lookupQueries as $query) {
-        try {
-            $matched = find_single_user_by_email_or_name($query);
-            $snipeUserId = (int)($matched['id'] ?? 0);
-            if ($snipeUserId > 0) {
-                break;
-            }
-        } catch (Throwable $e) {
-            // Try next identifier.
-        }
-    }
-
-    $overdueCandidates = list_checked_out_assets(true);
-    foreach ($overdueCandidates as $row) {
-        if (row_assigned_to_matches_user($row, $lookupKeys, $snipeUserId)) {
-            $overdueAssets[] = $row;
-        }
-    }
-
-    if (!empty($overdueAssets)) {
-        $catalogueBlocked = true;
-    }
-} catch (Throwable $e) {
-    $overdueErr = $debugOn ? $e->getMessage() : 'Unable to check overdue items at the moment.';
+$cacheKey = strtolower(trim($activeUserEmail !== '' ? $activeUserEmail : ($activeUserUsername !== '' ? $activeUserUsername : $activeUserDisplay)));
+if ($cacheKey === '') {
+    $cacheKey = 'user_' . (int)($activeUser['id'] ?? 0);
+}
+$cacheBucket = $_SESSION['overdue_check_cache'] ?? [];
+$cached = is_array($cacheBucket) && isset($cacheBucket[$cacheKey]) ? $cacheBucket[$cacheKey] : null;
+if (is_array($cached) && isset($cached['ts'], $cached['data']) && (time() - (int)$cached['ts']) <= 120) {
+    $cachedData = $cached['data'];
+    $catalogueBlocked = !empty($cachedData['blocked']);
+    $overdueAssets = $cachedData['assets'] ?? [];
+    $overdueErr = $cachedData['error'] ?? '';
 }
 
 // ---------------------------------------------------------------------
@@ -481,13 +540,11 @@ $perPage = defined('CATALOGUE_ITEMS_PER_PAGE')
 $categories   = [];
 $categoryErr  = '';
 $allowedCategoryMap = [];
-if (!$catalogueBlocked) {
-    try {
-        $categories = get_model_categories();
-    } catch (Throwable $e) {
-        $categories  = [];
-        $categoryErr = $e->getMessage();
-    }
+try {
+    $categories = get_model_categories();
+} catch (Throwable $e) {
+    $categories  = [];
+    $categoryErr = $e->getMessage();
 }
 
 // Optional admin-controlled allowlist for categories shown in the filter
@@ -517,29 +574,27 @@ if (!empty($allowedCategoryMap) && $category !== null && !isset($allowedCategory
     $category = null;
 }
 
-if (!$catalogueBlocked) {
-    try {
-        $data = get_bookable_models($page, $search ?? '', $category, $sort, $perPage, $allowedCategoryIds);
+try {
+    $data = get_bookable_models($page, $search ?? '', $category, $sort, $perPage, $allowedCategoryIds);
 
-        if (isset($data['rows']) && is_array($data['rows'])) {
-            $models = $data['rows'];
-        }
-
-        if (isset($data['total'])) {
-            $totalModels = (int)$data['total'];
-        } else {
-            $totalModels = count($models);
-        }
-
-        if ($perPage > 0) {
-            $totalPages = max(1, (int)ceil($totalModels / $perPage));
-        } else {
-            $totalPages = 1;
-        }
-    } catch (Throwable $e) {
-        $models   = [];
-        $modelErr = $e->getMessage();
+    if (isset($data['rows']) && is_array($data['rows'])) {
+        $models = $data['rows'];
     }
+
+    if (isset($data['total'])) {
+        $totalModels = (int)$data['total'];
+    } else {
+        $totalModels = count($models);
+    }
+
+    if ($perPage > 0) {
+        $totalPages = max(1, (int)ceil($totalModels / $perPage));
+    } else {
+        $totalPages = 1;
+    }
+} catch (Throwable $e) {
+    $models   = [];
+    $modelErr = $e->getMessage();
 }
 
 // Apply allowlist if configured; otherwise show all categories returned by Snipe-IT
@@ -576,11 +631,9 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
         <!-- App navigation -->
         <?= layout_render_nav($active, $isStaff) ?>
 
-        <?php if ($overdueErr): ?>
-            <div class="alert alert-warning">
-                <?= h($overdueErr) ?>
-            </div>
-        <?php endif; ?>
+        <div id="overdue-warning" class="alert alert-warning<?= $overdueErr ? '' : ' d-none' ?>">
+            <?= h($overdueErr) ?>
+        </div>
 
         <!-- Top bar -->
         <div class="top-bar mb-3">
@@ -600,31 +653,28 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             </div>
         </div>
 
-        <?php if ($catalogueBlocked): ?>
-            <div class="alert alert-danger">
-                <div class="fw-semibold mb-2">Catalogue unavailable</div>
-                <div class="mb-2">
-                    You have overdue items in Snipe-IT. Please return them before booking more equipment.
-                </div>
-                <ul class="mb-0">
-                    <?php foreach ($overdueAssets as $asset): ?>
-                        <?php
-                            $tag = $asset['asset_tag'] ?? 'Unknown tag';
-                            $modelName = $asset['model']['name'] ?? '';
-                            $expected = $asset['_expected_checkin_norm'] ?? ($asset['expected_checkin'] ?? '');
-                            $due = format_overdue_date($expected);
-                        ?>
-                        <li>
-                            <?= h($tag) ?>
-                            <?= $modelName !== '' ? ' (' . h($modelName) . ')' : '' ?>
-                            <?= $due !== '' ? ' — due ' . h($due) : '' ?>
-                        </li>
-                    <?php endforeach; ?>
-                </ul>
+        <div id="overdue-alert" class="alert alert-danger<?= $catalogueBlocked ? '' : ' d-none' ?>">
+            <div class="fw-semibold mb-2">Catalogue unavailable</div>
+            <div class="mb-2">
+                You have overdue items in Snipe-IT. Please return them before booking more equipment.
             </div>
-        <?php endif; ?>
+            <ul class="mb-0" id="overdue-list">
+                <?php foreach ($overdueAssets as $asset): ?>
+                    <?php
+                        $tag = $asset['tag'] ?? 'Unknown tag';
+                        $modelName = $asset['model'] ?? '';
+                        $due = $asset['due'] ?? '';
+                    ?>
+                    <li>
+                        <?= h($tag) ?>
+                        <?= $modelName !== '' ? ' (' . h($modelName) . ')' : '' ?>
+                        <?= $due !== '' ? ' — due ' . h($due) : '' ?>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
 
-        <?php if (!$catalogueBlocked): ?>
+        <div id="catalogue-content" class="<?= $catalogueBlocked ? 'd-none' : '' ?>">
             <?php if ($categoryErr): ?>
                 <div class="alert alert-warning">
                     Could not load categories from Snipe-IT: <?= htmlspecialchars($categoryErr) ?>
@@ -636,7 +686,6 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     Error talking to Snipe-IT (models): <?= htmlspecialchars($modelErr) ?>
                 </div>
             <?php endif; ?>
-        <?php endif; ?>
 
         <!-- Filters -->
         <?php if ($isStaff): ?>
@@ -668,7 +717,6 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             </div>
         <?php endif; ?>
 
-        <?php if (!$catalogueBlocked): ?>
         <form class="filter-panel mb-4" method="get" action="catalogue.php">
             <div class="filter-panel__header d-flex align-items-center gap-3">
                 <span class="filter-panel__dot"></span>
@@ -728,15 +776,14 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 </div>
             </div>
         </form>
-        <?php endif; ?>
 
-        <?php if (!$catalogueBlocked && empty($models) && !$modelErr): ?>
+        <?php if (empty($models) && !$modelErr): ?>
             <div class="alert alert-info">
                 No models found. Try adjusting your filters.
             </div>
         <?php endif; ?>
 
-        <?php if (!$catalogueBlocked && !empty($models)): ?>
+        <?php if (!empty($models)): ?>
             <div class="row g-3">
                 <?php foreach ($models as $model): ?>
                     <?php
@@ -900,6 +947,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 </nav>
             <?php endif; ?>
         <?php endif; ?>
+        </div>
     </div>
 </div>
 
@@ -912,6 +960,10 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
 <!-- AJAX add-to-basket + update basket count text -->
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    const overdueAlert = document.getElementById('overdue-alert');
+    const overdueList = document.getElementById('overdue-list');
+    const overdueWarning = document.getElementById('overdue-warning');
+    const catalogueContent = document.getElementById('catalogue-content');
     const viewBasketBtn = document.getElementById('view-basket-btn');
     const forms = document.querySelectorAll('.add-to-basket-form');
     const bookingInput = document.getElementById('booking_user_input');
@@ -922,6 +974,33 @@ document.addEventListener('DOMContentLoaded', function () {
     let bookingTimer   = null;
     let bookingQuery   = '';
     let basketToastTimer = null;
+
+    function applyOverdueBlock(items) {
+        if (catalogueContent) {
+            catalogueContent.classList.add('d-none');
+        }
+        if (overdueList) {
+            overdueList.innerHTML = '';
+            items.forEach(function (item) {
+                const tag = item.tag || 'Unknown tag';
+                const model = item.model || '';
+                const due = item.due || '';
+                let label = tag;
+                if (model) {
+                    label += ' (' + model + ')';
+                }
+                if (due) {
+                    label += ' — due ' + due;
+                }
+                const li = document.createElement('li');
+                li.textContent = label;
+                overdueList.appendChild(li);
+            });
+        }
+        if (overdueAlert) {
+            overdueAlert.classList.remove('d-none');
+        }
+    }
 
     function showBasketToast(message) {
         if (!basketToast) return;
@@ -936,6 +1015,27 @@ document.addEventListener('DOMContentLoaded', function () {
             basketToast.setAttribute('aria-hidden', 'true');
         }, 2200);
     }
+
+    fetch('catalogue.php?ajax=overdue_check', {
+        credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+        .then(function (response) {
+            return response.ok ? response.json() : null;
+        })
+        .then(function (data) {
+            if (!data) return;
+            if (data.error && overdueWarning) {
+                overdueWarning.textContent = data.error;
+                overdueWarning.classList.remove('d-none');
+            }
+            if (data.blocked && Array.isArray(data.assets)) {
+                applyOverdueBlock(data.assets);
+            }
+        })
+        .catch(function () {
+            // Ignore overdue check failures; catalogue remains accessible.
+        });
 
     forms.forEach(function (form) {
         form.addEventListener('submit', function (e) {
