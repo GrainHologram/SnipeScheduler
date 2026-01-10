@@ -541,6 +541,7 @@ function count_checked_out_assets_by_model(int $modelId): int
     }
 
     require_once SRC_PATH . '/db.php';
+    global $pdo;
 
     $stmt = $pdo->prepare("
         SELECT COUNT(*)
@@ -861,6 +862,7 @@ function fetch_checked_out_assets_from_snipeit(bool $overdueOnly = false, int $m
 function list_checked_out_assets(bool $overdueOnly = false): array
 {
     require_once SRC_PATH . '/db.php';
+    global $pdo;
 
     $sql = "
         SELECT
