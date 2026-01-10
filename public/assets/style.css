@@ -582,6 +582,11 @@ form .form-select {
     color: #ffffff;
 }
 
+.btn-primary:link,
+.btn-primary:visited {
+    color: #ffffff;
+}
+
 .btn-primary:hover,
 .btn-primary:active,
 .btn-primary:focus-visible {
