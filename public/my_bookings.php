@@ -34,6 +34,8 @@ $isStaff       = !empty($currentUser['is_admin']);
 $currentUserId = (string)($currentUser['id'] ?? '');
 
 $userName = trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''));
+$tabRaw = $_GET['tab'] ?? 'reservations';
+$tab = $tabRaw === 'checked_out' ? 'checked_out' : 'reservations';
 
 // Load this user's reservations
 try {
@@ -49,6 +51,37 @@ try {
 } catch (Exception $e) {
     $reservations = [];
     $loadError = $e->getMessage();
+}
+
+$checkedOutItems = [];
+$checkedOutError = '';
+if ($tab === 'checked_out') {
+    try {
+        $email = strtolower(trim($currentUser['email'] ?? ''));
+        $username = strtolower(trim($currentUser['username'] ?? ''));
+        $name = strtolower(trim($userName));
+
+        $stmt = $pdo->prepare("
+            SELECT *
+              FROM checked_out_asset_cache
+             WHERE (assigned_to_email IS NOT NULL AND LOWER(assigned_to_email) = :email)
+                OR (assigned_to_username IS NOT NULL AND LOWER(assigned_to_username) = :username)
+                OR (assigned_to_name IS NOT NULL AND LOWER(assigned_to_name) = :name)
+             ORDER BY
+                CASE WHEN expected_checkin IS NULL OR expected_checkin = '' THEN 1 ELSE 0 END,
+                expected_checkin ASC,
+                last_checkout DESC
+        ");
+        $stmt->execute([
+            ':email' => $email,
+            ':username' => $username,
+            ':name' => $name,
+        ]);
+        $checkedOutItems = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        $checkedOutItems = [];
+        $checkedOutError = $e->getMessage();
+    }
 }
 
 $deletedMsg = '';
@@ -106,81 +139,133 @@ if (!empty($_GET['deleted'])) {
             </div>
         <?php endif; ?>
 
-        <?php if (empty($reservations)): ?>
-            <div class="alert alert-info">
-                You don’t have any reservations yet.
-            </div>
+        <?php
+            $reservationsUrl = 'my_bookings.php?tab=reservations';
+            $checkedOutUrl = 'my_bookings.php?tab=checked_out';
+        ?>
+        <ul class="nav nav-tabs reservations-subtabs mb-3">
+            <li class="nav-item">
+                <a class="nav-link <?= $tab === 'reservations' ? 'active' : '' ?>"
+                   href="<?= h($reservationsUrl) ?>">My Reservations</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link <?= $tab === 'checked_out' ? 'active' : '' ?>"
+                   href="<?= h($checkedOutUrl) ?>">My Checked Out Items</a>
+            </li>
+        </ul>
+
+        <?php if ($tab === 'checked_out'): ?>
+            <?php if (!empty($checkedOutError)): ?>
+                <div class="alert alert-danger">
+                    Error loading checked-out items: <?= htmlspecialchars($checkedOutError) ?>
+                </div>
+            <?php elseif (empty($checkedOutItems)): ?>
+                <div class="alert alert-info">
+                    You don’t have any checked-out items right now.
+                </div>
+            <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped align-middle">
+                        <thead>
+                            <tr>
+                                <th>Asset Tag</th>
+                                <th>Name</th>
+                                <th>Model</th>
+                                <th>Assigned Since</th>
+                                <th>Expected Check-in</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($checkedOutItems as $row): ?>
+                                <tr>
+                                    <td><?= h($row['asset_tag'] ?? '') ?></td>
+                                    <td><?= h($row['asset_name'] ?? '') ?></td>
+                                    <td><?= h($row['model_name'] ?? '') ?></td>
+                                    <td><?= h(uk_datetime($row['last_checkout'] ?? '')) ?></td>
+                                    <td><?= h(uk_date($row['expected_checkin'] ?? '')) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
         <?php else: ?>
-            <?php foreach ($reservations as $res): ?>
-                <?php
-                    $resId   = (int)$res['id'];
-                    $items   = get_reservation_items_with_names($pdo, $resId);
-                    $summary = build_items_summary_text($items);
-                ?>
-                <div class="card mb-3">
-                    <div class="card-body">
-                        <h5 class="card-title">
-                            Reservation #<?= $resId ?>
-                        </h5>
-                        <p class="card-text">
-                            <strong>User Name:</strong>
-                            <?= h($res['user_name'] ?? $userName) ?><br>
+            <?php if (empty($reservations)): ?>
+                <div class="alert alert-info">
+                    You don’t have any reservations yet.
+                </div>
+            <?php else: ?>
+                <?php foreach ($reservations as $res): ?>
+                    <?php
+                        $resId   = (int)$res['id'];
+                        $items   = get_reservation_items_with_names($pdo, $resId);
+                        $summary = build_items_summary_text($items);
+                    ?>
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h5 class="card-title">
+                                Reservation #<?= $resId ?>
+                            </h5>
+                            <p class="card-text">
+                                <strong>User Name:</strong>
+                                <?= h($res['user_name'] ?? $userName) ?><br>
 
-                            <strong>Start:</strong>
-                            <?= uk_datetime($res['start_datetime'] ?? '') ?><br>
+                                <strong>Start:</strong>
+                                <?= uk_datetime($res['start_datetime'] ?? '') ?><br>
 
-                            <strong>End:</strong>
-                            <?= uk_datetime($res['end_datetime'] ?? '') ?><br>
+                                <strong>End:</strong>
+                                <?= uk_datetime($res['end_datetime'] ?? '') ?><br>
 
-                            <strong>Status:</strong>
-                            <?= h($res['status'] ?? '') ?><br>
+                                <strong>Status:</strong>
+                                <?= h($res['status'] ?? '') ?><br>
 
-                            <?php if ($summary !== ''): ?>
-                                <strong>Items:</strong>
-                                <?= h($summary) ?><br>
-                            <?php endif; ?>
+                                <?php if ($summary !== ''): ?>
+                                    <strong>Items:</strong>
+                                    <?= h($summary) ?><br>
+                                <?php endif; ?>
 
-                            <?php if (!empty($res['asset_name_cache'])): ?>
-                                <strong>Checked-out assets:</strong>
-                                <?= h($res['asset_name_cache']) ?>
-                            <?php endif; ?>
-                        </p>
+                                <?php if (!empty($res['asset_name_cache'])): ?>
+                                    <strong>Checked-out assets:</strong>
+                                    <?= h($res['asset_name_cache']) ?>
+                                <?php endif; ?>
+                            </p>
 
-                        <?php if (!empty($items)): ?>
-                            <h6>Items in this reservation</h6>
-                            <div class="table-responsive">
-                                <table class="table table-sm table-striped align-middle mb-0">
-                                    <thead>
-                                        <tr>
-                                            <th>Item</th>
-                                            <th style="width: 80px;">Qty</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php foreach ($items as $item): ?>
+                            <?php if (!empty($items)): ?>
+                                <h6>Items in this reservation</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped align-middle mb-0">
+                                        <thead>
                                             <tr>
-                                                <td><?= h($item['name'] ?? '') ?></td>
-                                                <td><?= (int)$item['qty'] ?></td>
+                                                <th>Item</th>
+                                                <th style="width: 80px;">Qty</th>
                                             </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-                        <?php endif; ?>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($items as $item): ?>
+                                                <tr>
+                                                    <td><?= h($item['name'] ?? '') ?></td>
+                                                    <td><?= (int)$item['qty'] ?></td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php endif; ?>
 
-                        <div class="d-flex justify-content-end mt-3">
-                            <form method="post"
-                                  action="delete_reservation.php"
-                                  onsubmit="return confirm('Delete this reservation and all its items? This cannot be undone.');">
-                                <input type="hidden" name="reservation_id" value="<?= $resId ?>">
-                                <button type="submit" class="btn btn-outline-danger btn-sm">
-                                    Delete reservation
-                                </button>
-                            </form>
+                            <div class="d-flex justify-content-end mt-3">
+                                <form method="post"
+                                      action="delete_reservation.php"
+                                      onsubmit="return confirm('Delete this reservation and all its items? This cannot be undone.');">
+                                    <input type="hidden" name="reservation_id" value="<?= $resId ?>">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                                        Delete reservation
+                                    </button>
+                                </form>
+                            </div>
                         </div>
                     </div>
-                </div>
-            <?php endforeach; ?>
+                <?php endforeach; ?>
+            <?php endif; ?>
         <?php endif; ?>
 
     </div>
