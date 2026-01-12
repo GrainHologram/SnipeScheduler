@@ -497,12 +497,12 @@ form .form-select {
 
 .reservation-history-table th:nth-child(1),
 .reservation-history-table td:nth-child(1) {
-    width: 60px;
+    width: 50px;
 }
 
 .reservation-history-table th:nth-child(2),
 .reservation-history-table td:nth-child(2) {
-    width: 150px;
+    width: 120px;
 }
 
 .reservation-history-table th:nth-child(3),
@@ -524,7 +524,7 @@ form .form-select {
 
 .reservation-history-table th:nth-child(7),
 .reservation-history-table td:nth-child(7) {
-    width: 160px;
+    width: 190px;
 }
 
 .items-cell {
