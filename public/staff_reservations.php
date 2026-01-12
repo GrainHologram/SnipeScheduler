@@ -361,11 +361,25 @@ try {
                                 if (!empty($r['asset_name_cache'])) {
                                     $assetRaw = (string)$r['asset_name_cache'];
                                     $assetParts = array_values(array_filter(array_map('trim', explode(',', $assetRaw)), 'strlen'));
-                                    if ($assetParts) {
-                                        $assetLines = '<ul class="items-list"><li>' . implode('</li><li>', array_map('h', $assetParts)) . '</li></ul>';
-                                    } else {
-                                        $assetLines = '<ul class="items-list"><li>' . h($assetRaw) . '</li></ul>';
+                                    $assetLis = [];
+                                    $sourceParts = $assetParts ?: [$assetRaw];
+                                    foreach ($sourceParts as $part) {
+                                        $part = trim($part);
+                                        if ($part === '') {
+                                            continue;
+                                        }
+                                        $openPos = strpos($part, '(');
+                                        if ($openPos !== false) {
+                                            $tag = trim(substr($part, 0, $openPos));
+                                            $rest = trim(substr($part, $openPos));
+                                            $assetLis[] = '<strong>' . h($tag) . '</strong> ' . h($rest);
+                                        } else {
+                                            $assetLis[] = '<strong>' . h($part) . '</strong>';
+                                        }
                                     }
+                                    $assetLines = $assetLis
+                                        ? '<ul class="items-list"><li>' . implode('</li><li>', $assetLis) . '</li></ul>'
+                                        : '';
                                     $assetsHtml = '<details class="items-section mt-2">'
                                         . '<summary><strong>Assets Assigned:</strong></summary>'
                                         . '<div class="items-section-body">' . $assetLines . '</div>'
