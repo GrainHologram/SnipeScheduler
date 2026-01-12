@@ -485,6 +485,15 @@ form .form-select {
     content: "v";
 }
 
+.items-list {
+    margin: 0;
+    padding-left: 1.1rem;
+}
+
+.items-list li {
+    margin-bottom: 0.2rem;
+}
+
 /* Reservation history table sizing */
 .reservation-history-table {
     table-layout: fixed;

@@ -348,7 +348,7 @@ try {
                                         ? sprintf('%s (%d)', $name, $qty)
                                         : $name;
                                 }
-                                $itemsText = $itemsLines ? implode('<br>', array_map('h', $itemsLines)) : '';
+                                $itemsText = $itemsLines ? '<ul class="items-list"><li>' . implode('</li><li>', array_map('h', $itemsLines)) . '</li></ul>' : '';
                                 $modelsHtml = '';
                                 $status     = strtolower((string)($r['status'] ?? ''));
                                 if ($itemsText !== '') {
@@ -361,7 +361,11 @@ try {
                                 if (!empty($r['asset_name_cache'])) {
                                     $assetRaw = (string)$r['asset_name_cache'];
                                     $assetParts = array_values(array_filter(array_map('trim', explode(',', $assetRaw)), 'strlen'));
-                                    $assetLines = $assetParts ? implode('<br>', array_map('h', $assetParts)) : h($assetRaw);
+                                    if ($assetParts) {
+                                        $assetLines = '<ul class="items-list"><li>' . implode('</li><li>', array_map('h', $assetParts)) . '</li></ul>';
+                                    } else {
+                                        $assetLines = '<ul class="items-list"><li>' . h($assetRaw) . '</li></ul>';
+                                    }
                                     $assetsHtml = '<details class="items-section mt-2">'
                                         . '<summary><strong>Assets Assigned:</strong></summary>'
                                         . '<div class="items-section-body">' . $assetLines . '</div>'
