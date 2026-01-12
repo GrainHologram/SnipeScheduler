@@ -444,9 +444,9 @@ form .form-select {
 /* Consistent action button sizing on reservation history */
 .btn-action {
     border-radius: 0.5rem;
-    min-width: 70px;
+    min-width: 64px;
     text-align: center;
-    padding: 0.18rem 0.6rem;
+    padding: 0.12rem 0.45rem;
     font-size: 0.8rem;
 }
 
