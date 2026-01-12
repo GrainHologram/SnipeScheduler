@@ -51,6 +51,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'model_search') {
                 'id'    => $mid,
                 'name'  => $name,
                 'label' => $label,
+                'image' => $row['image'] ?? '',
             ];
         }
         echo json_encode(['results' => $results]);
@@ -76,6 +77,7 @@ $errors = [];
 $addModelId = 0;
 $addQtyRaw = '';
 $addModelLabel = '';
+$addModelImage = '';
 
 $id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 if ($id <= 0) {
@@ -122,6 +124,24 @@ try {
 
 $displayItems = $items;
 $displayQty = [];
+$modelImageMap = [];
+if (!empty($items)) {
+    $uniqueModels = [];
+    foreach ($items as $item) {
+        $mid = (int)($item['model_id'] ?? 0);
+        if ($mid > 0) {
+            $uniqueModels[$mid] = true;
+        }
+    }
+    foreach (array_keys($uniqueModels) as $mid) {
+        try {
+            $model = get_model($mid);
+            $modelImageMap[$mid] = $model['image'] ?? '';
+        } catch (Exception $e) {
+            $modelImageMap[$mid] = '';
+        }
+    }
+}
 foreach ($items as $item) {
     $mid = (int)($item['model_id'] ?? 0);
     if ($mid > 0) {
@@ -133,9 +153,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $startRaw = $_POST['start_datetime'] ?? '';
     $endRaw   = $_POST['end_datetime'] ?? '';
     $qtyInput = $_POST['qty'] ?? [];
-    $addModelId = (int)($_POST['add_model_id'] ?? 0);
-    $addQtyRaw  = trim((string)($_POST['add_qty'] ?? ''));
-    $addQtyInt  = (int)$addQtyRaw;
+    $addModelIds = $_POST['add_model_id'] ?? [];
+    $addQtyList  = $_POST['add_qty'] ?? [];
+    $addLabels   = $_POST['add_model_label'] ?? [];
+    $addImages   = $_POST['add_model_image'] ?? [];
 
     $startTs = strtotime($startRaw);
     $endTs   = strtotime($endRaw);
@@ -173,30 +194,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $displayQty[$mid] = $qty;
     }
 
-    if ($addModelId > 0 || $addQtyInt > 0) {
+    $addCount = max(count($addModelIds), count($addQtyList));
+    for ($i = 0; $i < $addCount; $i++) {
+        $rawId = $addModelIds[$i] ?? '';
+        $rawQty = $addQtyList[$i] ?? '';
+        $addModelId = (int)$rawId;
+        $addQtyRaw  = trim((string)$rawQty);
+        $addQtyInt  = (int)$addQtyRaw;
+        $addModelLabel = (string)($addLabels[$i] ?? '');
+        $addModelImage = (string)($addImages[$i] ?? '');
+
+        if ($addModelId <= 0 && $addQtyInt <= 0) {
+            continue;
+        }
+
         if ($addModelId <= 0 || $addQtyInt <= 0) {
             $errors[] = 'Select a model and quantity to add.';
-        } else {
+            continue;
+        }
+
+        if ($addModelLabel === '') {
             try {
                 $addModel = get_model($addModelId);
                 if (empty($addModel['id'])) {
                     throw new Exception('Model not found in Snipe-IT.');
                 }
                 $addModelLabel = $addModel['name'] ?? ('Model #' . $addModelId);
-                $modelNameMap[$addModelId] = $addModelLabel;
-                $updatedItems[$addModelId] = ($updatedItems[$addModelId] ?? 0) + $addQtyInt;
-                $displayQty[$addModelId] = $updatedItems[$addModelId];
-
-                if (empty($existingModels[$addModelId])) {
-                    $displayItems[] = [
-                        'model_id' => $addModelId,
-                        'quantity' => $updatedItems[$addModelId],
-                        'model_name_cache' => $addModelLabel,
-                    ];
-                }
+                $addModelImage = $addModel['image'] ?? '';
             } catch (Exception $e) {
                 $errors[] = 'Unable to add model: ' . $e->getMessage();
+                continue;
             }
+        }
+
+        $modelNameMap[$addModelId] = $addModelLabel;
+        $modelImageMap[$addModelId] = $addModelImage;
+        $updatedItems[$addModelId] = ($updatedItems[$addModelId] ?? 0) + $addQtyInt;
+        $displayQty[$addModelId] = $updatedItems[$addModelId];
+
+        if (empty($existingModels[$addModelId])) {
+            $displayItems[] = [
+                'model_id' => $addModelId,
+                'quantity' => $updatedItems[$addModelId],
+                'model_name_cache' => $addModelLabel,
+            ];
         }
     }
 
@@ -325,6 +366,22 @@ $ajaxBase = 'reservation_edit.php?id=' . (int)$id;
 if ($from !== '') {
     $ajaxBase .= '&from=' . urlencode($from);
 }
+$preserveAddRows = [];
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $addModelIds = $_POST['add_model_id'] ?? [];
+    $addQtyList  = $_POST['add_qty'] ?? [];
+    $addLabels   = $_POST['add_model_label'] ?? [];
+    $addImages   = $_POST['add_model_image'] ?? [];
+    $count = max(count($addModelIds), count($addQtyList));
+    for ($i = 0; $i < $count; $i++) {
+        $preserveAddRows[] = [
+            'id'    => (string)($addModelIds[$i] ?? ''),
+            'label' => (string)($addLabels[$i] ?? ''),
+            'image' => (string)($addImages[$i] ?? ''),
+            'qty'   => (string)($addQtyList[$i] ?? ''),
+        ];
+    }
+}
 ?>
 <!DOCTYPE html>
 <html>
@@ -408,6 +465,7 @@ if ($from !== '') {
                         <table class="table table-sm table-striped align-middle">
                             <thead>
                                 <tr>
+                                    <th style="width: 200px;">Image</th>
                                     <th>Model</th>
                                     <th style="width: 120px;">Quantity</th>
                                 </tr>
@@ -418,8 +476,23 @@ if ($from !== '') {
                                         $mid = (int)($item['model_id'] ?? 0);
                                         $qty = $displayQty[$mid] ?? (int)($item['quantity'] ?? 0);
                                         $name = $item['model_name_cache'] ?? ('Model #' . $mid);
+                                        $imagePath = $modelImageMap[$mid] ?? '';
+                                        $proxiedImage = $imagePath !== ''
+                                            ? 'image_proxy.php?src=' . urlencode($imagePath)
+                                            : '';
                                     ?>
                                     <tr>
+                                        <td>
+                                            <?php if ($proxiedImage !== ''): ?>
+                                                <img src="<?= h($proxiedImage) ?>"
+                                                     alt="<?= h($name) ?>"
+                                                     class="reservation-model-image">
+                                            <?php else: ?>
+                                                <div class="reservation-model-image reservation-model-image--placeholder">
+                                                    No image
+                                                </div>
+                                            <?php endif; ?>
+                                        </td>
                                         <td><?= h($name) ?></td>
                                         <td>
                                             <input type="number"
@@ -436,31 +509,94 @@ if ($from !== '') {
                 <?php endif; ?>
 
                 <div class="row g-3 align-items-end mt-2">
-                    <div class="col-md-6">
-                        <label class="form-label">Add model (optional)</label>
-                        <div class="position-relative model-autocomplete-wrapper">
-                            <input type="text"
-                                   class="form-control model-autocomplete"
-                                   placeholder="Search by model name..."
-                                   autocomplete="off"
-                                   value="<?= h($addModelLabel) ?>">
-                            <input type="hidden"
-                                   name="add_model_id"
-                                   class="model-autocomplete-id"
-                                   value="<?= $addModelId > 0 ? (int)$addModelId : '' ?>">
-                            <div class="list-group position-absolute w-100 shadow-sm"
-                                 data-model-suggestions
-                                 style="display: none; z-index: 20;"></div>
+                    <div class="col-12">
+                        <label class="form-label">Add models (optional)</label>
+                        <div id="add-model-rows">
+                            <?php if (!empty($preserveAddRows)): ?>
+                                <?php foreach ($preserveAddRows as $row): ?>
+                                    <div class="row g-2 align-items-end add-model-row">
+                                        <div class="col-md-6">
+                                            <div class="position-relative model-autocomplete-wrapper">
+                                                <input type="text"
+                                                       class="form-control model-autocomplete"
+                                                       placeholder="Search by model name..."
+                                                       autocomplete="off"
+                                                       value="<?= h($row['label']) ?>">
+                                                <input type="hidden"
+                                                       name="add_model_id[]"
+                                                       class="model-autocomplete-id"
+                                                       value="<?= h($row['id']) ?>">
+                                                <input type="hidden"
+                                                       name="add_model_label[]"
+                                                       class="model-autocomplete-label"
+                                                       value="<?= h($row['label']) ?>">
+                                                <input type="hidden"
+                                                       name="add_model_image[]"
+                                                       class="model-autocomplete-image"
+                                                       value="<?= h($row['image']) ?>">
+                                                <div class="list-group position-absolute w-100 shadow-sm"
+                                                     data-model-suggestions
+                                                     style="display: none; z-index: 20;"></div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="number"
+                                                   name="add_qty[]"
+                                                   class="form-control"
+                                                   min="1"
+                                                   placeholder="Qty"
+                                                   value="<?= h($row['qty']) ?>">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <button type="button" class="btn btn-outline-secondary w-100 add-model-row-remove">
+                                                Remove
+                                            </button>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <div class="row g-2 align-items-end add-model-row">
+                                    <div class="col-md-6">
+                                        <div class="position-relative model-autocomplete-wrapper">
+                                            <input type="text"
+                                                   class="form-control model-autocomplete"
+                                                   placeholder="Search by model name..."
+                                                   autocomplete="off">
+                                            <input type="hidden"
+                                                   name="add_model_id[]"
+                                                   class="model-autocomplete-id">
+                                            <input type="hidden"
+                                                   name="add_model_label[]"
+                                                   class="model-autocomplete-label">
+                                            <input type="hidden"
+                                                   name="add_model_image[]"
+                                                   class="model-autocomplete-image">
+                                            <div class="list-group position-absolute w-100 shadow-sm"
+                                                 data-model-suggestions
+                                                 style="display: none; z-index: 20;"></div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="number"
+                                               name="add_qty[]"
+                                               class="form-control"
+                                               min="1"
+                                               placeholder="Qty">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button type="button" class="btn btn-outline-secondary w-100 add-model-row-remove">
+                                            Remove
+                                        </button>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
                         </div>
-                        <div class="form-text">Select a model from the list to add it.</div>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Add quantity</label>
-                        <input type="number"
-                               name="add_qty"
-                               class="form-control"
-                               min="1"
-                               value="<?= h($addQtyRaw) ?>">
+                        <div class="d-flex gap-2 mt-2">
+                            <button type="button" class="btn btn-outline-primary" id="add-model-row-btn">
+                                Add another model
+                            </button>
+                        </div>
+                        <div class="form-text">Add one or more models before saving.</div>
                     </div>
                 </div>
 
@@ -475,12 +611,13 @@ if ($from !== '') {
 <?php layout_footer(); ?>
 <script>
 (function () {
-    const wrappers = document.querySelectorAll('.model-autocomplete-wrapper');
-    wrappers.forEach((wrapper) => {
+    function initAutocomplete(wrapper) {
         const input = wrapper.querySelector('.model-autocomplete');
         const hidden = wrapper.querySelector('.model-autocomplete-id');
+        const label = wrapper.querySelector('.model-autocomplete-label');
+        const image = wrapper.querySelector('.model-autocomplete-image');
         const list = wrapper.querySelector('[data-model-suggestions]');
-        if (!input || !hidden || !list) return;
+        if (!input || !hidden || !label || !image || !list) return;
 
         let timer = null;
         let lastQuery = '';
@@ -488,6 +625,8 @@ if ($from !== '') {
         input.addEventListener('input', () => {
             const q = input.value.trim();
             hidden.value = '';
+            label.value = '';
+            image.value = '';
             if (q.length < 2) {
                 hideSuggestions();
                 return;
@@ -523,17 +662,20 @@ if ($from !== '') {
             }
 
             items.forEach((item) => {
-                const label = item.label || item.name || '';
+                const labelText = item.label || item.name || '';
                 const btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'list-group-item list-group-item-action';
-                btn.textContent = label;
+                btn.textContent = labelText;
                 btn.dataset.id = item.id || '';
-                btn.dataset.label = label;
+                btn.dataset.label = labelText;
+                btn.dataset.image = item.image || '';
 
                 btn.addEventListener('click', () => {
                     input.value = btn.dataset.label;
                     hidden.value = btn.dataset.id;
+                    label.value = btn.dataset.label;
+                    image.value = btn.dataset.image;
                     hideSuggestions();
                     input.focus();
                 });
@@ -547,6 +689,65 @@ if ($from !== '') {
         function hideSuggestions() {
             list.style.display = 'none';
             list.innerHTML = '';
+        }
+    }
+
+    document.querySelectorAll('.model-autocomplete-wrapper').forEach(initAutocomplete);
+
+    const addBtn = document.getElementById('add-model-row-btn');
+    const addRows = document.getElementById('add-model-rows');
+    if (addBtn && addRows) {
+        addBtn.addEventListener('click', () => {
+            const row = document.createElement('div');
+            row.className = 'row g-2 align-items-end add-model-row';
+            row.innerHTML = `
+                <div class="col-md-6">
+                    <div class="position-relative model-autocomplete-wrapper">
+                        <input type="text"
+                               class="form-control model-autocomplete"
+                               placeholder="Search by model name..."
+                               autocomplete="off">
+                        <input type="hidden"
+                               name="add_model_id[]"
+                               class="model-autocomplete-id">
+                        <input type="hidden"
+                               name="add_model_label[]"
+                               class="model-autocomplete-label">
+                        <input type="hidden"
+                               name="add_model_image[]"
+                               class="model-autocomplete-image">
+                        <div class="list-group position-absolute w-100 shadow-sm"
+                             data-model-suggestions
+                             style="display: none; z-index: 20;"></div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <input type="number"
+                           name="add_qty[]"
+                           class="form-control"
+                           min="1"
+                           placeholder="Qty">
+                </div>
+                <div class="col-md-2">
+                    <button type="button" class="btn btn-outline-secondary w-100 add-model-row-remove">
+                        Remove
+                    </button>
+                </div>
+            `;
+            addRows.appendChild(row);
+            const wrapper = row.querySelector('.model-autocomplete-wrapper');
+            if (wrapper) {
+                initAutocomplete(wrapper);
+            }
+        });
+    }
+
+    document.addEventListener('click', (event) => {
+        const btn = event.target.closest('.add-model-row-remove');
+        if (!btn) return;
+        const row = btn.closest('.add-model-row');
+        if (row) {
+            row.remove();
         }
     });
 })();
