@@ -483,6 +483,58 @@ form .form-select {
     content: "–";
 }
 
+/* Reservation history table sizing */
+.reservation-history-table {
+    table-layout: fixed;
+}
+
+.reservation-history-table th,
+.reservation-history-table td {
+    vertical-align: top;
+}
+
+.reservation-history-table th:nth-child(1),
+.reservation-history-table td:nth-child(1) {
+    width: 70px;
+}
+
+.reservation-history-table th:nth-child(2),
+.reservation-history-table td:nth-child(2) {
+    width: 180px;
+}
+
+.reservation-history-table th:nth-child(3),
+.reservation-history-table td:nth-child(3) {
+    width: 35%;
+}
+
+.reservation-history-table th:nth-child(4),
+.reservation-history-table td:nth-child(4),
+.reservation-history-table th:nth-child(5),
+.reservation-history-table td:nth-child(5) {
+    width: 130px;
+}
+
+.reservation-history-table th:nth-child(6),
+.reservation-history-table td:nth-child(6) {
+    width: 110px;
+}
+
+.reservation-history-table th:nth-child(7),
+.reservation-history-table td:nth-child(7) {
+    width: 190px;
+}
+
+.items-cell {
+    padding-top: 0.5rem;
+}
+
+.items-cell-content {
+    max-height: 140px;
+    overflow: auto;
+    padding-right: 4px;
+}
+
 /* Settings page: make each field block stand out */
 .settings-form .card .row.g-3 > [class*="col-"],
 .settings-form .card .row.g-2 > [class*="col-"] {

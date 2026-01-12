@@ -321,7 +321,7 @@ try {
             </div>
         <?php else: ?>
             <div class="table-responsive">
-                <table class="table table-sm table-striped align-middle">
+                <table class="table table-sm table-striped align-middle reservation-history-table">
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -372,7 +372,7 @@ try {
                             <tr>
                                 <td>#<?= (int)$r['id'] ?></td>
                                 <td><?= h($r['user_name'] ?? '(Unknown)') ?></td>
-                                <td><?= $itemsText !== '' ? $itemsText : '' ?></td>
+                                <td class="items-cell"><?= $itemsText !== '' ? '<div class="items-cell-content">' . $itemsText . '</div>' : '' ?></td>
                                 <td><?= uk_datetime($r['start_datetime'] ?? '') ?></td>
                                 <td><?= uk_datetime($r['end_datetime'] ?? '') ?></td>
                                 <td><?= h($r['status'] ?? '') ?></td>
