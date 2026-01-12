@@ -10,6 +10,7 @@ $isStaff   = !empty($currentUser['is_admin']);
 $embedded  = defined('RESERVATIONS_EMBED');
 $pageBase  = $embedded ? 'reservations.php' : 'staff_reservations.php';
 $baseQuery = $embedded ? ['tab' => 'history'] : [];
+$editSuffix = $embedded ? '&from=reservations' : '';
 
 /**
  * Convert YYYY-MM-DD → DD/MM/YYYY.
@@ -45,6 +46,10 @@ if (empty($currentUser['is_admin'])) {
 $deletedMsg = '';
 if (!empty($_GET['deleted'])) {
     $deletedMsg = 'Reservation #' . (int)$_GET['deleted'] . ' has been deleted.';
+}
+$updatedMsg = '';
+if (!empty($_GET['updated'])) {
+    $updatedMsg = 'Reservation #' . (int)$_GET['updated'] . ' has been updated.';
 }
 
 // Filters
@@ -141,6 +146,11 @@ try {
                 <?= htmlspecialchars($deletedMsg) ?>
             </div>
         <?php endif; ?>
+        <?php if (!empty($updatedMsg)): ?>
+            <div class="alert alert-success">
+                <?= htmlspecialchars($updatedMsg) ?>
+            </div>
+        <?php endif; ?>
 
         <?php if (!empty($loadError ?? '')): ?>
             <div class="alert alert-danger">
@@ -217,6 +227,7 @@ try {
                             <?php
                                 $items      = get_reservation_items_with_names($pdo, (int)$r['id']);
                                 $itemsText  = build_items_summary_text($items);
+                                $status     = strtolower((string)($r['status'] ?? ''));
                                 if (!empty($r['asset_name_cache'])) {
                                     $extra = 'Assets: ' . $r['asset_name_cache'];
                                     $itemsText = $itemsText ? $itemsText . ' | ' . $extra : $extra;
@@ -235,6 +246,12 @@ try {
                                            class="btn btn-sm btn-outline-secondary">
                                             View
                                         </a>
+                                        <?php if ($status === 'pending'): ?>
+                                            <a href="reservation_edit.php?id=<?= (int)$r['id'] ?><?= h($editSuffix) ?>"
+                                               class="btn btn-sm btn-outline-primary">
+                                                Edit
+                                            </a>
+                                        <?php endif; ?>
                                         <form method="post"
                                               action="delete_reservation.php"
                                               onsubmit="return confirm('Delete this reservation and all its items? This cannot be undone.');">
