@@ -354,7 +354,7 @@ try {
                                 if ($itemsText !== '') {
                                     $modelsHtml = '<details class="items-section">'
                                         . '<summary><strong>Models Reserved:</strong></summary>'
-                                        . '<div class="mt-1">' . $itemsText . '</div>'
+                                        . '<div class="items-section-body items-section-body--scroll">' . $itemsText . '</div>'
                                         . '</details>';
                                 }
                                 $assetsHtml = '';
@@ -364,16 +364,10 @@ try {
                                     $assetLines = $assetParts ? implode('<br>', array_map('h', $assetParts)) : h($assetRaw);
                                     $assetsHtml = '<details class="items-section mt-2">'
                                         . '<summary><strong>Assets Assigned:</strong></summary>'
-                                        . '<div class="mt-1">' . $assetLines . '</div>'
+                                        . '<div class="items-section-body">' . $assetLines . '</div>'
                                         . '</details>';
                                 }
-                                $itemsText = '';
-                                if ($modelsHtml !== '') {
-                                    $itemsText .= '<div class="items-section-scroll">' . $modelsHtml . '</div>';
-                                }
-                                if ($assetsHtml !== '') {
-                                    $itemsText .= $assetsHtml;
-                                }
+                                $itemsText = $modelsHtml . $assetsHtml;
                             ?>
                             <tr>
                                 <td>#<?= (int)$r['id'] ?></td>

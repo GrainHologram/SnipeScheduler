@@ -529,11 +529,16 @@ form .form-select {
     padding-top: 0.5rem;
 }
 
-.items-section-scroll {
+.items-section-body {
     max-height: 120px;
+    min-height: 80px;
     overflow: auto;
     padding-right: 4px;
-    margin-bottom: 0.65rem;
+    margin-top: 0.35rem;
+}
+
+.items-section-body--scroll {
+    overscroll-behavior: contain;
 }
 
 /* Settings page: make each field block stand out */
