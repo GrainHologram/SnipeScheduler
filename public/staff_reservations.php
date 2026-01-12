@@ -337,7 +337,18 @@ try {
                         <?php foreach ($reservations as $r): ?>
                             <?php
                                 $items      = get_reservation_items_with_names($pdo, (int)$r['id']);
-                                $itemsText  = build_items_summary_text($items);
+                                $itemsLines = [];
+                                foreach ($items as $item) {
+                                    $name = $item['name'] ?? '';
+                                    $qty = isset($item['qty']) ? (int)$item['qty'] : 0;
+                                    if ($name === '' || $qty <= 0) {
+                                        continue;
+                                    }
+                                    $itemsLines[] = $qty > 1
+                                        ? sprintf('%s (%d)', $name, $qty)
+                                        : $name;
+                                }
+                                $itemsText = $itemsLines ? implode('<br>', array_map('h', $itemsLines)) : '';
                                 $status     = strtolower((string)($r['status'] ?? ''));
                                 if (!empty($r['asset_name_cache'])) {
                                     $extra = 'Assets: ' . $r['asset_name_cache'];
@@ -347,7 +358,7 @@ try {
                             <tr>
                                 <td>#<?= (int)$r['id'] ?></td>
                                 <td><?= h($r['user_name'] ?? '(Unknown)') ?></td>
-                                <td><?= h($itemsText) ?></td>
+                                <td><?= $itemsText !== '' ? $itemsText : '' ?></td>
                                 <td><?= uk_datetime($r['start_datetime'] ?? '') ?></td>
                                 <td><?= uk_datetime($r['end_datetime'] ?? '') ?></td>
                                 <td><?= h($r['status'] ?? '') ?></td>
