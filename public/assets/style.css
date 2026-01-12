@@ -626,6 +626,20 @@ form .form-select {
     }
 }
 
+@media (min-width: 768px) and (max-width: 1024px) {
+    .reservation-history-table th:nth-child(4),
+    .reservation-history-table td:nth-child(4),
+    .reservation-history-table th:nth-child(5),
+    .reservation-history-table td:nth-child(5) {
+        width: 95px;
+    }
+
+    .reservation-history-table th:nth-child(6),
+    .reservation-history-table td:nth-child(6) {
+        width: 90px;
+    }
+}
+
 /* Settings page: make each field block stand out */
 .settings-form .card .row.g-3 > [class*="col-"],
 .settings-form .card .row.g-2 > [class*="col-"] {
