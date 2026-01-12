@@ -971,17 +971,20 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                                     <label class="form-check-label" for="app_debug">Enable debug mode (more verbose errors)</label>
                                 </div>
                             </div>
-                            <div class="col-md-6 d-flex align-items-end">
-                                <div class="form-check">
-                                    <input class="form-check-input"
-                                           type="checkbox"
-                                           name="app_block_catalogue_overdue"
-                                           id="app_block_catalogue_overdue"
-                                        <?= $cfg(['app', 'block_catalogue_overdue'], true) ? 'checked' : '' ?>>
-                                    <label class="form-check-label" for="app_block_catalogue_overdue">
-                                        Block catalogue for users with overdue checkouts
-                                    </label>
-                                </div>
+                        </div>
+                        <div class="mt-3 p-3 rounded border border-warning-subtle bg-warning-subtle">
+                            <div class="form-check">
+                                <input class="form-check-input"
+                                       type="checkbox"
+                                       name="app_block_catalogue_overdue"
+                                       id="app_block_catalogue_overdue"
+                                    <?= $cfg(['app', 'block_catalogue_overdue'], true) ? 'checked' : '' ?>>
+                                <label class="form-check-label fw-semibold" for="app_block_catalogue_overdue">
+                                    Block catalogue for users with overdue checkouts
+                                </label>
+                            </div>
+                            <div class="form-text mt-1">
+                                When enabled, users with overdue assets cannot access the catalogue until items are returned.
                             </div>
                         </div>
                     </div>
