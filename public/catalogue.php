@@ -18,10 +18,17 @@ $activeUser      = $bookingOverride ?: $currentUser;
 $ldapCfg  = $config['ldap'] ?? [];
 $appCfg   = $config['app'] ?? [];
 $debugOn  = !empty($appCfg['debug']);
+$blockCatalogueOverdue = array_key_exists('block_catalogue_overdue', $appCfg)
+    ? !empty($appCfg['block_catalogue_overdue'])
+    : true;
 $overdueCacheTtl = 0;
 
 if (($_GET['ajax'] ?? '') === 'overdue_check') {
     header('Content-Type: application/json');
+    if (!$blockCatalogueOverdue) {
+        echo json_encode(['blocked' => false, 'assets' => []]);
+        exit;
+    }
 
     $bookingOverride = $_SESSION['booking_user_override'] ?? null;
     $activeUser      = $bookingOverride ?: $currentUser;
@@ -505,6 +512,7 @@ foreach ($basket as $qty) {
 $overdueAssets = [];
 $overdueErr = '';
 $catalogueBlocked = false;
+$skipOverdueCheck = !$blockCatalogueOverdue;
 $activeUserEmail = trim($activeUser['email'] ?? '');
 $activeUserUsername = trim($activeUser['username'] ?? '');
 $activeUserDisplay = trim($activeUser['display_name'] ?? '');
@@ -514,7 +522,7 @@ if ($cacheKey === '') {
 }
 $cacheBucket = $_SESSION['overdue_check_cache'] ?? [];
 $cached = is_array($cacheBucket) && isset($cacheBucket[$cacheKey]) ? $cacheBucket[$cacheKey] : null;
-if (is_array($cached) && isset($cached['ts'], $cached['data']) && $overdueCacheTtl > 0 && (time() - (int)$cached['ts']) <= $overdueCacheTtl) {
+if (!$skipOverdueCheck && is_array($cached) && isset($cached['ts'], $cached['data']) && $overdueCacheTtl > 0 && (time() - (int)$cached['ts']) <= $overdueCacheTtl) {
     $cachedData = $cached['data'];
     $catalogueBlocked = !empty($cachedData['blocked']);
     $overdueAssets = $cachedData['assets'] ?? [];
@@ -642,7 +650,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
     <link rel="stylesheet" href="assets/style.css">
     <?= layout_theme_styles() ?>
 </head>
-<body class="p-4">
+<body class="p-4" data-catalogue-overdue="<?= $blockCatalogueOverdue ? '1' : '0' ?>">
 <div class="container">
     <div class="page-shell">
         <?= layout_logo_tag() ?>
@@ -656,9 +664,11 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
         <!-- App navigation -->
         <?= layout_render_nav($active, $isStaff) ?>
 
-        <div id="overdue-warning" class="alert alert-warning<?= $overdueErr ? '' : ' d-none' ?>">
-            <?= h($overdueErr) ?>
-        </div>
+        <?php if ($blockCatalogueOverdue): ?>
+            <div id="overdue-warning" class="alert alert-warning<?= $overdueErr ? '' : ' d-none' ?>">
+                <?= h($overdueErr) ?>
+            </div>
+        <?php endif; ?>
 
         <!-- Top bar -->
         <div class="top-bar mb-3">
@@ -678,26 +688,28 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             </div>
         </div>
 
-        <div id="overdue-alert" class="alert alert-danger<?= $catalogueBlocked ? '' : ' d-none' ?>">
-            <div class="fw-semibold mb-2">Catalogue unavailable</div>
-            <div class="mb-2">
-                You have overdue items in Snipe-IT. Please return them before booking more equipment.
+        <?php if ($blockCatalogueOverdue): ?>
+            <div id="overdue-alert" class="alert alert-danger<?= $catalogueBlocked ? '' : ' d-none' ?>">
+                <div class="fw-semibold mb-2">Catalogue unavailable</div>
+                <div class="mb-2">
+                    You have overdue items in Snipe-IT. Please return them before booking more equipment.
+                </div>
+                <ul class="mb-0" id="overdue-list">
+                    <?php foreach ($overdueAssets as $asset): ?>
+                        <?php
+                            $tag = $asset['tag'] ?? 'Unknown tag';
+                            $modelName = $asset['model'] ?? '';
+                            $due = $asset['due'] ?? '';
+                        ?>
+                        <li>
+                            <?= h($tag) ?>
+                            <?= $modelName !== '' ? ' (' . h($modelName) . ')' : '' ?>
+                            <?= $due !== '' ? ' — due ' . h($due) : '' ?>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
             </div>
-            <ul class="mb-0" id="overdue-list">
-                <?php foreach ($overdueAssets as $asset): ?>
-                    <?php
-                        $tag = $asset['tag'] ?? 'Unknown tag';
-                        $modelName = $asset['model'] ?? '';
-                        $due = $asset['due'] ?? '';
-                    ?>
-                    <li>
-                        <?= h($tag) ?>
-                        <?= $modelName !== '' ? ' (' . h($modelName) . ')' : '' ?>
-                        <?= $due !== '' ? ' — due ' . h($due) : '' ?>
-                    </li>
-                <?php endforeach; ?>
-            </ul>
-        </div>
+        <?php endif; ?>
 
         <div id="catalogue-content" class="<?= $catalogueBlocked ? 'd-none' : '' ?>">
             <?php if ($categoryErr): ?>
@@ -1043,26 +1055,29 @@ document.addEventListener('DOMContentLoaded', function () {
         }, 2200);
     }
 
-    fetch('catalogue.php?ajax=overdue_check', {
-        credentials: 'same-origin',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    })
-        .then(function (response) {
-            return response.ok ? response.json() : null;
+    const overdueEnabled = document.body.dataset.catalogueOverdue === '1';
+    if (overdueEnabled) {
+        fetch('catalogue.php?ajax=overdue_check', {
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
-        .then(function (data) {
-            if (!data) return;
-            if (data.error && overdueWarning) {
-                overdueWarning.textContent = data.error;
-                overdueWarning.classList.remove('d-none');
-            }
-            if (data.blocked && Array.isArray(data.assets)) {
-                applyOverdueBlock(data.assets);
-            }
-        })
-        .catch(function () {
-            // Ignore overdue check failures; catalogue remains accessible.
-        });
+            .then(function (response) {
+                return response.ok ? response.json() : null;
+            })
+            .then(function (data) {
+                if (!data) return;
+                if (data.error && overdueWarning) {
+                    overdueWarning.textContent = data.error;
+                    overdueWarning.classList.remove('d-none');
+                }
+                if (data.blocked && Array.isArray(data.assets)) {
+                    applyOverdueBlock(data.assets);
+                }
+            })
+            .catch(function () {
+                // Ignore overdue check failures; catalogue remains accessible.
+            });
+    }
 
     forms.forEach(function (form) {
         form.addEventListener('submit', function (e) {

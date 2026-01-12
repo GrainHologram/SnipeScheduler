@@ -125,6 +125,7 @@ return [
         'api_cache_ttl_seconds' => 60, // cache Snipe-IT GET responses for this many seconds
         'overdue_staff_email' => '', // overdue report recipients (comma/newline separated)
         'overdue_staff_name'  => '', // optional names for recipients (comma/newline separated)
+        'block_catalogue_overdue' => true, // block catalogue for users with overdue checkouts
     ],
 
     'catalogue' => [
