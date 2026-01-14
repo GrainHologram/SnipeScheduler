@@ -322,21 +322,21 @@ try {
                 <?php foreach ($baseQuery as $k => $v): ?>
                     <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
                 <?php endforeach; ?>
-                <div class="col-md-4 col-lg-3">
+                <div class="col-md-4 col-lg-4">
                     <input type="text"
                            name="q"
                            class="form-control form-control-lg"
                            placeholder="Search by user or items..."
                            value="<?= htmlspecialchars($qRaw) ?>">
                 </div>
-                <div class="col-md-1 col-lg-2">
+                <div class="col-md-1 col-lg-1">
                     <input type="date"
                            name="from"
                            class="form-control form-control-lg"
                            value="<?= htmlspecialchars($fromRaw) ?>"
                            placeholder="From date">
                 </div>
-                <div class="col-md-1 col-lg-2">
+                <div class="col-md-1 col-lg-1">
                     <input type="date"
                            name="to"
                            class="form-control form-control-lg"
