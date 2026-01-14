@@ -221,6 +221,7 @@ $selectedStart       = '';
 $selectedEnd         = '';
 $modelAssets         = [];
 $presetSelections    = [];
+$selectedTotalQty    = 0;
 
 if ($selectedReservationId) {
     $stmt = $pdo->prepare("
@@ -239,6 +240,9 @@ if ($selectedReservationId) {
         $selectedStart = $selectedReservation['start_datetime'] ?? '';
         $selectedEnd   = $selectedReservation['end_datetime'] ?? '';
         $selectedItems = get_reservation_items_with_names($pdo, $selectedReservationId);
+        foreach ($selectedItems as $item) {
+            $selectedTotalQty += (int)($item['qty'] ?? 0);
+        }
         $storedSelections = $_SESSION['reservation_selected_assets'][$selectedReservationId] ?? [];
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['selected_assets']) && is_array($_POST['selected_assets'])) {
             $normalizedSelections = [];
@@ -351,6 +355,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             try {
+                $totalStmt = $pdo->prepare("
+                    SELECT COALESCE(SUM(quantity), 0)
+                      FROM reservation_items
+                     WHERE reservation_id = :rid
+                ");
+                $totalStmt->execute([':rid' => $selectedReservationId]);
+                $totalQtyBefore = (int)$totalStmt->fetchColumn();
+
                 $stmt = $pdo->prepare("
                     SELECT quantity
                       FROM reservation_items
@@ -363,6 +375,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':mid' => $removeModelId,
                 ]);
                 $currentQty = (int)$stmt->fetchColumn();
+
+                $willDeleteReservation = false;
+                if ($removeAll) {
+                    $willDeleteReservation = $currentQty > 0 && ($totalQtyBefore - $currentQty) <= 0;
+                } else {
+                    $willDeleteReservation = $totalQtyBefore <= 1;
+                }
+
+                if ($willDeleteReservation && ($_POST['confirm_delete'] ?? '') !== '1') {
+                    throw new RuntimeException('Confirmation required to delete the reservation.');
+                }
 
                 if ($currentQty <= 1 || $removeAll) {
                     $del = $pdo->prepare("
@@ -388,10 +411,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
                 }
 
+                if ($willDeleteReservation) {
+                    $delRes = $pdo->prepare("DELETE FROM reservations WHERE id = :id");
+                    $delRes->execute([':id' => $selectedReservationId]);
+                    unset($_SESSION['reservation_selected_assets'][$selectedReservationId]);
+                    unset($_SESSION['selected_reservation_id']);
+                    $selectedReservationId = null;
+                }
+
                 header('Location: ' . $selfUrl);
                 exit;
             } catch (Throwable $e) {
-                    $checkoutErrors[] = 'Could not update reservation: ' . $e->getMessage();
+                $checkoutErrors[] = 'Could not update reservation: ' . $e->getMessage();
             }
         }
     }
@@ -829,10 +860,12 @@ $isStaff = !empty($currentUser['is_admin']);
                                                             <?= h($item['name'] ?? ('Model #' . $mid)) ?> (need <?= $qty ?>)
                                                         </div>
                                                         <div class="mt-2">
+                                                            <?php $removeAllDeletes = $selectedTotalQty > 0 && $selectedTotalQty <= $qty; ?>
                                                             <button type="submit"
                                                                     name="remove_model_id_all"
                                                                     value="<?= $mid ?>"
-                                                                    class="btn btn-sm btn-outline-danger">
+                                                                    class="btn btn-sm btn-outline-danger"
+                                                                    <?= $removeAllDeletes ? 'data-confirm-delete="1"' : '' ?>>
                                                                 Remove all
                                                             </button>
                                                         </div>
@@ -865,12 +898,14 @@ $isStaff = !empty($currentUser['is_admin']);
                                                                     <?= h($item['name'] ?? ('Model #' . $mid)) ?> (need <?= $qty ?>)
                                                                 </div>
                                                                 <div class="mt-2">
-                                                                    <button type="submit"
-                                                                            name="remove_model_id_all"
-                                                                            value="<?= $mid ?>"
-                                                                            class="btn btn-sm btn-outline-danger">
-                                                                        Remove all
-                                                                    </button>
+                                                                <?php $removeAllDeletes = $selectedTotalQty > 0 && $selectedTotalQty <= $qty; ?>
+                                                                <button type="submit"
+                                                                        name="remove_model_id_all"
+                                                                        value="<?= $mid ?>"
+                                                                        class="btn btn-sm btn-outline-danger"
+                                                                        <?= $removeAllDeletes ? 'data-confirm-delete="1"' : '' ?>>
+                                                                    Remove all
+                                                                </button>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -896,10 +931,12 @@ $isStaff = !empty($currentUser['is_admin']);
                                                                 <option value="<?= $aid ?>" <?= $selectedAttr ?>><?= h($label) ?></option>
                                                             <?php endforeach; ?>
                                                         </select>
+                                                        <?php $removeOneDeletes = $selectedTotalQty <= 1; ?>
                                                         <button type="submit"
                                                                 name="remove_slot"
                                                                 value="<?= $mid ?>:<?= $i ?>"
-                                                                class="btn btn-sm btn-outline-danger">
+                                                                class="btn btn-sm btn-outline-danger"
+                                                                <?= $removeOneDeletes ? 'data-confirm-delete="1"' : '' ?>>
                                                             Remove
                                                         </button>
                                                     </div>
@@ -931,6 +968,26 @@ $isStaff = !empty($currentUser['is_admin']);
 
 <script>
 (function () {
+    document.addEventListener('click', (event) => {
+        const btn = event.target.closest('button[data-confirm-delete]');
+        if (!btn) {
+            return;
+        }
+        const ok = window.confirm('This will delete the entire reservation. Continue?');
+        if (!ok) {
+            event.preventDefault();
+            return;
+        }
+        const form = btn.form;
+        if (form && !form.querySelector('input[name=\"confirm_delete\"]')) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'confirm_delete';
+            input.value = '1';
+            form.appendChild(input);
+        }
+    });
+
     const wrappers = document.querySelectorAll('.user-autocomplete-wrapper');
     wrappers.forEach((wrapper) => {
         const input = wrapper.querySelector('.user-autocomplete');
