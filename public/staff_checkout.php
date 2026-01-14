@@ -304,9 +304,19 @@ if ($selectedReservationId) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $mode = $_POST['mode'] ?? '';
 
-    if (isset($_POST['remove_model_id']) || isset($_POST['remove_model_id_all'])) {
+    if (isset($_POST['remove_model_id_all']) || isset($_POST['remove_slot'])) {
         $removeAll = isset($_POST['remove_model_id_all']);
-        $removeModelId = (int)($_POST['remove_model_id_all'] ?? $_POST['remove_model_id'] ?? 0);
+        $removeModelId = 0;
+        $removeSlot = null;
+        if ($removeAll) {
+            $removeModelId = (int)($_POST['remove_model_id_all'] ?? 0);
+        } elseif (isset($_POST['remove_slot'])) {
+            $rawSlot = trim((string)$_POST['remove_slot']);
+            if (preg_match('/^(\\d+):(\\d+)$/', $rawSlot, $m)) {
+                $removeModelId = (int)$m[1];
+                $removeSlot = (int)$m[2];
+            }
+        }
         if (!$selectedReservation) {
             $checkoutErrors[] = 'Please select a reservation for today before removing items.';
         } elseif ($removeModelId <= 0) {
@@ -333,7 +343,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($removeAll) {
                 unset($normalizedSelections[$removeModelId]);
             } elseif (isset($normalizedSelections[$removeModelId])) {
-                array_pop($normalizedSelections[$removeModelId]);
+                if ($removeSlot !== null && $removeSlot >= 0 && isset($normalizedSelections[$removeModelId][$removeSlot])) {
+                    array_splice($normalizedSelections[$removeModelId], $removeSlot, 1);
+                } else {
+                    array_pop($normalizedSelections[$removeModelId]);
+                }
             }
             if ($selectedReservationId) {
                 $_SESSION['reservation_selected_assets'][$selectedReservationId] = $normalizedSelections;
@@ -886,8 +900,8 @@ $isStaff = !empty($currentUser['is_admin']);
                                                             <?php endforeach; ?>
                                                         </select>
                                                         <button type="submit"
-                                                                name="remove_model_id"
-                                                                value="<?= $mid ?>"
+                                                                name="remove_slot"
+                                                                value="<?= $mid ?>:<?= $i ?>"
                                                                 class="btn btn-sm btn-outline-danger">
                                                             Remove
                                                         </button>
