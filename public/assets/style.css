@@ -51,6 +51,11 @@ a.btn:visited {
     color: inherit;
 }
 
+.btn-primary:visited,
+.btn-success:visited {
+    color: #ffffff;
+}
+
 .btn-link {
     color: var(--primary-strong);
 }
