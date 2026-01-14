@@ -58,10 +58,15 @@ $restoreError = '';
 $qRaw    = trim($_GET['q'] ?? '');
 $fromRaw = trim($_GET['from'] ?? '');
 $toRaw   = trim($_GET['to'] ?? '');
+$pageRaw = (int)($_GET['page'] ?? 1);
+$perPageRaw = (int)($_GET['per_page'] ?? 25);
 
 $q        = $qRaw !== '' ? $qRaw : null;
 $dateFrom = $fromRaw !== '' ? $fromRaw : null;
 $dateTo   = $toRaw !== '' ? $toRaw : null;
+$page     = $pageRaw > 0 ? $pageRaw : 1;
+$perPageOptions = [10, 25, 50, 100];
+$perPage = in_array($perPageRaw, $perPageOptions, true) ? $perPageRaw : 25;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'restore_missed') {
     $restoreId = (int)($_POST['reservation_id'] ?? 0);
@@ -162,7 +167,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'resto
     }
 }
 
-// Load filtered reservations
+// Load filtered reservations (paginated)
 try {
     $where  = [];
     $params = [];
@@ -188,14 +193,36 @@ try {
         $sql .= ' WHERE ' . implode(' AND ', $where);
     }
 
-    $sql .= ' ORDER BY start_datetime DESC';
+    $countSql = "SELECT COUNT(*) FROM reservations";
+    if (!empty($where)) {
+        $whereSql = ' WHERE ' . implode(' AND ', $where);
+        $sql .= $whereSql;
+        $countSql .= $whereSql;
+    }
 
+    $countStmt = $pdo->prepare($countSql);
+    $countStmt->execute($params);
+    $totalRows = (int)$countStmt->fetchColumn();
+    $totalPages = max(1, (int)ceil($totalRows / $perPage));
+    if ($page > $totalPages) {
+        $page = $totalPages;
+    }
+    $offset = ($page - 1) * $perPage;
+
+    $sql .= ' ORDER BY start_datetime DESC LIMIT :limit OFFSET :offset';
     $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+    }
+    $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
     $reservations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
     $reservations = [];
     $loadError = $e->getMessage();
+    $totalRows = 0;
+    $totalPages = 1;
 }
 ?>
 <?php if (!$embedded): ?>
@@ -300,6 +327,15 @@ try {
                        class="form-control"
                        value="<?= htmlspecialchars($toRaw) ?>"
                        placeholder="To date">
+            </div>
+            <div class="col-md-2">
+                <select name="per_page" class="form-select">
+                    <?php foreach ($perPageOptions as $opt): ?>
+                        <option value="<?= $opt ?>" <?= $perPage === $opt ? 'selected' : '' ?>>
+                            <?= $opt ?> per page
+                        </option>
+                    <?php endforeach; ?>
+                </select>
             </div>
             <div class="col-md-2 d-flex gap-2">
                 <button class="btn btn-primary w-100" type="submit">Filter</button>
@@ -447,6 +483,44 @@ try {
                     </tbody>
                 </table>
             </div>
+            <?php if ($totalPages > 1): ?>
+                <?php
+                    $pagerBase = $pageBase;
+                    $pagerQuery = array_merge($baseQuery, [
+                        'q' => $qRaw,
+                        'from' => $fromRaw,
+                        'to' => $toRaw,
+                        'per_page' => $perPage,
+                    ]);
+                ?>
+                <nav class="mt-3">
+                    <ul class="pagination justify-content-center">
+                        <?php
+                            $prevPage = max(1, $page - 1);
+                            $nextPage = min($totalPages, $page + 1);
+                            $pagerQuery['page'] = $prevPage;
+                            $prevUrl = $pagerBase . '?' . http_build_query($pagerQuery);
+                            $pagerQuery['page'] = $nextPage;
+                            $nextUrl = $pagerBase . '?' . http_build_query($pagerQuery);
+                        ?>
+                        <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                            <a class="page-link" href="<?= h($prevUrl) ?>">Previous</a>
+                        </li>
+                        <?php for ($p = 1; $p <= $totalPages; $p++): ?>
+                            <?php
+                                $pagerQuery['page'] = $p;
+                                $pageUrl = $pagerBase . '?' . http_build_query($pagerQuery);
+                            ?>
+                            <li class="page-item <?= $p === $page ? 'active' : '' ?>">
+                                <a class="page-link" href="<?= h($pageUrl) ?>"><?= $p ?></a>
+                            </li>
+                        <?php endfor; ?>
+                        <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
+                            <a class="page-link" href="<?= h($nextUrl) ?>">Next</a>
+                        </li>
+                    </ul>
+                </nav>
+            <?php endif; ?>
         <?php endif; ?>
 
 <?php if (!$embedded): ?>
