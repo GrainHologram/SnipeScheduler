@@ -320,6 +320,12 @@ function layout_checked_out_url(string $base, array $params): string
                         Renew selected
                     </button>
                 </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="select-all-assets">
+                    <label class="form-check-label" for="select-all-assets">
+                        Select all on this page
+                    </label>
+                </div>
                 <div class="table-responsive">
                     <table class="table table-sm table-striped align-middle">
                         <thead>
@@ -431,6 +437,16 @@ function layout_checked_out_url(string $base, array $params): string
         <?php endif; ?>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    const selectAll = document.getElementById('select-all-assets');
+    if (selectAll) {
+        selectAll.addEventListener('change', () => {
+            const boxes = document.querySelectorAll('input[name="bulk_asset_ids[]"]');
+            boxes.forEach((box) => {
+                box.checked = selectAll.checked;
+            });
+        });
+    }
+
     const sortSelect = document.getElementById('checked-out-sort');
     const table = document.querySelector('.table-responsive table');
     if (!sortSelect || !table) return;
