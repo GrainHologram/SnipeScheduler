@@ -68,11 +68,25 @@ $view    = $viewRaw === 'overdue' ? 'overdue' : 'all';
 $error   = '';
 $assets  = [];
 $search  = trim($_GET['q'] ?? '');
+$sortRaw = trim($_GET['sort'] ?? '');
 $pageRaw = (int)($_GET['page'] ?? 1);
 $perPageRaw = (int)($_GET['per_page'] ?? 10);
 $page = $pageRaw > 0 ? $pageRaw : 1;
 $perPageOptions = [10, 25, 50, 100];
 $perPage = in_array($perPageRaw, $perPageOptions, true) ? $perPageRaw : 10;
+$sortOptions = [
+    'expected_asc',
+    'expected_desc',
+    'tag_asc',
+    'tag_desc',
+    'model_asc',
+    'model_desc',
+    'user_asc',
+    'user_desc',
+    'checkout_desc',
+    'checkout_asc',
+];
+$sort = in_array($sortRaw, $sortOptions, true) ? $sortRaw : 'expected_asc';
 $forceRefresh = isset($_REQUEST['refresh']) && $_REQUEST['refresh'] === '1';
 if ($forceRefresh) {
     // Disable cached Snipe-IT responses for this request
@@ -152,6 +166,85 @@ try {
             return false;
         }));
     }
+    usort($assets, function ($a, $b) use ($sort) {
+        $aTag = strtolower((string)($a['asset_tag'] ?? ''));
+        $bTag = strtolower((string)($b['asset_tag'] ?? ''));
+        $aModel = strtolower((string)($a['model']['name'] ?? ''));
+        $bModel = strtolower((string)($b['model']['name'] ?? ''));
+        $aUser = $a['assigned_to'] ?? ($a['assigned_to_fullname'] ?? '');
+        $bUser = $b['assigned_to'] ?? ($b['assigned_to_fullname'] ?? '');
+        if (is_array($aUser)) {
+            $aUser = $aUser['name'] ?? ($aUser['username'] ?? '');
+        }
+        if (is_array($bUser)) {
+            $bUser = $bUser['name'] ?? ($bUser['username'] ?? '');
+        }
+        $aUser = strtolower((string)$aUser);
+        $bUser = strtolower((string)$bUser);
+        $aExpected = $a['_expected_checkin_norm'] ?? ($a['expected_checkin'] ?? '');
+        $bExpected = $b['_expected_checkin_norm'] ?? ($b['expected_checkin'] ?? '');
+        if (is_array($aExpected)) {
+            $aExpected = $aExpected['datetime'] ?? ($aExpected['date'] ?? '');
+        }
+        if (is_array($bExpected)) {
+            $bExpected = $bExpected['datetime'] ?? ($bExpected['date'] ?? '');
+        }
+        $aExpectedTs = $aExpected ? strtotime((string)$aExpected) : 0;
+        $bExpectedTs = $bExpected ? strtotime((string)$bExpected) : 0;
+        if ($aExpectedTs === false) {
+            $aExpectedTs = 0;
+        }
+        if ($bExpectedTs === false) {
+            $bExpectedTs = 0;
+        }
+        $aCheckout = $a['_last_checkout_norm'] ?? ($a['last_checkout'] ?? '');
+        $bCheckout = $b['_last_checkout_norm'] ?? ($b['last_checkout'] ?? '');
+        if (is_array($aCheckout)) {
+            $aCheckout = $aCheckout['datetime'] ?? ($aCheckout['date'] ?? '');
+        }
+        if (is_array($bCheckout)) {
+            $bCheckout = $bCheckout['datetime'] ?? ($bCheckout['date'] ?? '');
+        }
+        $aCheckoutTs = $aCheckout ? strtotime((string)$aCheckout) : 0;
+        $bCheckoutTs = $bCheckout ? strtotime((string)$bCheckout) : 0;
+        if ($aCheckoutTs === false) {
+            $aCheckoutTs = 0;
+        }
+        if ($bCheckoutTs === false) {
+            $bCheckoutTs = 0;
+        }
+
+        $cmpText = function (string $left, string $right) {
+            return $left <=> $right;
+        };
+        $cmpNum = function (int $left, int $right) {
+            return $left <=> $right;
+        };
+
+        switch ($sort) {
+            case 'expected_desc':
+                return $cmpNum($bExpectedTs ?: PHP_INT_MAX, $aExpectedTs ?: PHP_INT_MAX);
+            case 'expected_asc':
+                return $cmpNum($aExpectedTs ?: PHP_INT_MAX, $bExpectedTs ?: PHP_INT_MAX);
+            case 'tag_desc':
+                return $cmpText($bTag, $aTag);
+            case 'tag_asc':
+                return $cmpText($aTag, $bTag);
+            case 'model_desc':
+                return $cmpText($bModel, $aModel);
+            case 'model_asc':
+                return $cmpText($aModel, $bModel);
+            case 'user_desc':
+                return $cmpText($bUser, $aUser);
+            case 'user_asc':
+                return $cmpText($aUser, $bUser);
+            case 'checkout_asc':
+                return $cmpNum($aCheckoutTs, $bCheckoutTs);
+            case 'checkout_desc':
+                return $cmpNum($bCheckoutTs, $aCheckoutTs);
+        }
+        return 0;
+    });
     $totalRows = count($assets);
     $totalPages = max(1, (int)ceil($totalRows / $perPage));
     if ($page > $totalPages) {
@@ -208,8 +301,8 @@ function layout_checked_out_url(string $base, array $params): string
 
         <?php
             $tabBaseParams = $baseQuery;
-            $allParams     = array_merge($tabBaseParams, ['view' => 'all', 'per_page' => $perPage]);
-            $overdueParams = array_merge($tabBaseParams, ['view' => 'overdue', 'per_page' => $perPage]);
+            $allParams     = array_merge($tabBaseParams, ['view' => 'all', 'per_page' => $perPage, 'sort' => $sort]);
+            $overdueParams = array_merge($tabBaseParams, ['view' => 'overdue', 'per_page' => $perPage, 'sort' => $sort]);
             if ($search !== '') {
                 $allParams['q']     = $search;
                 $overdueParams['q'] = $search;
@@ -230,7 +323,7 @@ function layout_checked_out_url(string $base, array $params): string
         </ul>
 
         <div class="border rounded-3 p-4 mb-4">
-            <form method="get" class="row g-2 mb-0 align-items-end" action="<?= h($pageBase) ?>">
+            <form method="get" class="row g-2 mb-0 align-items-end" action="<?= h($pageBase) ?>" id="checked-out-filter-form">
             <?php foreach ($baseQuery as $k => $v): ?>
                 <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
             <?php endforeach; ?>
@@ -243,17 +336,17 @@ function layout_checked_out_url(string $base, array $params): string
                        placeholder="Filter by asset tag, name, model, or user">
             </div>
             <div class="col-md-2">
-                <select id="checked-out-sort" class="form-select form-select-lg" aria-label="Sort checked-out assets">
-                    <option value="expected_asc">Expected check-in (soonest first)</option>
-                    <option value="expected_desc">Expected check-in (latest first)</option>
-                    <option value="tag_asc">Asset tag (A–Z)</option>
-                    <option value="tag_desc">Asset tag (Z–A)</option>
-                    <option value="model_asc">Model (A–Z)</option>
-                    <option value="model_desc">Model (Z–A)</option>
-                    <option value="user_asc">User (A–Z)</option>
-                    <option value="user_desc">User (Z–A)</option>
-                    <option value="checkout_desc">Assigned since (newest first)</option>
-                    <option value="checkout_asc">Assigned since (oldest first)</option>
+                <select id="checked-out-sort" name="sort" class="form-select form-select-lg" aria-label="Sort checked-out assets">
+                    <option value="expected_asc" <?= $sort === 'expected_asc' ? 'selected' : '' ?>>Expected check-in (soonest first)</option>
+                    <option value="expected_desc" <?= $sort === 'expected_desc' ? 'selected' : '' ?>>Expected check-in (latest first)</option>
+                    <option value="tag_asc" <?= $sort === 'tag_asc' ? 'selected' : '' ?>>Asset tag (A–Z)</option>
+                    <option value="tag_desc" <?= $sort === 'tag_desc' ? 'selected' : '' ?>>Asset tag (Z–A)</option>
+                    <option value="model_asc" <?= $sort === 'model_asc' ? 'selected' : '' ?>>Model (A–Z)</option>
+                    <option value="model_desc" <?= $sort === 'model_desc' ? 'selected' : '' ?>>Model (Z–A)</option>
+                    <option value="user_asc" <?= $sort === 'user_asc' ? 'selected' : '' ?>>User (A–Z)</option>
+                    <option value="user_desc" <?= $sort === 'user_desc' ? 'selected' : '' ?>>User (Z–A)</option>
+                    <option value="checkout_desc" <?= $sort === 'checkout_desc' ? 'selected' : '' ?>>Assigned since (newest first)</option>
+                    <option value="checkout_asc" <?= $sort === 'checkout_asc' ? 'selected' : '' ?>>Assigned since (oldest first)</option>
                 </select>
             </div>
             <div class="col-md-2">
@@ -308,6 +401,7 @@ function layout_checked_out_url(string $base, array $params): string
                 <?php endif; ?>
                 <input type="hidden" name="per_page" value="<?= (int)$perPage ?>">
                 <input type="hidden" name="page" value="<?= (int)$page ?>">
+                <input type="hidden" name="sort" value="<?= h($sort) ?>">
                 <div class="d-flex flex-wrap gap-2 align-items-end mb-2">
                     <div>
                         <label class="form-label mb-1">Renew selected to</label>
@@ -405,6 +499,7 @@ function layout_checked_out_url(string $base, array $params): string
                         'view' => $view,
                         'q' => $search,
                         'per_page' => $perPage,
+                        'sort' => $sort,
                     ]);
                 ?>
                 <nav class="mt-3">
@@ -473,112 +568,12 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     const sortSelect = document.getElementById('checked-out-sort');
-    const table = document.querySelector('.table-responsive table');
-    if (!sortSelect || !table) return;
-
-    const tbody = table.querySelector('tbody');
-    if (!tbody) return;
-
-    function getText(row, key) {
-        return (row.dataset[key] || '').toString();
-    }
-
-    function getNumber(row, key) {
-        const val = parseInt(row.dataset[key] || '0', 10);
-        return Number.isNaN(val) ? 0 : val;
-    }
-
-    function compareValues(a, b, asc) {
-        if (a < b) return asc ? -1 : 1;
-        if (a > b) return asc ? 1 : -1;
-        return 0;
-    }
-
-    function sortRows(value) {
-        const rows = Array.from(tbody.querySelectorAll('tr'));
-        let key = '';
-        let asc = true;
-
-        switch (value) {
-            case 'expected_desc':
-                key = 'expectedTs';
-                asc = false;
-                break;
-            case 'expected_asc':
-                key = 'expectedTs';
-                asc = true;
-                break;
-            case 'tag_desc':
-                key = 'assetTag';
-                asc = false;
-                break;
-            case 'tag_asc':
-                key = 'assetTag';
-                asc = true;
-                break;
-            case 'model_desc':
-                key = 'model';
-                asc = false;
-                break;
-            case 'model_asc':
-                key = 'model';
-                asc = true;
-                break;
-            case 'user_desc':
-                key = 'user';
-                asc = false;
-                break;
-            case 'user_asc':
-                key = 'user';
-                asc = true;
-                break;
-            case 'checkout_asc':
-                key = 'checkoutTs';
-                asc = true;
-                break;
-            case 'checkout_desc':
-                key = 'checkoutTs';
-                asc = false;
-                break;
-            default:
-                key = 'expectedTs';
-                asc = true;
-        }
-
-        rows.sort(function (ra, rb) {
-            if (key === 'expectedTs') {
-                const aVal = getNumber(ra, 'expectedTs') || Number.MAX_SAFE_INTEGER;
-                const bVal = getNumber(rb, 'expectedTs') || Number.MAX_SAFE_INTEGER;
-                return compareValues(aVal, bVal, asc);
-            }
-            if (key === 'checkoutTs') {
-                const aVal = getNumber(ra, 'checkoutTs') || 0;
-                const bVal = getNumber(rb, 'checkoutTs') || 0;
-                return compareValues(aVal, bVal, asc);
-            }
-
-            const aText = getText(ra, key);
-            const bText = getText(rb, key);
-            return compareValues(aText, bText, asc);
-        });
-
-        rows.forEach(function (row) {
-            tbody.appendChild(row);
+    const filterForm = document.getElementById('checked-out-filter-form');
+    if (sortSelect && filterForm) {
+        sortSelect.addEventListener('change', function () {
+            filterForm.submit();
         });
     }
-
-    const storageKey = 'checked_out_sort';
-    const saved = window.localStorage ? localStorage.getItem(storageKey) : '';
-    const initial = saved || 'expected_asc';
-    sortSelect.value = initial;
-    sortRows(initial);
-    sortSelect.addEventListener('change', function () {
-        const val = sortSelect.value;
-        if (window.localStorage) {
-            localStorage.setItem(storageKey, val);
-        }
-        sortRows(val);
-    });
 });
 </script>
 <?php if (!$embedded): ?>
