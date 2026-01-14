@@ -68,6 +68,11 @@ $view    = $viewRaw === 'overdue' ? 'overdue' : 'all';
 $error   = '';
 $assets  = [];
 $search  = trim($_GET['q'] ?? '');
+$pageRaw = (int)($_GET['page'] ?? 1);
+$perPageRaw = (int)($_GET['per_page'] ?? 10);
+$page = $pageRaw > 0 ? $pageRaw : 1;
+$perPageOptions = [10, 25, 50, 100];
+$perPage = in_array($perPageRaw, $perPageOptions, true) ? $perPageRaw : 10;
 $forceRefresh = isset($_REQUEST['refresh']) && $_REQUEST['refresh'] === '1';
 if ($forceRefresh) {
     // Disable cached Snipe-IT responses for this request
@@ -147,8 +152,17 @@ try {
             return false;
         }));
     }
+    $totalRows = count($assets);
+    $totalPages = max(1, (int)ceil($totalRows / $perPage));
+    if ($page > $totalPages) {
+        $page = $totalPages;
+    }
+    $offset = ($page - 1) * $perPage;
+    $assets = array_slice($assets, $offset, $perPage);
 } catch (Throwable $e) {
     $error = $e->getMessage();
+    $totalRows = 0;
+    $totalPages = 1;
 }
 
 // Restore cache TTL if we temporarily disabled it
@@ -194,8 +208,8 @@ function layout_checked_out_url(string $base, array $params): string
 
         <?php
             $tabBaseParams = $baseQuery;
-            $allParams     = array_merge($tabBaseParams, ['view' => 'all']);
-            $overdueParams = array_merge($tabBaseParams, ['view' => 'overdue']);
+            $allParams     = array_merge($tabBaseParams, ['view' => 'all', 'per_page' => $perPage]);
+            $overdueParams = array_merge($tabBaseParams, ['view' => 'overdue', 'per_page' => $perPage]);
             if ($search !== '') {
                 $allParams['q']     = $search;
                 $overdueParams['q'] = $search;
@@ -215,20 +229,21 @@ function layout_checked_out_url(string $base, array $params): string
             </li>
         </ul>
 
-        <form method="get" class="row g-2 mb-3" action="<?= h($pageBase) ?>">
+        <div class="border rounded-3 p-4 mb-4">
+            <form method="get" class="row g-2 mb-0 align-items-end" action="<?= h($pageBase) ?>">
             <?php foreach ($baseQuery as $k => $v): ?>
                 <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
             <?php endforeach; ?>
             <input type="hidden" name="view" value="<?= htmlspecialchars($view) ?>">
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <input type="text"
                        name="q"
                        value="<?= htmlspecialchars($search) ?>"
-                       class="form-control"
+                       class="form-control form-control-lg"
                        placeholder="Filter by asset tag, name, model, or user">
             </div>
-            <div class="col-md-3">
-                <select id="checked-out-sort" class="form-select" aria-label="Sort checked-out assets">
+            <div class="col-md-2">
+                <select id="checked-out-sort" class="form-select form-select-lg" aria-label="Sort checked-out assets">
                     <option value="expected_asc">Expected check-in (soonest first)</option>
                     <option value="expected_desc">Expected check-in (latest first)</option>
                     <option value="tag_asc">Asset tag (A–Z)</option>
@@ -241,10 +256,29 @@ function layout_checked_out_url(string $base, array $params): string
                     <option value="checkout_asc">Assigned since (oldest first)</option>
                 </select>
             </div>
-            <div class="col-md-3">
-                <button type="submit" class="btn btn-primary">Filter</button>
+            <div class="col-md-2">
+                <select name="per_page" class="form-select form-select-lg">
+                    <?php foreach ($perPageOptions as $opt): ?>
+                        <option value="<?= $opt ?>" <?= $perPage === $opt ? 'selected' : '' ?>>
+                            <?= $opt ?> per page
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex gap-2">
+                <button type="submit" class="btn btn-primary w-100">Filter</button>
+            </div>
+            <div class="col-md-2 d-flex gap-2">
+                <?php
+                    $clearParams = $tabBaseParams;
+                    $clearParams['view'] = $view;
+                    $clearParams['per_page'] = $perPage;
+                    $clearUrl = layout_checked_out_url($pageBase, $clearParams);
+                ?>
+                <a href="<?= h($clearUrl) ?>" class="btn btn-outline-secondary w-100">Clear</a>
             </div>
         </form>
+        </div>
 
         <?php if ($error): ?>
             <div class="alert alert-danger">
@@ -272,6 +306,8 @@ function layout_checked_out_url(string $base, array $params): string
                 <?php if ($search !== ''): ?>
                     <input type="hidden" name="q" value="<?= h($search) ?>">
                 <?php endif; ?>
+                <input type="hidden" name="per_page" value="<?= (int)$perPage ?>">
+                <input type="hidden" name="page" value="<?= (int)$page ?>">
                 <div class="d-flex flex-wrap gap-2 align-items-end mb-2">
                     <div>
                         <label class="form-label mb-1">Renew selected to</label>
@@ -355,6 +391,43 @@ function layout_checked_out_url(string $base, array $params): string
                     </table>
                 </div>
             </form>
+            <?php if ($totalPages > 1): ?>
+                <?php
+                    $pagerBase = $pageBase;
+                    $pagerQuery = array_merge($baseQuery, [
+                        'view' => $view,
+                        'q' => $search,
+                        'per_page' => $perPage,
+                    ]);
+                ?>
+                <nav class="mt-3">
+                    <ul class="pagination justify-content-center">
+                        <?php
+                            $prevPage = max(1, $page - 1);
+                            $nextPage = min($totalPages, $page + 1);
+                            $pagerQuery['page'] = $prevPage;
+                            $prevUrl = $pagerBase . '?' . http_build_query($pagerQuery);
+                            $pagerQuery['page'] = $nextPage;
+                            $nextUrl = $pagerBase . '?' . http_build_query($pagerQuery);
+                        ?>
+                        <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                            <a class="page-link" href="<?= h($prevUrl) ?>">Previous</a>
+                        </li>
+                        <?php for ($p = 1; $p <= $totalPages; $p++): ?>
+                            <?php
+                                $pagerQuery['page'] = $p;
+                                $pageUrl = $pagerBase . '?' . http_build_query($pagerQuery);
+                            ?>
+                            <li class="page-item <?= $p === $page ? 'active' : '' ?>">
+                                <a class="page-link" href="<?= h($pageUrl) ?>"><?= $p ?></a>
+                            </li>
+                        <?php endfor; ?>
+                        <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
+                            <a class="page-link" href="<?= h($nextUrl) ?>">Next</a>
+                        </li>
+                    </ul>
+                </nav>
+            <?php endif; ?>
         <?php endif; ?>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
