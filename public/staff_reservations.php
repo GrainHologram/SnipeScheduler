@@ -303,34 +303,34 @@ try {
             }
         ?>
         <!-- Filters -->
-        <div class="border rounded-3 p-3 mb-4">
+        <div class="border rounded-3 p-4 mb-4">
             <form class="row g-2 mb-0" method="get" action="<?= h($actionUrl) ?>">
                 <?php foreach ($baseQuery as $k => $v): ?>
                     <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
                 <?php endforeach; ?>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <input type="text"
                            name="q"
-                           class="form-control form-control-sm"
+                           class="form-control form-control-lg"
                            placeholder="Search by user or items..."
                            value="<?= htmlspecialchars($qRaw) ?>">
                 </div>
                 <div class="col-md-2">
                     <input type="date"
                            name="from"
-                           class="form-control form-control-sm"
+                           class="form-control form-control-lg"
                            value="<?= htmlspecialchars($fromRaw) ?>"
                            placeholder="From date">
                 </div>
                 <div class="col-md-2">
                     <input type="date"
                            name="to"
-                           class="form-control form-control-sm"
+                           class="form-control form-control-lg"
                            value="<?= htmlspecialchars($toRaw) ?>"
                            placeholder="To date">
                 </div>
                 <div class="col-md-2">
-                    <select name="per_page" class="form-select form-select-sm">
+                    <select name="per_page" class="form-select form-select-lg">
                         <?php foreach ($perPageOptions as $opt): ?>
                             <option value="<?= $opt ?>" <?= $perPage === $opt ? 'selected' : '' ?>>
                                 <?= $opt ?> per page
@@ -338,8 +338,8 @@ try {
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-1 d-flex gap-2">
-                    <button class="btn btn-primary btn-sm w-100" type="submit">Filter</button>
+                <div class="col-md-2 d-flex gap-2">
+                    <button class="btn btn-primary btn-lg w-100" type="submit">Filter</button>
                 </div>
                 <div class="col-md-2 d-flex gap-2">
                     <?php
@@ -348,7 +348,7 @@ try {
                             $clearUrl .= '?' . http_build_query($baseQuery);
                         }
                     ?>
-                    <a href="<?= h($clearUrl) ?>" class="btn btn-outline-secondary btn-sm w-100">Clear</a>
+                    <a href="<?= h($clearUrl) ?>" class="btn btn-outline-secondary btn-lg w-100">Clear</a>
                 </div>
             </form>
         </div>
