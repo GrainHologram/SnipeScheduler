@@ -772,6 +772,7 @@ form .form-select {
 .btn-success {
     border-radius: 0.6rem;
     box-shadow: 0 10px 20px rgba(var(--primary-rgb), 0.18);
+    color: #ffffff;
 }
 
 /* Optional: subtle hover effect */
@@ -890,11 +891,13 @@ form .form-select {
 
 .btn-primary:focus {
     box-shadow: 0 0 0 0.25rem rgba(var(--primary-rgb), 0.25);
+    color: #ffffff;
 }
 
 .btn-success {
     background: linear-gradient(120deg, var(--accent), var(--accent-2));
     border: 1px solid rgba(var(--primary-rgb), 0.5);
+    color: #ffffff;
 }
 
 .btn-outline-primary:hover,
