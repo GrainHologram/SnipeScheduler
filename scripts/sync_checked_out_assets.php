@@ -63,11 +63,16 @@ try {
         )
     ");
 
+    $seenAssetIds = [];
     foreach ($assets as $asset) {
         $assetId = (int)($asset['id'] ?? 0);
         if ($assetId <= 0) {
             continue;
         }
+        if (isset($seenAssetIds[$assetId])) {
+            continue;
+        }
+        $seenAssetIds[$assetId] = true;
 
         $assetTag  = $asset['asset_tag'] ?? '';
         $assetName = $asset['name'] ?? '';
