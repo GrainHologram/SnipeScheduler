@@ -59,14 +59,14 @@ $qRaw    = trim($_GET['q'] ?? '');
 $fromRaw = trim($_GET['from'] ?? '');
 $toRaw   = trim($_GET['to'] ?? '');
 $pageRaw = (int)($_GET['page'] ?? 1);
-$perPageRaw = (int)($_GET['per_page'] ?? 25);
+$perPageRaw = (int)($_GET['per_page'] ?? 10);
 
 $q        = $qRaw !== '' ? $qRaw : null;
 $dateFrom = $fromRaw !== '' ? $fromRaw : null;
 $dateTo   = $toRaw !== '' ? $toRaw : null;
 $page     = $pageRaw > 0 ? $pageRaw : 1;
 $perPageOptions = [10, 25, 50, 100];
-$perPage = in_array($perPageRaw, $perPageOptions, true) ? $perPageRaw : 25;
+$perPage = in_array($perPageRaw, $perPageOptions, true) ? $perPageRaw : 10;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'restore_missed') {
     $restoreId = (int)($_POST['reservation_id'] ?? 0);
@@ -307,29 +307,29 @@ try {
             <?php foreach ($baseQuery as $k => $v): ?>
                 <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
             <?php endforeach; ?>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <input type="text"
                        name="q"
-                       class="form-control"
+                       class="form-control form-control-sm"
                        placeholder="Search by user or items..."
                        value="<?= htmlspecialchars($qRaw) ?>">
             </div>
             <div class="col-md-2">
                 <input type="date"
                        name="from"
-                       class="form-control"
+                       class="form-control form-control-sm"
                        value="<?= htmlspecialchars($fromRaw) ?>"
                        placeholder="From date">
             </div>
             <div class="col-md-2">
                 <input type="date"
                        name="to"
-                       class="form-control"
+                       class="form-control form-control-sm"
                        value="<?= htmlspecialchars($toRaw) ?>"
                        placeholder="To date">
             </div>
             <div class="col-md-2">
-                <select name="per_page" class="form-select">
+                <select name="per_page" class="form-select form-select-sm">
                     <?php foreach ($perPageOptions as $opt): ?>
                         <option value="<?= $opt ?>" <?= $perPage === $opt ? 'selected' : '' ?>>
                             <?= $opt ?> per page
@@ -337,8 +337,8 @@ try {
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-md-2 d-flex gap-2">
-                <button class="btn btn-primary w-100" type="submit">Filter</button>
+            <div class="col-md-1 d-flex gap-2">
+                <button class="btn btn-primary btn-sm w-100" type="submit">Filter</button>
             </div>
             <div class="col-md-2 d-flex gap-2">
                 <?php
@@ -347,7 +347,7 @@ try {
                         $clearUrl .= '?' . http_build_query($baseQuery);
                     }
                 ?>
-                <a href="<?= h($clearUrl) ?>" class="btn btn-outline-secondary w-100">Clear</a>
+                <a href="<?= h($clearUrl) ?>" class="btn btn-outline-secondary btn-sm w-100">Clear</a>
             </div>
         </form>
 
