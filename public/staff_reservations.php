@@ -315,14 +315,14 @@ try {
                            placeholder="Search by user or items..."
                            value="<?= htmlspecialchars($qRaw) ?>">
                 </div>
-                <div class="col-md-1">
+                <div class="col-md-2">
                     <input type="date"
                            name="from"
                            class="form-control form-control-lg"
                            value="<?= htmlspecialchars($fromRaw) ?>"
                            placeholder="From date">
                 </div>
-                <div class="col-md-1">
+                <div class="col-md-2">
                     <input type="date"
                            name="to"
                            class="form-control form-control-lg"
@@ -338,17 +338,17 @@ try {
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-2 d-flex gap-2">
-                    <button class="btn btn-primary btn-lg w-100" type="submit">Filter</button>
+                <div class="col-md-1 d-flex gap-2">
+                    <button class="btn btn-primary w-100" type="submit">Filter</button>
                 </div>
-                <div class="col-md-2 d-flex gap-2">
+                <div class="col-md-1 d-flex gap-2">
                     <?php
                         $clearUrl = $pageBase;
                         if (!empty($baseQuery)) {
                             $clearUrl .= '?' . http_build_query($baseQuery);
                         }
                     ?>
-                    <a href="<?= h($clearUrl) ?>" class="btn btn-outline-secondary btn-lg w-100">Clear</a>
+                    <a href="<?= h($clearUrl) ?>" class="btn btn-outline-secondary w-100">Clear</a>
                 </div>
             </form>
         </div>
