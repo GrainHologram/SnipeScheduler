@@ -71,8 +71,16 @@ if (($_GET['ajax'] ?? '') === 'user_search') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    unset($_SESSION['selected_reservation_id']);
-    unset($_SESSION['reservation_selected_assets']);
+    $allowedKeys = array_keys($baseQuery);
+    $extraKeys = array_diff(array_keys($_GET), $allowedKeys);
+    if (empty($extraKeys)) {
+        if (!empty($_SESSION['selected_reservation_fresh'])) {
+            unset($_SESSION['selected_reservation_fresh']);
+        } else {
+            unset($_SESSION['selected_reservation_id']);
+            unset($_SESSION['reservation_selected_assets']);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------
@@ -195,6 +203,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'select_
     $selectedReservationId = (int)($_POST['reservation_id'] ?? 0);
     if ($selectedReservationId > 0) {
         $_SESSION['selected_reservation_id'] = $selectedReservationId;
+        $_SESSION['selected_reservation_fresh'] = 1;
     } else {
         unset($_SESSION['selected_reservation_id']);
         $selectedReservationId = null;
