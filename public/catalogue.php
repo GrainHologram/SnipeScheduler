@@ -1010,6 +1010,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const bookingEmail = document.getElementById('booking_user_email');
     const bookingName  = document.getElementById('booking_user_name');
     const basketToast  = document.getElementById('basket-toast');
+    const filterForm = document.querySelector('.filter-panel');
+    const categorySelect = filterForm ? filterForm.querySelector('select[name="category"]') : null;
+    const sortSelect = filterForm ? filterForm.querySelector('select[name="sort"]') : null;
     let bookingTimer   = null;
     let bookingQuery   = '';
     let basketToastTimer = null;
@@ -1178,6 +1181,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
         bookingInput.addEventListener('blur', function () {
             setTimeout(hideBookingSuggestions, 150);
+        });
+    }
+
+    if (filterForm && categorySelect) {
+        categorySelect.addEventListener('change', function () {
+            filterForm.submit();
+        });
+    }
+
+    if (filterForm && sortSelect) {
+        sortSelect.addEventListener('change', function () {
+            filterForm.submit();
         });
     }
 });
