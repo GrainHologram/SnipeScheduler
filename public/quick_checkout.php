@@ -6,6 +6,7 @@ require_once __DIR__ . '/../src/bootstrap.php';
 require_once SRC_PATH . '/auth.php';
 require_once SRC_PATH . '/snipeit_client.php';
 require_once SRC_PATH . '/db.php';
+require_once SRC_PATH . '/activity_log.php';
 require_once SRC_PATH . '/email.php';
 require_once SRC_PATH . '/layout.php';
 
@@ -316,6 +317,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $pdo->rollBack();
                         $errors[] = 'Quick checkout completed, but could not record reservation history: ' . $e->getMessage();
                     }
+
+                    activity_log_event('quick_checkout', 'Quick checkout completed', [
+                        'subject_type' => 'reservation',
+                        'subject_id'   => $reservationId ?? null,
+                        'metadata'     => [
+                            'checked_out_to' => $userName,
+                            'snipe_user_id'  => $userId,
+                            'assets'         => $assetTags,
+                            'start'          => $reservationStart,
+                            'end'            => $reservationEnd,
+                            'note'           => $note,
+                        ],
+                    ]);
 
                     // Email notifications
                     $userEmail  = $user['email'] ?? '';

@@ -3,6 +3,7 @@
 
 require_once __DIR__ . '/../src/bootstrap.php';
 require_once SRC_PATH . '/db.php';
+require_once SRC_PATH . '/activity_log.php';
 
 session_start();
 
@@ -274,6 +275,12 @@ if ($provider === 'google') {
         'is_staff'     => $isStaff,
     ];
 
+    activity_log_event('user_login', 'User logged in', [
+        'metadata' => [
+            'provider' => 'google',
+        ],
+    ]);
+
     header('Location: index.php');
     exit;
 }
@@ -470,6 +477,12 @@ if ($provider === 'microsoft') {
         'is_admin'     => $isAdmin,
         'is_staff'     => $isStaff,
     ];
+
+    activity_log_event('user_login', 'User logged in', [
+        'metadata' => [
+            'provider' => 'microsoft',
+        ],
+    ]);
 
     header('Location: index.php');
     exit;
@@ -672,6 +685,12 @@ $_SESSION['user'] = [
     'is_admin'     => $isAdmin,
     'is_staff'     => $isStaff,
 ];
+
+activity_log_event('user_login', 'User logged in', [
+    'metadata' => [
+        'provider' => 'ldap',
+    ],
+]);
 
 ldap_unbind($ldap);
 

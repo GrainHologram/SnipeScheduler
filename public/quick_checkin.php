@@ -6,6 +6,7 @@ require_once __DIR__ . '/../src/bootstrap.php';
 require_once SRC_PATH . '/auth.php';
 require_once SRC_PATH . '/snipeit_client.php';
 require_once SRC_PATH . '/db.php';
+require_once SRC_PATH . '/activity_log.php';
 require_once SRC_PATH . '/email.php';
 require_once SRC_PATH . '/layout.php';
 
@@ -366,6 +367,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     layout_send_notification($staffEmail, $staffDisplayName, 'Assets checked in', $bodyLines);
                 }
+
+                activity_log_event('quick_checkin', 'Quick checkin completed', [
+                    'metadata' => [
+                        'assets' => $assetTags,
+                        'note'   => $note,
+                    ],
+                ]);
             }
             if ($hadCheckinAssets) {
                 $checkinAssets = [];

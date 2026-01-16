@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../src/bootstrap.php';
 require_once SRC_PATH . '/auth.php';
 require_once SRC_PATH . '/db.php';
+require_once SRC_PATH . '/activity_log.php';
 require_once SRC_PATH . '/snipeit_client.php';
 require_once SRC_PATH . '/layout.php';
 
@@ -359,6 +360,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $pdo->commit();
+
+            activity_log_event('reservation_updated', 'Reservation updated', [
+                'subject_type' => 'reservation',
+                'subject_id'   => $id,
+                'metadata'     => [
+                    'start' => $start,
+                    'end'   => $end,
+                ],
+            ]);
 
             $redirect = $actionUrl;
             $glue = strpos($redirect, '?') === false ? '?' : '&';

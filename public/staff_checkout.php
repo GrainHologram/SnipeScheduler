@@ -9,6 +9,7 @@
 require_once __DIR__ . '/../src/bootstrap.php';
 require_once SRC_PATH . '/auth.php';
 require_once SRC_PATH . '/db.php';
+require_once SRC_PATH . '/activity_log.php';
 require_once SRC_PATH . '/booking_helpers.php';
 require_once SRC_PATH . '/snipeit_client.php';
 require_once SRC_PATH . '/email.php';
@@ -427,8 +428,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 if ($willDeleteReservation) {
+                    $deletedReservationId = $selectedReservationId;
                     $delRes = $pdo->prepare("DELETE FROM reservations WHERE id = :id");
                     $delRes->execute([':id' => $selectedReservationId]);
+                    activity_log_event('reservation_deleted', 'Reservation deleted', [
+                        'subject_type' => 'reservation',
+                        'subject_id'   => $deletedReservationId,
+                        'metadata'     => [
+                            'via' => 'staff_checkout',
+                        ],
+                    ]);
                     unset($_SESSION['reservation_selected_assets'][$selectedReservationId]);
                     unset($_SESSION['selected_reservation_id']);
                     $selectedReservationId = null;
@@ -599,6 +608,17 @@ $checkoutTo = trim($selectedReservation['user_name'] ?? '');
                         unset($_SESSION['reservation_selected_assets'][$selectedReservationId]);
                     }
 
+                    activity_log_event('reservation_checked_out', 'Reservation checked out', [
+                        'subject_type' => 'reservation',
+                        'subject_id'   => $selectedReservationId,
+                        'metadata'     => [
+                            'checked_out_to' => $userName,
+                            'snipe_user_id'  => $userId,
+                            'assets'         => $assetTags,
+                            'note'           => $note,
+                        ],
+                    ]);
+
                     // Email notifications
                     $userEmail = $selectedReservation['user_email'] ?? '';
                     $userName  = $selectedReservation['user_name'] ?? ($selectedReservation['user_email'] ?? 'User');
@@ -686,6 +706,23 @@ $checkoutTo = trim($selectedReservation['user_name'] ?? '');
 
                 // If no errors, clear the list
                 if (empty($checkoutErrors)) {
+                    $assetTags = array_map(static function ($asset): string {
+                        $tag = $asset['asset_tag'] ?? '';
+                        $model = $asset['model'] ?? '';
+                        return $model !== '' ? ($tag . ' (' . $model . ')') : $tag;
+                    }, $checkoutAssets);
+
+                    activity_log_event('reservation_checked_out', 'Assets checked out from reservation', [
+                        'subject_type' => 'reservation',
+                        'subject_id'   => $selectedReservationId,
+                        'metadata'     => [
+                            'checked_out_to' => $userName,
+                            'snipe_user_id'  => $userId,
+                            'assets'         => $assetTags,
+                            'note'           => $note,
+                        ],
+                    ]);
+
                     $checkoutAssets = [];
                 }
             } catch (Throwable $e) {
