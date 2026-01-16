@@ -21,13 +21,14 @@ $pageBase   = $embedded ? 'reservations.php' : 'staff_checkout.php';
 $baseQuery  = $embedded ? ['tab' => 'today'] : [];
 $selfUrl    = $pageBase . (!empty($baseQuery) ? '?' . http_build_query($baseQuery) : '');
 $active     = basename($_SERVER['PHP_SELF']);
-$isStaff    = !empty($currentUser['is_admin']);
+$isAdmin    = !empty($currentUser['is_admin']);
+$isStaff    = !empty($currentUser['is_staff']) || $isAdmin;
 $tz       = new DateTimeZone($timezone);
 $now      = new DateTime('now', $tz);
 $todayStr = $now->format('Y-m-d');
 
 // Only staff/admin allowed
-if (empty($currentUser['is_admin'])) {
+if (!$isStaff) {
     http_response_code(403);
     echo 'Access denied.';
     exit;
@@ -698,7 +699,6 @@ $checkoutTo = trim($selectedReservation['user_name'] ?? '');
 // View data
 // ---------------------------------------------------------------------
 $active  = basename($_SERVER['PHP_SELF']);
-$isStaff = !empty($currentUser['is_admin']);
 ?>
 <?php if (!$embedded): ?>
 <!DOCTYPE html>
@@ -727,7 +727,7 @@ $isStaff = !empty($currentUser['is_admin']);
 
         <!-- App navigation -->
         <?php if (!$embedded): ?>
-            <?= layout_render_nav($active, $isStaff) ?>
+            <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
         <?php endif; ?>
 
         <!-- Top bar -->

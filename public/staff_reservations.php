@@ -6,7 +6,8 @@ require_once SRC_PATH . '/booking_helpers.php';
 require_once SRC_PATH . '/layout.php';
 
 $active    = basename($_SERVER['PHP_SELF']);
-$isStaff   = !empty($currentUser['is_admin']);
+$isAdmin   = !empty($currentUser['is_admin']);
+$isStaff   = !empty($currentUser['is_staff']) || $isAdmin;
 $embedded  = defined('RESERVATIONS_EMBED');
 $pageBase  = $embedded ? 'reservations.php' : 'staff_reservations.php';
 $baseQuery = $embedded ? ['tab' => 'history'] : [];
@@ -37,7 +38,7 @@ function uk_datetime(?string $isoDatetime): string
 }
 
 // Only staff/admin allowed
-if (empty($currentUser['is_admin'])) {
+if (!$isStaff) {
     http_response_code(403);
     echo 'Access denied.';
     exit;
@@ -262,7 +263,7 @@ try {
 
         <!-- App navigation -->
         <?php if (!$embedded): ?>
-            <?= layout_render_nav($active, $isStaff) ?>
+            <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
         <?php endif; ?>
 
         <!-- Top bar -->

@@ -70,7 +70,8 @@ function expected_to_timestamp($value): ?int
 }
 
 $active    = basename($_SERVER['PHP_SELF']);
-$isStaff   = !empty($currentUser['is_admin']);
+$isAdmin   = !empty($currentUser['is_admin']);
+$isStaff   = !empty($currentUser['is_staff']) || $isAdmin;
 $embedded  = defined('RESERVATIONS_EMBED');
 $pageBase  = $embedded ? 'reservations.php' : 'checked_out_assets.php';
 $baseQuery = $embedded ? ['tab' => 'checked_out'] : [];
@@ -322,7 +323,7 @@ function layout_checked_out_url(string $base, array $params): string
         </div>
 
         <?php if (!$embedded): ?>
-            <?= layout_render_nav($active, $isStaff) ?>
+            <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
         <?php endif; ?>
 
         <?php

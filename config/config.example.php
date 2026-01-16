@@ -62,15 +62,40 @@ return [
         'google_oauth_enabled' => false,
         'microsoft_oauth_enabled' => false,
         // Accepts a single CN string or an array of CNs
+        'admin_group_cn' => [
+            // 'ICT Admins',
+            // 'Another Admin Group',
+        ],
+        'checkout_group_cn' => [
+            // 'Checkout Staff',
+            // 'Equipment Desk',
+        ],
+        // Legacy fallback: if the above are empty, these groups are treated as both roles.
         'staff_group_cn' => [
             // 'ICT Staff',
             // 'Another Staff Group',
         ],
-        // Optional: treat these Google accounts as staff when using Google OAuth
+        // Optional: treat these Google accounts as administrators
+        'google_admin_emails' => [
+            // 'admin@example.com',
+        ],
+        // Optional: treat these Google accounts as checkout staff
+        'google_checkout_emails' => [
+            // 'staff@example.com',
+        ],
+        // Legacy fallback for Google OAuth (maps to both roles if admin/checkout lists are empty)
         'google_staff_emails' => [
             // 'admin@example.com',
         ],
-        // Optional: treat these Microsoft accounts as staff when using Microsoft OAuth
+        // Optional: treat these Microsoft accounts as administrators
+        'microsoft_admin_emails' => [
+            // 'admin@example.com',
+        ],
+        // Optional: treat these Microsoft accounts as checkout staff
+        'microsoft_checkout_emails' => [
+            // 'staff@example.com',
+        ],
+        // Legacy fallback for Microsoft OAuth (maps to both roles if admin/checkout lists are empty)
         'microsoft_staff_emails' => [
             // 'admin@example.com',
         ],

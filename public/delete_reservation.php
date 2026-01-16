@@ -7,6 +7,7 @@ require_once SRC_PATH . '/auth.php';
 require_once SRC_PATH . '/db.php';
 
 $isAdmin       = !empty($currentUser['is_admin']);
+$isStaff       = !empty($currentUser['is_staff']) || $isAdmin;
 $currentUserId = (string)($currentUser['id'] ?? '');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -42,7 +43,7 @@ $ownsReservation = $currentUserId !== ''
     && isset($reservation['user_id'])
     && (string)$reservation['user_id'] === $currentUserId;
 
-if (!$isAdmin && !$ownsReservation) {
+if (!$isStaff && !$ownsReservation) {
     http_response_code(403);
     echo 'Access denied.';
     exit;
@@ -71,7 +72,7 @@ try {
 }
 
 // Redirect back with a “deleted” flag
-$redirect = $isAdmin
+$redirect = $isStaff
     ? 'staff_reservations.php?deleted=' . $resId
     : 'my_bookings.php?deleted=' . $resId;
 

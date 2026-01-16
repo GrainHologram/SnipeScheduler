@@ -20,21 +20,48 @@ $googleEnabled = !empty($authCfg['google_oauth_enabled']);
 $msEnabled     = !empty($authCfg['microsoft_oauth_enabled']);
 
 // Staff group CN(s) from config (string or array)
-$staffCns = $authCfg['staff_group_cn'] ?? '';
-if (!is_array($staffCns)) {
-    $staffCns = $staffCns !== '' ? [$staffCns] : [];
+$normalizeList = static function ($raw): array {
+    if (!is_array($raw)) {
+        $raw = $raw !== '' ? [$raw] : [];
+    }
+    return array_values(array_filter(array_map('trim', $raw), 'strlen'));
+};
+$normalizeEmailList = static function ($raw): array {
+    if (!is_array($raw)) {
+        $raw = [];
+    }
+    return array_values(array_filter(array_map('strtolower', array_map('trim', $raw))));
+};
+
+$legacyStaffCns = $normalizeList($authCfg['staff_group_cn'] ?? '');
+$adminCns = $normalizeList($authCfg['admin_group_cn'] ?? []);
+$checkoutCns = $normalizeList($authCfg['checkout_group_cn'] ?? []);
+if (empty($adminCns) && !empty($legacyStaffCns)) {
+    $adminCns = $legacyStaffCns;
 }
-$staffCns = array_values(array_filter(array_map('trim', $staffCns), 'strlen'));
-$googleStaffEmails = $authCfg['google_staff_emails'] ?? [];
-if (!is_array($googleStaffEmails)) {
-    $googleStaffEmails = [];
+if (empty($checkoutCns) && !empty($legacyStaffCns)) {
+    $checkoutCns = $legacyStaffCns;
 }
-$googleStaffEmails = array_values(array_filter(array_map('strtolower', array_map('trim', $googleStaffEmails))));
-$msStaffEmails = $authCfg['microsoft_staff_emails'] ?? [];
-if (!is_array($msStaffEmails)) {
-    $msStaffEmails = [];
+
+$googleStaffEmails = $normalizeEmailList($authCfg['google_staff_emails'] ?? []);
+$googleAdminEmails = $normalizeEmailList($authCfg['google_admin_emails'] ?? []);
+$googleCheckoutEmails = $normalizeEmailList($authCfg['google_checkout_emails'] ?? []);
+if (empty($googleAdminEmails) && !empty($googleStaffEmails)) {
+    $googleAdminEmails = $googleStaffEmails;
 }
-$msStaffEmails = array_values(array_filter(array_map('strtolower', array_map('trim', $msStaffEmails))));
+if (empty($googleCheckoutEmails) && !empty($googleStaffEmails)) {
+    $googleCheckoutEmails = $googleStaffEmails;
+}
+
+$msStaffEmails = $normalizeEmailList($authCfg['microsoft_staff_emails'] ?? []);
+$msAdminEmails = $normalizeEmailList($authCfg['microsoft_admin_emails'] ?? []);
+$msCheckoutEmails = $normalizeEmailList($authCfg['microsoft_checkout_emails'] ?? []);
+if (empty($msAdminEmails) && !empty($msStaffEmails)) {
+    $msAdminEmails = $msStaffEmails;
+}
+if (empty($msCheckoutEmails) && !empty($msStaffEmails)) {
+    $msCheckoutEmails = $msStaffEmails;
+}
 
 $provider = strtolower($_GET['provider'] ?? $_POST['provider'] ?? 'ldap');
 
@@ -253,7 +280,9 @@ if ($provider === 'google') {
         $redirectWithError($debugOn ? 'Login system is currently unavailable (database error): ' . $e->getMessage() : 'Login system is currently unavailable (database error).');
     }
 
-    $isStaff = in_array($email, $googleStaffEmails, true);
+    $isAdmin = in_array($email, $googleAdminEmails, true);
+    $isCheckout = in_array($email, $googleCheckoutEmails, true);
+    $isStaff = $isAdmin || $isCheckout;
 
     $_SESSION['user'] = [
         'id'           => $userId,
@@ -262,7 +291,8 @@ if ($provider === 'google') {
         'first_name'   => $firstName ?: $email,
         'last_name'    => $lastName ?? '',
         'display_name' => $fullName,
-        'is_admin'     => $isStaff,
+        'is_admin'     => $isAdmin,
+        'is_staff'     => $isStaff,
     ];
 
     header('Location: index.php');
@@ -447,7 +477,9 @@ if ($provider === 'microsoft') {
         $redirectWithError($debugOn ? 'Login system is currently unavailable (database error): ' . $e->getMessage() : 'Login system is currently unavailable (database error).');
     }
 
-    $isStaff = in_array($email, $msStaffEmails, true);
+    $isAdmin = in_array($email, $msAdminEmails, true);
+    $isCheckout = in_array($email, $msCheckoutEmails, true);
+    $isStaff = $isAdmin || $isCheckout;
 
     $_SESSION['user'] = [
         'id'           => $userId,
@@ -456,7 +488,8 @@ if ($provider === 'microsoft') {
         'first_name'   => $firstName ?: $email,
         'last_name'    => $lastName ?? '',
         'display_name' => $fullName,
-        'is_admin'     => $isStaff,
+        'is_admin'     => $isAdmin,
+        'is_staff'     => $isStaff,
     ];
 
     header('Location: index.php');
@@ -606,16 +639,32 @@ if ($fullName === '') {
 // ------------------------------------------------------------------
 // Staff check (LDAP group via config)
 // ------------------------------------------------------------------
-$isStaff = false;
-if ($staffCns && !empty($user['memberof']) && is_array($user['memberof'])) {
+$isAdmin = false;
+$isCheckout = false;
+if (!empty($user['memberof']) && is_array($user['memberof'])) {
     for ($i = 0; $i < ($user['memberof']['count'] ?? 0); $i++) {
-        foreach ($staffCns as $cn) {
-            if (stripos($user['memberof'][$i], 'CN=' . $cn . ',') !== false) {
-                $isStaff = true;
-                break 2;
+        $memberOf = $user['memberof'][$i] ?? '';
+        foreach ($adminCns as $cn) {
+            if ($cn !== '' && stripos($memberOf, 'CN=' . $cn . ',') !== false) {
+                $isAdmin = true;
+                break;
             }
         }
+        foreach ($checkoutCns as $cn) {
+            if ($cn !== '' && stripos($memberOf, 'CN=' . $cn . ',') !== false) {
+                $isCheckout = true;
+                break;
+            }
+        }
+        if ($isAdmin && $isCheckout) {
+            break;
+        }
     }
+}
+if ($isAdmin || $isCheckout) {
+    $isStaff = true;
+} else {
+    $isStaff = false;
 }
 
 // ------------------------------------------------------------------
@@ -641,7 +690,8 @@ $_SESSION['user'] = [
     'first_name'   => $firstName,
     'last_name'    => $lastName,
     'display_name' => $fullName,
-    'is_admin'     => $isStaff,
+    'is_admin'     => $isAdmin,
+    'is_staff'     => $isStaff,
 ];
 
 ldap_unbind($ldap);

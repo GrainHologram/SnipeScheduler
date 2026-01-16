@@ -64,9 +64,10 @@ function qc_current_reservations_for_model(PDO $pdo, int $modelId): array
 }
 
 $active  = basename($_SERVER['PHP_SELF']);
-$isStaff = !empty($currentUser['is_admin']);
+$isAdmin = !empty($currentUser['is_admin']);
+$isStaff = !empty($currentUser['is_staff']) || $isAdmin;
 
-if (empty($currentUser['is_admin'])) {
+if (!$isStaff) {
     http_response_code(403);
     echo 'Access denied.';
     exit;
@@ -373,7 +374,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
 
-        <?= layout_render_nav($active, $isStaff) ?>
+        <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
 
         <?php if (!empty($messages)): ?>
             <div class="alert alert-success">
