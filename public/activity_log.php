@@ -23,6 +23,18 @@ try {
     $tz = null;
 }
 
+$eventLabels = [
+    'user_login' => 'User Login',
+    'user_logout' => 'User Logout',
+    'reservation_submitted' => 'Reservation Submitted',
+    'reservation_updated' => 'Reservation Updated',
+    'reservation_deleted' => 'Reservation Deleted',
+    'reservation_cancelled' => 'Reservation Cancelled',
+    'reservation_checked_out' => 'Reservation Checked Out',
+    'quick_checkout' => 'Quick Checkout',
+    'quick_checkin' => 'Quick Checkin',
+];
+
 $qRaw    = trim($_GET['q'] ?? '');
 $eventRaw = trim($_GET['event_type'] ?? '');
 $fromRaw = trim($_GET['from'] ?? '');
@@ -182,15 +194,18 @@ try {
                             <input type="text"
                                    name="q"
                                    class="form-control form-control-lg"
-                                   placeholder="Search by actor, event, subject, or details..."
+                                   placeholder="Search by user, event, subject, or details..."
                                    value="<?= h($qRaw) ?>">
                         </div>
                         <div class="col-auto">
                             <select name="event_type" class="form-select form-select-lg" aria-label="Filter event type" style="min-width: 220px;">
                                 <option value="">All event types</option>
                                 <?php foreach ($eventTypeOptions as $opt): ?>
+                                    <?php
+                                        $label = $eventLabels[$opt] ?? ucwords(str_replace('_', ' ', $opt));
+                                    ?>
                                     <option value="<?= h($opt) ?>" <?= $eventType === $opt ? 'selected' : '' ?>>
-                                        <?= h($opt) ?>
+                                        <?= h($label) ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -217,8 +232,8 @@ try {
                                 <option value="time_asc" <?= $sort === 'time_asc' ? 'selected' : '' ?>>Time (oldest first)</option>
                                 <option value="event_asc" <?= $sort === 'event_asc' ? 'selected' : '' ?>>Event (A–Z)</option>
                                 <option value="event_desc" <?= $sort === 'event_desc' ? 'selected' : '' ?>>Event (Z–A)</option>
-                                <option value="actor_asc" <?= $sort === 'actor_asc' ? 'selected' : '' ?>>Actor (A–Z)</option>
-                                <option value="actor_desc" <?= $sort === 'actor_desc' ? 'selected' : '' ?>>Actor (Z–A)</option>
+                                <option value="actor_asc" <?= $sort === 'actor_asc' ? 'selected' : '' ?>>User (A–Z)</option>
+                                <option value="actor_desc" <?= $sort === 'actor_desc' ? 'selected' : '' ?>>User (Z–A)</option>
                                 <option value="subject_asc" <?= $sort === 'subject_asc' ? 'selected' : '' ?>>Subject (A–Z)</option>
                                 <option value="subject_desc" <?= $sort === 'subject_desc' ? 'selected' : '' ?>>Subject (Z–A)</option>
                                 <option value="id_desc" <?= $sort === 'id_desc' ? 'selected' : '' ?>>Log ID (high → low)</option>
@@ -255,7 +270,7 @@ try {
                                 <tr>
                                     <th>Time</th>
                                     <th>Event</th>
-                                    <th>Actor</th>
+                                    <th>User</th>
                                     <th>Subject</th>
                                     <th>Details</th>
                                 </tr>
@@ -270,6 +285,9 @@ try {
                                     if ($actorLabel === '') {
                                         $actorLabel = 'System';
                                     }
+
+                                    $eventTypeValue = (string)($row['event_type'] ?? '');
+                                    $eventLabel = $eventLabels[$eventTypeValue] ?? ucwords(str_replace('_', ' ', $eventTypeValue));
 
                                     $subjectLabel = trim((string)($row['subject_type'] ?? ''));
                                     $subjectId = trim((string)($row['subject_id'] ?? ''));
@@ -297,7 +315,7 @@ try {
                                     ?>
                                     <tr>
                                         <td class="text-nowrap"><?= h($displayTime) ?></td>
-                                        <td><?= h((string)($row['event_type'] ?? '')) ?></td>
+                                        <td><?= h($eventLabel) ?></td>
                                         <td><?= h($actorLabel) ?></td>
                                         <td><?= h($subjectLabel !== '' ? $subjectLabel : '-') ?></td>
                                         <td>
