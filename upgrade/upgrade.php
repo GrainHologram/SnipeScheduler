@@ -3,6 +3,7 @@ require_once __DIR__ . '/../src/bootstrap.php';
 require_once SRC_PATH . '/auth.php';
 require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/layout.php';
+require_once SRC_PATH . '/config_writer.php';
 
 $isAdmin = !empty($currentUser['is_admin']);
 if (!$isAdmin) {
@@ -17,6 +18,21 @@ $currentVersion = is_file($versionFile) ? trim((string)@file_get_contents($versi
 $upgradeDir = __DIR__;
 $upgradeFiles = glob($upgradeDir . '/*.sql');
 sort($upgradeFiles);
+
+$configPath = CONFIG_PATH . '/config.php';
+$legacyConfigPath = APP_ROOT . '/config.php';
+$configFile = is_file($configPath) ? $configPath : (is_file($legacyConfigPath) ? $legacyConfigPath : '');
+$config = [];
+if ($configFile !== '') {
+    try {
+        $config = require $configFile;
+        if (!is_array($config)) {
+            $config = [];
+        }
+    } catch (Throwable $e) {
+        $config = [];
+    }
+}
 
 $appliedVersions = [];
 $loadError = '';
@@ -48,6 +64,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'run')
         foreach ($pending as $item) {
             $version = $item['version'];
             $path = $item['path'];
+
+            $phpPath = $upgradeDir . '/upgrade_' . $version . '.php';
+            if (is_file($phpPath)) {
+                require_once $phpPath;
+                $fnName = 'upgrade_apply_' . preg_replace('/[^a-zA-Z0-9]+/', '_', $version);
+                if (function_exists($fnName)) {
+                    $config = $fnName($configFile, $config, $messages, $errors);
+                }
+            }
+
             $sql = is_file($path) ? file_get_contents($path) : '';
             if ($sql === '') {
                 $errors[] = "Upgrade file {$version} is empty or missing.";
