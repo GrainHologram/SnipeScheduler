@@ -24,6 +24,7 @@ try {
 }
 
 $qRaw    = trim($_GET['q'] ?? '');
+$eventRaw = trim($_GET['event_type'] ?? '');
 $fromRaw = trim($_GET['from'] ?? '');
 $toRaw   = trim($_GET['to'] ?? '');
 $pageRaw = (int)($_GET['page'] ?? 1);
@@ -31,6 +32,7 @@ $perPageRaw = (int)($_GET['per_page'] ?? 25);
 $sortRaw = trim($_GET['sort'] ?? '');
 
 $q        = $qRaw !== '' ? $qRaw : null;
+$eventType = $eventRaw !== '' ? $eventRaw : null;
 $dateFrom = $fromRaw !== '' ? $fromRaw : null;
 $dateTo   = $toRaw !== '' ? $toRaw : null;
 $page     = $pageRaw > 0 ? $pageRaw : 1;
@@ -54,13 +56,22 @@ $activityLogRows = [];
 $activityLogError = '';
 $totalRows = 0;
 $totalPages = 1;
+$eventTypeOptions = [];
 try {
+    $eventStmt = $pdo->query('SELECT DISTINCT event_type FROM activity_log ORDER BY event_type ASC');
+    $eventTypeOptions = array_values(array_filter(array_map('trim', $eventStmt->fetchAll(PDO::FETCH_COLUMN))));
+
     $where  = [];
     $params = [];
 
     if ($q !== null) {
         $where[] = '(event_type LIKE :q OR actor_name LIKE :q OR actor_email LIKE :q OR subject_type LIKE :q OR subject_id LIKE :q OR message LIKE :q OR metadata LIKE :q)';
         $params[':q'] = '%' . $q . '%';
+    }
+
+    if ($eventType !== null) {
+        $where[] = 'event_type = :event_type';
+        $params[':event_type'] = $eventType;
     }
 
     if ($dateFrom !== null) {
@@ -173,6 +184,16 @@ try {
                                    class="form-control form-control-lg"
                                    placeholder="Search by actor, event, subject, or details..."
                                    value="<?= h($qRaw) ?>">
+                        </div>
+                        <div class="col-auto">
+                            <select name="event_type" class="form-select form-select-lg" aria-label="Filter event type" style="min-width: 220px;">
+                                <option value="">All event types</option>
+                                <?php foreach ($eventTypeOptions as $opt): ?>
+                                    <option value="<?= h($opt) ?>" <?= $eventType === $opt ? 'selected' : '' ?>>
+                                        <?= h($opt) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
                         <div class="col-auto">
                             <input type="date"
@@ -294,6 +315,7 @@ try {
                         <?php
                             $pagerQuery = [
                                 'q' => $qRaw,
+                                'event_type' => $eventRaw,
                                 'from' => $fromRaw,
                                 'to' => $toRaw,
                                 'per_page' => $perPage,
@@ -340,8 +362,14 @@ try {
 document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('activity-log-filter-form');
     const sortSelect = form ? form.querySelector('select[name="sort"]') : null;
+    const eventSelect = form ? form.querySelector('select[name="event_type"]') : null;
     if (form && sortSelect) {
         sortSelect.addEventListener('change', function () {
+            form.submit();
+        });
+    }
+    if (form && eventSelect) {
+        eventSelect.addEventListener('change', function () {
             form.submit();
         });
     }
