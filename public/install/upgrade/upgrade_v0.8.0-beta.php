@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../src/config_writer.php';
+require_once __DIR__ . '/../../../src/config_writer.php';
 
 function upgrade_apply_v0_8_0_beta(string $configFile, array $config, array &$messages, array &$errors): array
 {
@@ -49,7 +49,10 @@ function upgrade_apply_v0_8_0_beta(string $configFile, array $config, array &$me
     if ($changed) {
         $config['auth'] = $auth;
         try {
-            $content = layout_build_config_file($config);
+            $content = layout_build_config_file($config, [
+                'SNIPEIT_API_PAGE_LIMIT' => defined('SNIPEIT_API_PAGE_LIMIT') ? SNIPEIT_API_PAGE_LIMIT : 12,
+                'CATALOGUE_ITEMS_PER_PAGE' => defined('CATALOGUE_ITEMS_PER_PAGE') ? CATALOGUE_ITEMS_PER_PAGE : 12,
+            ]);
             file_put_contents($configFile, $content);
             $messages[] = 'Updated auth configuration to promote existing staff entries to admin.';
         } catch (Throwable $e) {
@@ -61,7 +64,7 @@ function upgrade_apply_v0_8_0_beta(string $configFile, array $config, array &$me
 }
 
 if (PHP_SAPI === 'cli' && realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
-    $appRoot = realpath(__DIR__ . '/..') ?: (__DIR__ . '/..');
+    $appRoot = realpath(__DIR__ . '/../../..') ?: (__DIR__ . '/../../..');
     $defaultConfig = $appRoot . '/config/config.php';
     $legacyConfig = $appRoot . '/config.php';
 

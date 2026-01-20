@@ -1,23 +1,18 @@
 <?php
-$isCli = PHP_SAPI === 'cli';
-
-require_once __DIR__ . '/../src/bootstrap.php';
-if (!$isCli && !defined('AUTH_LOGIN_PATH')) {
-    define('AUTH_LOGIN_PATH', '../public/login.php');
+require_once __DIR__ . '/../../../src/bootstrap.php';
+if (!defined('AUTH_LOGIN_PATH')) {
+    define('AUTH_LOGIN_PATH', '../../login.php');
 }
+require_once SRC_PATH . '/auth.php';
 require_once SRC_PATH . '/db.php';
+require_once SRC_PATH . '/layout.php';
 require_once SRC_PATH . '/config_writer.php';
 
-if (!$isCli) {
-    require_once SRC_PATH . '/auth.php';
-    require_once SRC_PATH . '/layout.php';
-
-    $isAdmin = !empty($currentUser['is_admin']);
-    if (!$isAdmin) {
-        http_response_code(403);
-        echo 'Access denied.';
-        exit;
-    }
+$isAdmin = !empty($currentUser['is_admin']);
+if (!$isAdmin) {
+    http_response_code(403);
+    echo 'Access denied.';
+    exit;
 }
 
 $versionFile = APP_ROOT . '/version.txt';
@@ -65,28 +60,7 @@ foreach ($upgradeFiles as $file) {
 $messages = [];
 $errors = [];
 
-$runCli = $isCli && in_array(($_SERVER['argv'][1] ?? 'run'), ['run', 'yes'], true);
-$confirmRunCli = false;
-if ($isCli) {
-    if (!empty($pending)) {
-        fwrite(STDOUT, "Pending upgrades:\n");
-        foreach ($pending as $item) {
-            fwrite(STDOUT, ' - ' . $item['version'] . PHP_EOL);
-        }
-    } else {
-        fwrite(STDOUT, "No pending upgrade scripts found.\n");
-    }
-
-    if ($runCli && !empty($pending)) {
-        fwrite(STDOUT, "Run these upgrades now? [y/N]: ");
-        $answer = trim((string)fgets(STDIN));
-        $confirmRunCli = in_array(strtolower($answer), ['y', 'yes'], true);
-        if (!$confirmRunCli) {
-            fwrite(STDOUT, "Aborted.\n");
-        }
-    }
-}
-if (($isCli && $confirmRunCli) || (!$isCli && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'run')) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'run') {
     if (empty($pending)) {
         $messages[] = 'No pending upgrade scripts found.';
     } else {
@@ -144,21 +118,6 @@ if (($isCli && $confirmRunCli) || (!$isCli && $_SERVER['REQUEST_METHOD'] === 'PO
         }
     }
 }
-if ($isCli) {
-    foreach ($messages as $msg) {
-        fwrite(STDOUT, $msg . PHP_EOL);
-    }
-    foreach ($errors as $err) {
-        fwrite(STDERR, $err . PHP_EOL);
-    }
-    if ($runCli && !empty($pending) && !$confirmRunCli) {
-        exit(1);
-    }
-    if ($confirmRunCli && empty($errors)) {
-        fwrite(STDOUT, "Reminder: consider deleting upgrade files after use for security.\n");
-    }
-    exit(!empty($errors) ? 1 : 0);
-}
 ?>
 <!DOCTYPE html>
 <html>
@@ -168,13 +127,13 @@ if ($isCli) {
     <title>Upgrade Database – SnipeScheduler</title>
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="../public/assets/style.css">
+    <link rel="stylesheet" href="../../assets/style.css">
     <?= layout_theme_styles() ?>
 </head>
 <body class="p-4">
 <div class="container">
     <div class="page-shell">
-        <?= str_replace('href="index.php"', 'href="../public/index.php"', layout_logo_tag()) ?>
+        <?= str_replace('href="index.php"', 'href="../../index.php"', layout_logo_tag()) ?>
         <div class="page-header">
             <h1>Database Upgrade</h1>
             <div class="page-subtitle">
