@@ -107,6 +107,12 @@ $checkoutAssets = &$_SESSION['quick_checkout_assets'];
 
 $messages = [];
 $errors   = [];
+$warnings = [];
+$pendingUserCandidates = [];
+$checkoutToValue = '';
+$noteValue = '';
+$selectedUserId = 0;
+$overrideValue = false;
 
 // Remove single asset
 if (isset($_GET['remove'])) {
@@ -163,6 +169,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $checkoutTo      = trim($_POST['checkout_to'] ?? '');
         $note            = trim($_POST['note'] ?? '');
         $overrideAllowed = isset($_POST['override_conflicts']) && $_POST['override_conflicts'] === '1';
+        $selectedUserId  = (int)($_POST['checkout_user_id'] ?? 0);
+        $checkoutToValue = $checkoutTo;
+        $noteValue       = $note;
+        $overrideValue   = $overrideAllowed;
         $startRaw        = trim($_POST['start_datetime'] ?? $startRaw);
         $endRaw          = trim($_POST['end_datetime'] ?? $endRaw);
 
@@ -179,184 +189,208 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'End date/time must be after start date/time.';
         } else {
             try {
-                $user = find_single_user_by_email_or_name($checkoutTo);
-                $userId   = (int)($user['id'] ?? 0);
-                $userName = $user['name'] ?? ($user['username'] ?? $checkoutTo);
-
-                if ($userId <= 0) {
-                    throw new Exception('Matched user has no valid ID.');
-                }
-
-                // Check for active reservations on these models right now, but only warn when
-                // reserved qty would exceed available stock after this checkout.
-                $reservationConflicts = [];
-                $checkoutModelCounts = [];
-                foreach ($checkoutAssets as $asset) {
-                    $mid = (int)($asset['model_id'] ?? 0);
-                    if ($mid > 0) {
-                        $checkoutModelCounts[$mid] = ($checkoutModelCounts[$mid] ?? 0) + 1;
-                    }
-                }
-                foreach ($checkoutModelCounts as $mid => $checkoutQty) {
-                    $conf = qc_current_reservations_for_model($pdo, (int)$mid);
-                    if (empty($conf)) {
-                        continue;
-                    }
-
-                    $reservedQty = 0;
-                    foreach ($conf as $row) {
-                        $reservedQty += (int)($row['quantity'] ?? 0);
-                    }
-
-                    $availabilityUnknown = false;
-                    try {
-                        $requestableTotal = count_requestable_assets_by_model((int)$mid);
-                        $checkedOut = count_checked_out_assets_by_model((int)$mid);
-                        $available = max(0, $requestableTotal - $checkedOut);
-                    } catch (Throwable $e) {
-                        $availabilityUnknown = true;
-                        $available = 0;
-                    }
-
-                    $shouldWarn = $availabilityUnknown ? true : (($reservedQty + $checkoutQty) > $available);
-                    if (!$shouldWarn) {
-                        continue;
-                    }
-
-                    foreach ($checkoutAssets as $asset) {
-                        if ((int)($asset['model_id'] ?? 0) === (int)$mid) {
-                            $reservationConflicts[$asset['id']] = $conf;
-                        }
-                    }
-                }
-
-                if (!empty($reservationConflicts) && !$overrideAllowed) {
-                    $errors[] = 'Some assets are reserved for this time. Review who reserved them below or tick "Override" to proceed anyway.';
+                $user = null;
+                $result = find_user_by_email_or_name_with_candidates($checkoutTo);
+                if (!empty($result['user'])) {
+                    $user = $result['user'];
                 } else {
-                    $expectedCheckinIso = date('Y-m-d H:i:s', $endTs);
-
-                    foreach ($checkoutAssets as $asset) {
-                        $assetId  = (int)$asset['id'];
-                        $assetTag = $asset['asset_tag'] ?? '';
-                        try {
-                            checkout_asset_to_user($assetId, $userId, $note, $expectedCheckinIso);
-                            $messages[] = "Checked out asset {$assetTag} to {$userName}." . (!empty($reservationConflicts[$assetId]) ? ' (Override used)' : '');
-                        } catch (Throwable $e) {
-                            $errors[] = "Failed to check out {$assetTag}: " . $e->getMessage();
+                    $pendingUserCandidates = $result['candidates'];
+                    if ($selectedUserId > 0) {
+                        foreach ($pendingUserCandidates as $candidate) {
+                            if ((int)($candidate['id'] ?? 0) === $selectedUserId) {
+                                $user = $candidate;
+                                break;
+                            }
                         }
+                        if (!$user) {
+                            $errors[] = 'Selected user is not available for this query. Please choose again.';
+                        }
+                    } else {
+                        $warnings[] = "Multiple Snipe-IT users matched '{$checkoutTo}'. Please choose which account to use.";
                     }
                 }
 
-                if (empty($errors)) {
-                    $reservationStart = date('Y-m-d H:i:s', $startTs);
-                    $reservationEnd   = date('Y-m-d H:i:s', $endTs);
-                    $assetTags = array_map(function ($a) {
-                        $tag   = $a['asset_tag'] ?? '';
-                        $model = $a['model'] ?? '';
-                        return $model !== '' ? "{$tag} ({$model})" : $tag;
-                    }, $checkoutAssets);
-                    $assetsText = implode(', ', array_filter($assetTags));
-                    $modelCounts = [];
-                    $modelNames  = [];
+                if (!$user) {
+                    // Wait for a valid user selection before proceeding.
+                } else {
+                    $userId   = (int)($user['id'] ?? 0);
+                    $userName = $user['name'] ?? ($user['username'] ?? $checkoutTo);
+
+                    if ($userId <= 0) {
+                        throw new Exception('Matched user has no valid ID.');
+                    }
+
+                    // Check for active reservations on these models right now, but only warn when
+                    // reserved qty would exceed available stock after this checkout.
+                    $reservationConflicts = [];
+                    $checkoutModelCounts = [];
                     foreach ($checkoutAssets as $asset) {
-                        $modelId = (int)($asset['model_id'] ?? 0);
-                        if ($modelId <= 0) {
+                        $mid = (int)($asset['model_id'] ?? 0);
+                        if ($mid > 0) {
+                            $checkoutModelCounts[$mid] = ($checkoutModelCounts[$mid] ?? 0) + 1;
+                        }
+                    }
+                    foreach ($checkoutModelCounts as $mid => $checkoutQty) {
+                        $conf = qc_current_reservations_for_model($pdo, (int)$mid);
+                        if (empty($conf)) {
                             continue;
                         }
-                        $modelCounts[$modelId] = ($modelCounts[$modelId] ?? 0) + 1;
-                        if (!isset($modelNames[$modelId])) {
-                            $modelNames[$modelId] = $asset['model'] ?? ('Model #' . $modelId);
+
+                        $reservedQty = 0;
+                        foreach ($conf as $row) {
+                            $reservedQty += (int)($row['quantity'] ?? 0);
+                        }
+
+                        $availabilityUnknown = false;
+                        try {
+                            $requestableTotal = count_requestable_assets_by_model((int)$mid);
+                            $checkedOut = count_checked_out_assets_by_model((int)$mid);
+                            $available = max(0, $requestableTotal - $checkedOut);
+                        } catch (Throwable $e) {
+                            $availabilityUnknown = true;
+                            $available = 0;
+                        }
+
+                        $shouldWarn = $availabilityUnknown ? true : (($reservedQty + $checkoutQty) > $available);
+                        if (!$shouldWarn) {
+                            continue;
+                        }
+
+                        foreach ($checkoutAssets as $asset) {
+                            if ((int)($asset['model_id'] ?? 0) === (int)$mid) {
+                                $reservationConflicts[$asset['id']] = $conf;
+                            }
                         }
                     }
 
-                    try {
-                        $pdo->beginTransaction();
+                    if (!empty($reservationConflicts) && !$overrideAllowed) {
+                        $errors[] = 'Some assets are reserved for this time. Review who reserved them below or tick "Override" to proceed anyway.';
+                    } else {
+                        $expectedCheckinIso = date('Y-m-d H:i:s', $endTs);
 
-                        $insertRes = $pdo->prepare("
-                            INSERT INTO reservations (
-                                user_name, user_email, user_id, snipeit_user_id,
-                                asset_id, asset_name_cache,
-                                start_datetime, end_datetime, status
-                            ) VALUES (
-                                :user_name, :user_email, :user_id, :snipeit_user_id,
-                                0, :asset_name_cache,
-                                :start_datetime, :end_datetime, 'completed'
-                            )
-                        ");
-                        $insertRes->execute([
-                            ':user_name'        => $userName,
-                            ':user_email'       => $user['email'] ?? '',
-                            ':user_id'          => (string)$userId,
-                            ':snipeit_user_id'  => $userId,
-                            ':asset_name_cache' => $assetsText,
-                            ':start_datetime'   => $reservationStart,
-                            ':end_datetime'     => $reservationEnd,
-                        ]);
+                        foreach ($checkoutAssets as $asset) {
+                            $assetId  = (int)$asset['id'];
+                            $assetTag = $asset['asset_tag'] ?? '';
+                            try {
+                                checkout_asset_to_user($assetId, $userId, $note, $expectedCheckinIso);
+                                $messages[] = "Checked out asset {$assetTag} to {$userName}." . (!empty($reservationConflicts[$assetId]) ? ' (Override used)' : '');
+                            } catch (Throwable $e) {
+                                $errors[] = "Failed to check out {$assetTag}: " . $e->getMessage();
+                            }
+                        }
+                    }
 
-                        $reservationId = (int)$pdo->lastInsertId();
-                        if ($reservationId > 0 && !empty($modelCounts)) {
-                            $insertItem = $pdo->prepare("
-                                INSERT INTO reservation_items (
-                                    reservation_id, model_id, model_name_cache, quantity
-                                ) VALUES (
-                                    :reservation_id, :model_id, :model_name_cache, :quantity
-                                )
-                            ");
-                            foreach ($modelCounts as $modelId => $qty) {
-                                $insertItem->execute([
-                                    ':reservation_id'   => $reservationId,
-                                    ':model_id'         => (int)$modelId,
-                                    ':model_name_cache' => $modelNames[$modelId] ?? ('Model #' . $modelId),
-                                    ':quantity'         => (int)$qty,
-                                ]);
+                    if (empty($errors)) {
+                        $reservationStart = date('Y-m-d H:i:s', $startTs);
+                        $reservationEnd   = date('Y-m-d H:i:s', $endTs);
+                        $assetTags = array_map(function ($a) {
+                            $tag   = $a['asset_tag'] ?? '';
+                            $model = $a['model'] ?? '';
+                            return $model !== '' ? "{$tag} ({$model})" : $tag;
+                        }, $checkoutAssets);
+                        $assetsText = implode(', ', array_filter($assetTags));
+                        $modelCounts = [];
+                        $modelNames  = [];
+                        foreach ($checkoutAssets as $asset) {
+                            $modelId = (int)($asset['model_id'] ?? 0);
+                            if ($modelId <= 0) {
+                                continue;
+                            }
+                            $modelCounts[$modelId] = ($modelCounts[$modelId] ?? 0) + 1;
+                            if (!isset($modelNames[$modelId])) {
+                                $modelNames[$modelId] = $asset['model'] ?? ('Model #' . $modelId);
                             }
                         }
 
-                        $pdo->commit();
-                    } catch (Throwable $e) {
-                        $pdo->rollBack();
-                        $errors[] = 'Quick checkout completed, but could not record reservation history: ' . $e->getMessage();
-                    }
+                        try {
+                            $pdo->beginTransaction();
 
-                    activity_log_event('quick_checkout', 'Quick checkout completed', [
-                        'subject_type' => 'reservation',
-                        'subject_id'   => $reservationId ?? null,
-                        'metadata'     => [
-                            'checked_out_to' => $userName,
-                            'assets'         => $assetTags,
-                            'start'          => $reservationStart,
-                            'end'            => $reservationEnd,
-                            'note'           => $note,
-                        ],
-                    ]);
+                            $insertRes = $pdo->prepare("
+                                INSERT INTO reservations (
+                                    user_name, user_email, user_id, snipeit_user_id,
+                                    asset_id, asset_name_cache,
+                                    start_datetime, end_datetime, status
+                                ) VALUES (
+                                    :user_name, :user_email, :user_id, :snipeit_user_id,
+                                    0, :asset_name_cache,
+                                    :start_datetime, :end_datetime, 'completed'
+                                )
+                            ");
+                            $insertRes->execute([
+                                ':user_name'        => $userName,
+                                ':user_email'       => $user['email'] ?? '',
+                                ':user_id'          => (string)$userId,
+                                ':snipeit_user_id'  => $userId,
+                                ':asset_name_cache' => $assetsText,
+                                ':start_datetime'   => $reservationStart,
+                                ':end_datetime'     => $reservationEnd,
+                            ]);
 
-                    // Email notifications
-                    $userEmail  = $user['email'] ?? '';
-                    $staffEmail = $currentUser['email'] ?? '';
-                    $staffName  = trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''));
-                    $staffDisplayName = $staffName !== '' ? $staffName : ($currentUser['email'] ?? 'Staff');
-                    $assetLines = $assetsText;
-                    $dueDisplay = date('d/m/Y h:i A', $endTs);
-                    $bodyLines = [
-                        'Assets checked out:',
-                        $assetLines,
-                        "Return by: {$dueDisplay}",
-                        $note !== '' ? "Note: {$note}" : '',
-                    ];
-                    if ($userEmail !== '') {
-                        layout_send_notification($userEmail, $userName, 'Assets checked out', $bodyLines);
-                    }
-                    if ($staffEmail !== '') {
-                        $staffBody = array_merge(
-                            [
-                                "You checked out assets for {$userName}"
+                            $reservationId = (int)$pdo->lastInsertId();
+                            if ($reservationId > 0 && !empty($modelCounts)) {
+                                $insertItem = $pdo->prepare("
+                                    INSERT INTO reservation_items (
+                                        reservation_id, model_id, model_name_cache, quantity
+                                    ) VALUES (
+                                        :reservation_id, :model_id, :model_name_cache, :quantity
+                                    )
+                                ");
+                                foreach ($modelCounts as $modelId => $qty) {
+                                    $insertItem->execute([
+                                        ':reservation_id'   => $reservationId,
+                                        ':model_id'         => (int)$modelId,
+                                        ':model_name_cache' => $modelNames[$modelId] ?? ('Model #' . $modelId),
+                                        ':quantity'         => (int)$qty,
+                                    ]);
+                                }
+                            }
+
+                            $pdo->commit();
+                        } catch (Throwable $e) {
+                            $pdo->rollBack();
+                            $errors[] = 'Quick checkout completed, but could not record reservation history: ' . $e->getMessage();
+                        }
+
+                        activity_log_event('quick_checkout', 'Quick checkout completed', [
+                            'subject_type' => 'reservation',
+                            'subject_id'   => $reservationId ?? null,
+                            'metadata'     => [
+                                'checked_out_to' => $userName,
+                                'assets'         => $assetTags,
+                                'start'          => $reservationStart,
+                                'end'            => $reservationEnd,
+                                'note'           => $note,
                             ],
-                            $bodyLines
-                        );
-                        layout_send_notification($staffEmail, $staffDisplayName, 'You checked out assets', $staffBody);
-                    }
+                        ]);
 
-                    $checkoutAssets = [];
+                        // Email notifications
+                        $userEmail  = $user['email'] ?? '';
+                        $staffEmail = $currentUser['email'] ?? '';
+                        $staffName  = trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''));
+                        $staffDisplayName = $staffName !== '' ? $staffName : ($currentUser['email'] ?? 'Staff');
+                        $assetLines = $assetsText;
+                        $dueDisplay = date('d/m/Y h:i A', $endTs);
+                        $bodyLines = [
+                            'Assets checked out:',
+                            $assetLines,
+                            "Return by: {$dueDisplay}",
+                            $note !== '' ? "Note: {$note}" : '',
+                        ];
+                        if ($userEmail !== '') {
+                            layout_send_notification($userEmail, $userName, 'Assets checked out', $bodyLines);
+                        }
+                        if ($staffEmail !== '') {
+                            $staffBody = array_merge(
+                                [
+                                    "You checked out assets for {$userName}"
+                                ],
+                                $bodyLines
+                            );
+                            layout_send_notification($staffEmail, $staffDisplayName, 'You checked out assets', $staffBody);
+                        }
+
+                        $checkoutAssets = [];
+                    }
                 }
             } catch (Throwable $e) {
                 $errors[] = 'Could not find user in Snipe-IT: ' . $e->getMessage();
@@ -394,6 +428,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <ul class="mb-0">
                     <?php foreach ($messages as $m): ?>
                         <li><?= h($m) ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        <?php endif; ?>
+
+        <?php if (!empty($warnings)): ?>
+            <div class="alert alert-warning">
+                <ul class="mb-0">
+                    <?php foreach ($warnings as $w): ?>
+                        <li><?= h($w) ?></li>
                     <?php endforeach; ?>
                 </ul>
             </div>
@@ -522,7 +566,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                            name="checkout_to"
                                            class="form-control user-autocomplete"
                                            autocomplete="off"
-                                           placeholder="Start typing email or name">
+                                           placeholder="Start typing email or name"
+                                           value="<?= h($checkoutToValue) ?>">
                                     <div class="list-group position-absolute w-100"
                                          data-suggestions
                                          style="z-index: 1050; max-height: 220px; overflow-y: auto; display: none;"></div>
@@ -533,9 +578,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <input type="text"
                                        name="note"
                                        class="form-control"
-                                       placeholder="Optional note to store with checkout">
+                                       placeholder="Optional note to store with checkout"
+                                       value="<?= h($noteValue) ?>">
                             </div>
                         </div>
+
+                        <?php if (!empty($pendingUserCandidates)): ?>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Select matching Snipe-IT user</label>
+                                    <select name="checkout_user_id" class="form-select" required>
+                                        <option value="">-- Choose user --</option>
+                                        <?php foreach ($pendingUserCandidates as $candidate): ?>
+                                            <?php
+                                                $cid = (int)($candidate['id'] ?? 0);
+                                                $cEmail = $candidate['email'] ?? '';
+                                                $cName = $candidate['name'] ?? ($candidate['username'] ?? '');
+                                                $cLabel = $cName !== '' && $cEmail !== '' ? "{$cName} ({$cEmail})" : ($cName !== '' ? $cName : $cEmail);
+                                                $selectedAttr = $selectedUserId === $cid ? 'selected' : '';
+                                            ?>
+                                            <option value="<?= $cid ?>" <?= $selectedAttr ?>><?= h($cLabel) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <div class="form-text">Multiple users matched the search. Choose which account to use.</div>
+                                </div>
+                            </div>
+                        <?php endif; ?>
 
                         <div class="row g-3 mb-3">
                             <div class="col-md-6">
@@ -557,7 +625,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         <?php if (!empty($reservationConflicts)): ?>
                             <div class="form-check mb-3">
-                                <input class="form-check-input" type="checkbox" value="1" id="override_conflicts" name="override_conflicts">
+                                <input class="form-check-input"
+                                       type="checkbox"
+                                       value="1"
+                                       id="override_conflicts"
+                                       name="override_conflicts"
+                                       <?= $overrideValue ? 'checked' : '' ?>>
                                 <label class="form-check-label" for="override_conflicts">
                                     Override current reservations and check out anyway
                                 </label>

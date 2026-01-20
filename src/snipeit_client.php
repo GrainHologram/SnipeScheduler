@@ -614,6 +614,68 @@ function find_single_user_by_email_or_name(string $query): array
 }
 
 /**
+ * Find a Snipe-IT user by email or name, returning candidates on ambiguity.
+ *
+ * @param string $query
+ * @return array{user: ?array, candidates: array}
+ * @throws Exception
+ */
+function find_user_by_email_or_name_with_candidates(string $query): array
+{
+    $q = trim($query);
+    if ($q === '') {
+        throw new InvalidArgumentException('User search query cannot be empty.');
+    }
+
+    $params = [
+        'search' => $q,
+        'limit'  => 20,
+    ];
+
+    $data = snipeit_request('GET', 'users', $params);
+
+    if (!isset($data['rows']) || !is_array($data['rows']) || count($data['rows']) === 0) {
+        throw new Exception("No Snipe-IT users found matching '{$q}'.");
+    }
+
+    $rows = $data['rows'];
+
+    if (count($rows) === 1) {
+        return ['user' => $rows[0], 'candidates' => []];
+    }
+
+    $exactEmailMatches = [];
+    $exactNameMatches  = [];
+    $qLower = strtolower($q);
+    foreach ($rows as $row) {
+        $email = $row['email'] ?? '';
+        $name  = $row['name'] ?? ($row['username'] ?? '');
+        if ($email !== '' && strtolower(trim($email)) === $qLower) {
+            $exactEmailMatches[] = $row;
+        }
+        if ($name !== '' && strtolower(trim($name)) === $qLower) {
+            $exactNameMatches[] = $row;
+        }
+    }
+
+    if (count($exactEmailMatches) === 1) {
+        return ['user' => $exactEmailMatches[0], 'candidates' => []];
+    }
+    if (count($exactNameMatches) === 1) {
+        return ['user' => $exactNameMatches[0], 'candidates' => []];
+    }
+
+    $candidates = $rows;
+    if (!empty($exactEmailMatches)) {
+        $candidates = $exactEmailMatches;
+    } elseif (!empty($exactNameMatches)) {
+        $candidates = $exactNameMatches;
+    }
+
+    return ['user' => null, 'candidates' => $candidates];
+}
+
+/**
  * Check out a single asset to a Snipe-IT user by ID.
  *
  * Uses POST /hardware/{id}/checkout
