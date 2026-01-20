@@ -33,7 +33,7 @@ In the app, Users can request equipment, and staff can manage reservations, chec
 1. Clone or copy this repository to your web root.
 2. Ensure the web server user can write to `config/` (for `config.php`) and create `config/cache/` if needed.
 3. Point your web server at the `public/` directory.
-4. Visit `public/install/install.php` in your browser:
+4. Visit `/install/` in your browser:
    - Fill in database, Snipe-IT API, and at least one of the authentication (LDAP/Google/Entra) methods (tests are available inline).
    - If you are using Entra for Authentication and User Search, you will need to create an App Registration on Entra, and assign the following API permissions:
 
@@ -47,7 +47,7 @@ In the app, Users can request equipment, and staff can manage reservations, chec
       - You’ll need to grant admin consent for the directory search permission. After adding it, staff should sign out/in to receive the new scope.
 
    - Generate `config/config.php` and optionally create the database from `public/install/schema.sql`.
-   - Remove or restrict access to `public/install/install.php` after successful setup.
+   - Remove or restrict access to `public/install` after successful setup.
 5. If you prefer manual configuration, copy `config/config.example.php` to `config/config.php` and update values. Then import `public/install/schema.sql` into your database.
 6. Certain CRON Scripts must be run at regular intervals for this app to function correctly. Please see the CRON Scripts section below.
 
