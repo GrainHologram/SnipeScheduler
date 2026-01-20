@@ -152,6 +152,9 @@ if ($isCli) {
     if ($runCli && !empty($pending) && !$confirmRunCli) {
         exit(1);
     }
+    if ($confirmRunCli && empty($errors)) {
+        fwrite(STDOUT, "Reminder: consider deleting upgrade files after use for security.\n");
+    }
     exit(!empty($errors) ? 1 : 0);
 }
 ?>
