@@ -184,6 +184,26 @@ if (!function_exists('layout_footer')) {
 }
 
 if (!function_exists('layout_logo_tag')) {
+    function layout_default_logo_url(): string
+    {
+        $scriptName = (string)($_SERVER['SCRIPT_NAME'] ?? '');
+        $scriptDir  = rtrim(str_replace('\\', '/', dirname($scriptName)), '/');
+        $baseDir    = $scriptDir;
+
+        $leaf = $scriptDir !== '' ? basename($scriptDir) : '';
+        if ($leaf === 'install') {
+            $baseDir = rtrim(str_replace('\\', '/', dirname($scriptDir)), '/');
+        } elseif ($leaf === 'upgrade' && basename(dirname($scriptDir)) === 'install') {
+            $baseDir = rtrim(str_replace('\\', '/', dirname(dirname($scriptDir))), '/');
+        }
+
+        if ($baseDir === '') {
+            return '/SnipeScheduler-Logo.png';
+        }
+
+        return $baseDir . '/SnipeScheduler-Logo.png';
+    }
+
     function layout_logo_tag(?array $cfg = null): string
     {
         $cfg = layout_cached_config($cfg);
@@ -194,7 +214,7 @@ if (!function_exists('layout_logo_tag')) {
         }
 
         if ($logoUrl === '') {
-            return '';
+            $logoUrl = layout_default_logo_url();
         }
 
         $urlEsc = htmlspecialchars($logoUrl, ENT_QUOTES, 'UTF-8');
