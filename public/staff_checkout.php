@@ -678,6 +678,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         // Clear selected reservation to avoid repeat
                         unset($_SESSION['selected_reservation_id']);
                         $selectedReservationId = null;
+                        $selectedReservation = null;
+                        $selectedItems = [];
+                        $modelAssets = [];
+                        $presetSelections = [];
+                        $selectedTotalQty = 0;
+                        $reservationUserCandidates = [];
+                        $selectedReservationUserId = 0;
+                        $reservationNoteValue = '';
                     }
                 } catch (Throwable $e) {
                     $checkoutErrors[] = 'Reservation checkout failed: ' . $e->getMessage();
