@@ -832,6 +832,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
 
             <input type="hidden" name="start_datetime" value="<?= h($windowStartRaw) ?>">
             <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
+            <input type="hidden" name="full" value="1">
 
             <div class="row g-3 align-items-end">
                 <div class="col-12 col-lg-5">
@@ -895,6 +896,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             <input type="hidden" name="q" value="<?= h($searchRaw) ?>">
             <input type="hidden" name="category" value="<?= h($categoryRaw) ?>">
             <input type="hidden" name="sort" value="<?= h($sortRaw) ?>">
+            <input type="hidden" name="full" value="1">
             <div class="row g-3 align-items-end">
                 <div class="col-md-4">
                     <label class="form-label fw-semibold">Start date &amp; time</label>
@@ -1108,6 +1110,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                             'sort'     => $sortRaw,
                             'start_datetime' => $windowStartRaw,
                             'end_datetime' => $windowEndRaw,
+                            'full' => 1,
                         ];
                         ?>
                         <?php for ($p = 1; $p <= $totalPages; $p++): ?>
