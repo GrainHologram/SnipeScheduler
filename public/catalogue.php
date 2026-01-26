@@ -1263,6 +1263,39 @@ document.addEventListener('DOMContentLoaded', function () {
         }, 2200);
     }
 
+    if (filterForm) {
+        filterForm.addEventListener('submit', function () {
+            showLoadingOverlay();
+        });
+    }
+
+    if (categorySelect) {
+        categorySelect.addEventListener('change', function () {
+            showLoadingOverlay();
+            filterForm.submit();
+        });
+    }
+
+    if (sortSelect) {
+        sortSelect.addEventListener('change', function () {
+            showLoadingOverlay();
+            filterForm.submit();
+        });
+    }
+
+    const searchInput = filterForm ? filterForm.querySelector('input[name="q"]') : null;
+    if (searchInput) {
+        searchInput.addEventListener('blur', function () {
+            if (!filterForm) return;
+            const value = searchInput.value.trim();
+            if (value === '' && searchInput.defaultValue.trim() === '') {
+                return;
+            }
+            showLoadingOverlay();
+            filterForm.submit();
+        });
+    }
+
     if (windowStartInput && windowEndInput) {
         windowStartInput.addEventListener('change', normalizeWindowEnd);
         windowEndInput.addEventListener('change', normalizeWindowEnd);
