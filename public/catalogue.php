@@ -1126,6 +1126,12 @@ document.addEventListener('DOMContentLoaded', function () {
     let bookingQuery   = '';
     let basketToastTimer = null;
 
+    function showLoadingOverlay() {
+        if (!loadingOverlay) return;
+        loadingOverlay.classList.remove('is-hidden');
+        loadingOverlay.setAttribute('aria-busy', 'true');
+    }
+
     function maybeSubmitWindow() {
         if (!windowForm || !windowStartInput || !windowEndInput) return;
         const startVal = windowStartInput.value.trim();
@@ -1135,6 +1141,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const startMs = Date.parse(startVal);
         const endMs = Date.parse(endVal);
         if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs <= startMs) return;
+        showLoadingOverlay();
         windowForm.submit();
     }
 
@@ -1155,6 +1162,7 @@ document.addEventListener('DOMContentLoaded', function () {
         tomorrow.setHours(9, 0, 0, 0);
         windowStartInput.value = toLocalDatetimeValue(now);
         windowEndInput.value = toLocalDatetimeValue(tomorrow);
+        showLoadingOverlay();
         maybeSubmitWindow();
     }
 
