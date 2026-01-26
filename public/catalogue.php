@@ -842,7 +842,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             </div>
         </form>
 
-        <form class="availability-box mb-4" method="get" action="catalogue.php" id="catalogue-window-form">
+        <form class="availability-box availability-box--outlined mb-4" method="get" action="catalogue.php" id="catalogue-window-form">
             <div class="d-flex align-items-center mb-3 flex-wrap gap-2">
                 <div class="availability-pill">Select reservation window</div>
                 <div class="text-muted small">Set dates to update availability automatically.</div>

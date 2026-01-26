@@ -307,6 +307,11 @@ input[type="checkbox"] {
     overflow: hidden;
 }
 
+.availability-box--outlined {
+    border: 2px solid rgba(var(--primary-rgb), 0.35);
+    box-shadow: 0 12px 26px rgba(15, 23, 42, 0.16), inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
 .availability-box::after {
     content: "";
     position: absolute;
