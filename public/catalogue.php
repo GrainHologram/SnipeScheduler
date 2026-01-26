@@ -24,9 +24,9 @@ $blockCatalogueOverdue = array_key_exists('block_catalogue_overdue', $appCfg)
     : true;
 $overdueCacheTtl = 0;
 
-if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['full'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['prefetch'])) {
     $query = $_GET;
-    $query['full'] = 1;
+    $query['prefetch'] = 1;
     $fullUrl = 'catalogue.php' . (empty($query) ? '' : '?' . http_build_query($query));
     ?>
     <!DOCTYPE html>
@@ -832,7 +832,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
 
             <input type="hidden" name="start_datetime" value="<?= h($windowStartRaw) ?>">
             <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
-            <input type="hidden" name="full" value="1">
+            <input type="hidden" name="prefetch" value="1">
 
             <div class="row g-3 align-items-end">
                 <div class="col-12 col-lg-5">
@@ -896,7 +896,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             <input type="hidden" name="q" value="<?= h($searchRaw) ?>">
             <input type="hidden" name="category" value="<?= h($categoryRaw) ?>">
             <input type="hidden" name="sort" value="<?= h($sortRaw) ?>">
-            <input type="hidden" name="full" value="1">
+            <input type="hidden" name="prefetch" value="1">
             <div class="row g-3 align-items-end">
                 <div class="col-md-4">
                     <label class="form-label fw-semibold">Start date &amp; time</label>
@@ -1110,7 +1110,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                             'sort'     => $sortRaw,
                             'start_datetime' => $windowStartRaw,
                             'end_datetime' => $windowEndRaw,
-                            'full' => 1,
+                            'prefetch' => 1,
                         ];
                         ?>
                         <?php for ($p = 1; $p <= $totalPages; $p++): ?>
@@ -1142,6 +1142,13 @@ document.addEventListener('DOMContentLoaded', function () {
     if (loadingOverlay) {
         loadingOverlay.classList.add('is-hidden');
         loadingOverlay.setAttribute('aria-busy', 'false');
+    }
+    if (window.history && window.history.replaceState) {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('prefetch')) {
+            url.searchParams.delete('prefetch');
+            window.history.replaceState({}, '', url.toString());
+        }
     }
     const overdueAlert = document.getElementById('overdue-alert');
     const overdueList = document.getElementById('overdue-list');
