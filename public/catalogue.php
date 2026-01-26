@@ -1143,13 +1143,6 @@ document.addEventListener('DOMContentLoaded', function () {
         loadingOverlay.classList.add('is-hidden');
         loadingOverlay.setAttribute('aria-busy', 'false');
     }
-    if (window.history && window.history.replaceState) {
-        const url = new URL(window.location.href);
-        if (url.searchParams.has('prefetch')) {
-            url.searchParams.delete('prefetch');
-            window.history.replaceState({}, '', url.toString());
-        }
-    }
     const overdueAlert = document.getElementById('overdue-alert');
     const overdueList = document.getElementById('overdue-list');
     const overdueWarning = document.getElementById('overdue-warning');
