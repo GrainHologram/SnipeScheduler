@@ -688,6 +688,11 @@ form .form-select {
     margin-bottom: 0.35rem;
 }
 
+.reservation-window-btn {
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
 .filter-panel::after {
     content: "";
     position: absolute;
