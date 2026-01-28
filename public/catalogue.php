@@ -89,6 +89,12 @@ if (($_GET['ajax'] ?? '') === 'overdue_check') {
             $activeUserDisplay,
             $activeUserName
         );
+        $lookupSqlValues = build_sql_lookup_values(
+            $activeUserEmail,
+            $activeUserUsername,
+            $activeUserDisplay,
+            $activeUserName
+        );
 
         $snipeUserId = 0;
         $lookupQueries = array_values(array_filter(array_unique([
@@ -110,21 +116,7 @@ if (($_GET['ajax'] ?? '') === 'overdue_check') {
             }
         }
 
-        $overdueCandidates = list_checked_out_assets(true);
-        $overdueAssets = [];
-        foreach ($overdueCandidates as $row) {
-            if (row_assigned_to_matches_user($row, $lookupKeys, $snipeUserId)) {
-                $tag = $row['asset_tag'] ?? 'Unknown tag';
-                $modelName = $row['model']['name'] ?? '';
-                $expected = $row['_expected_checkin_norm'] ?? ($row['expected_checkin'] ?? '');
-                $due = format_overdue_date($expected);
-                $overdueAssets[] = [
-                    'tag'   => $tag,
-                    'model' => $modelName,
-                    'due'   => $due,
-                ];
-            }
-        }
+        $overdueAssets = fetch_overdue_assets_for_user($lookupSqlValues, $snipeUserId);
 
         $payload = [
             'blocked' => !empty($overdueAssets),
@@ -542,6 +534,131 @@ function build_lookup_keys(string $email, string $username, string $display, str
     return $keys;
 }
 
+function build_name_variants(string $value): array
+{
+    $value = trim($value);
+    if ($value === '') {
+        return [];
+    }
+
+    $variants = [$value];
+    if (strpos($value, ',') !== false) {
+        $parts = array_map('trim', explode(',', $value, 2));
+        if (count($parts) === 2 && $parts[0] !== '' && $parts[1] !== '') {
+            $variants[] = $parts[1] . ' ' . $parts[0];
+        }
+    } else {
+        $parts = preg_split('/\\s+/', $value);
+        if (count($parts) >= 2) {
+            $first = array_shift($parts);
+            $last = array_pop($parts);
+            if ($first !== '' && $last !== '') {
+                $variants[] = $last . ' ' . $first;
+            }
+        }
+    }
+
+    $variants = array_values(array_filter(array_unique($variants), 'strlen'));
+    return $variants;
+}
+
+function build_sql_lookup_values(string $email, string $username, string $display, string $name): array
+{
+    $email = strtolower(trim($email));
+    $username = strtolower(trim($username));
+    $nameVariants = array_merge(
+        build_name_variants($name),
+        build_name_variants($display)
+    );
+    $nameVariants = array_values(array_filter(array_unique(array_map('strtolower', $nameVariants)), 'strlen'));
+
+    return [
+        'emails' => $email !== '' ? [$email] : [],
+        'usernames' => $username !== '' ? [$username] : [],
+        'names' => $nameVariants,
+    ];
+}
+
+function expected_to_timestamp($value): ?int
+{
+    if (is_array($value)) {
+        $value = $value['datetime'] ?? ($value['date'] ?? '');
+    }
+    $value = trim((string)$value);
+    if ($value === '') {
+        return null;
+    }
+    if (preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $value)) {
+        $value .= ' 23:59:59';
+    }
+    $ts = strtotime($value);
+    if ($ts === false) {
+        return null;
+    }
+    return $ts;
+}
+
+function fetch_overdue_assets_for_user(array $lookup, int $snipeUserId): array
+{
+    global $pdo;
+
+    $where = [];
+    $params = [];
+    if ($snipeUserId > 0) {
+        $where[] = 'assigned_to_id = ?';
+        $params[] = $snipeUserId;
+    }
+    if (!empty($lookup['emails'])) {
+        $placeholders = implode(',', array_fill(0, count($lookup['emails']), '?'));
+        $where[] = "(assigned_to_email IS NOT NULL AND LOWER(assigned_to_email) IN ({$placeholders}))";
+        $params = array_merge($params, $lookup['emails']);
+    }
+    if (!empty($lookup['usernames'])) {
+        $placeholders = implode(',', array_fill(0, count($lookup['usernames']), '?'));
+        $where[] = "(assigned_to_username IS NOT NULL AND LOWER(assigned_to_username) IN ({$placeholders}))";
+        $params = array_merge($params, $lookup['usernames']);
+    }
+    if (!empty($lookup['names'])) {
+        $placeholders = implode(',', array_fill(0, count($lookup['names']), '?'));
+        $where[] = "(assigned_to_name IS NOT NULL AND LOWER(assigned_to_name) IN ({$placeholders}))";
+        $params = array_merge($params, $lookup['names']);
+    }
+
+    if (empty($where)) {
+        return [];
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT asset_tag, model_name, expected_checkin
+          FROM checked_out_asset_cache
+         WHERE " . implode(' OR ', $where)
+    );
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if (!$rows) {
+        return [];
+    }
+
+    $now = time();
+    $overdueAssets = [];
+    foreach ($rows as $row) {
+        $ts = expected_to_timestamp($row['expected_checkin'] ?? '');
+        if ($ts === null || $ts > $now) {
+            continue;
+        }
+        $tag = $row['asset_tag'] ?? 'Unknown tag';
+        $modelName = $row['model_name'] ?? '';
+        $due = format_overdue_date($row['expected_checkin'] ?? '');
+        $overdueAssets[] = [
+            'tag' => $tag,
+            'model' => $modelName,
+            'due' => $due,
+        ];
+    }
+
+    return $overdueAssets;
+}
+
 function row_assigned_to_matches_user(array $row, array $keys, int $userId): bool
 {
     $assigned = $row['assigned_to'] ?? ($row['assigned_to_fullname'] ?? '');
@@ -601,6 +718,12 @@ $lookupKeys = build_lookup_keys(
     $activeUserDisplay,
     $activeUserName
 );
+$lookupSqlValues = build_sql_lookup_values(
+    $activeUserEmail,
+    $activeUserUsername,
+    $activeUserDisplay,
+    $activeUserName
+);
 $cacheBucket = $_SESSION['overdue_check_cache'] ?? [];
 $cached = is_array($cacheBucket) && isset($cacheBucket[$cacheKey]) ? $cacheBucket[$cacheKey] : null;
 if (!$skipOverdueCheck && is_array($cached) && isset($cached['ts'], $cached['data']) && $overdueCacheTtl > 0 && (time() - (int)$cached['ts']) <= $overdueCacheTtl) {
@@ -608,6 +731,34 @@ if (!$skipOverdueCheck && is_array($cached) && isset($cached['ts'], $cached['dat
     $catalogueBlocked = !empty($cachedData['blocked']);
     $overdueAssets = $cachedData['assets'] ?? [];
     $overdueErr = $cachedData['error'] ?? '';
+}
+if (!$skipOverdueCheck && !$catalogueBlocked && empty($overdueAssets)) {
+    try {
+        $snipeUserId = 0;
+        $lookupQueries = array_values(array_filter(array_unique([
+            $activeUserEmail,
+            $activeUserUsername,
+            $activeUserDisplay,
+            $activeUserName,
+        ]), 'strlen'));
+
+        foreach ($lookupQueries as $query) {
+            try {
+                $matched = find_single_user_by_email_or_name($query);
+                $snipeUserId = (int)($matched['id'] ?? 0);
+                if ($snipeUserId > 0) {
+                    break;
+                }
+            } catch (Throwable $e) {
+                // Try next identifier.
+            }
+        }
+
+        $overdueAssets = fetch_overdue_assets_for_user($lookupSqlValues, $snipeUserId);
+        $catalogueBlocked = !empty($overdueAssets);
+    } catch (Throwable $e) {
+        $overdueErr = $debugOn ? $e->getMessage() : 'Unable to check overdue items at the moment.';
+    }
 }
 
 // ---------------------------------------------------------------------
