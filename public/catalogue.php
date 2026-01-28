@@ -966,7 +966,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             <div id="overdue-alert" class="alert alert-danger<?= $catalogueBlocked ? '' : ' d-none' ?>">
                 <div class="fw-semibold mb-2">Catalogue unavailable</div>
                 <div class="mb-2">
-                    You have overdue items in Snipe-IT. Please return them before booking more equipment.
+                    You have overdue items. Please return them before booking more equipment.
                 </div>
                 <ul class="mb-0" id="overdue-list">
                     <?php foreach ($overdueAssets as $asset): ?>
