@@ -259,7 +259,11 @@ function google_directory_search(string $q, array $config): array
     }
 
     $qEsc = str_replace(['\\', '"'], ['\\\\', '\"'], $q);
-    $query = 'email:' . $qEsc . '* OR name:' . $qEsc . '*';
+    $qWild = '*' . $qEsc . '*';
+    $query = 'email:' . $qWild
+        . ' OR name:' . $qWild
+        . ' OR givenName:' . $qWild
+        . ' OR familyName:' . $qWild;
     $url = 'https://admin.googleapis.com/admin/directory/v1/users?'
         . http_build_query([
             'query'      => $query,
@@ -304,16 +308,22 @@ function entra_directory_search(string $q, array $config): array
     }
 
     $qEsc = str_replace("'", "''", $q);
-    $filter = "startswith(displayName,'{$qEsc}') or startswith(mail,'{$qEsc}') or startswith(userPrincipalName,'{$qEsc}')";
+    $filter = "contains(displayName,'{$qEsc}')"
+        . " or contains(mail,'{$qEsc}')"
+        . " or contains(userPrincipalName,'{$qEsc}')"
+        . " or startswith(givenName,'{$qEsc}')"
+        . " or startswith(surname,'{$qEsc}')";
     $url = 'https://graph.microsoft.com/v1.0/users?'
         . http_build_query([
             '$select' => 'displayName,mail,userPrincipalName',
             '$top'    => 20,
+            '$count'  => 'true',
             '$filter' => $filter,
         ]);
 
     $data = http_get_json($url, [
         'Authorization: Bearer ' . $accessToken,
+        'ConsistencyLevel: eventual',
         'Accept: application/json',
     ]);
 
