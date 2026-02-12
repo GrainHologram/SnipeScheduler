@@ -132,6 +132,10 @@ return [
         'block_catalogue_overdue' => true, // block catalogue for users with overdue checkouts
     ],
 
+    'reservations' => [
+        'deletable_statuses' => ['pending', 'confirmed', 'cancelled', 'missed'], // reservation statuses that allow deletion
+    ],
+
     'catalogue' => [
         // Restrict which categories appear in the catalogue filter.
         // Leave empty to show all categories returned by Snipe-IT.

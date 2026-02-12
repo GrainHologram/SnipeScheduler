@@ -247,6 +247,10 @@ if (!empty($_GET['deleted'])) {
                                         Edit
                                     </a>
                                 <?php endif; ?>
+                                <?php
+                                    $deletableStatuses = (load_config())['reservations']['deletable_statuses'] ?? ['pending', 'confirmed', 'cancelled', 'missed'];
+                                    if (in_array($status, $deletableStatuses, true)):
+                                ?>
                                 <form method="post"
                                       action="delete_reservation.php"
                                       onsubmit="return confirm('Delete this reservation and all its items? This cannot be undone.');">
@@ -255,6 +259,7 @@ if (!empty($_GET['deleted'])) {
                                         Delete reservation
                                     </button>
                                 </form>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </div>
