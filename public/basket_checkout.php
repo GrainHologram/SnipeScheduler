@@ -21,15 +21,16 @@ if (!$startRaw || !$endRaw) {
     die('Start and end date/time are required.');
 }
 
-$startTs = strtotime($startRaw);
-$endTs   = strtotime($endRaw);
-
-if ($startTs === false || $endTs === false) {
+$appTz = app_get_timezone();
+try {
+    $startDt = new DateTime($startRaw, $appTz);
+    $endDt   = new DateTime($endRaw, $appTz);
+} catch (Throwable $e) {
     die('Invalid date/time.');
 }
 
-$start = date('Y-m-d H:i:s', $startTs);
-$end   = date('Y-m-d H:i:s', $endTs);
+$start = $startDt->format('Y-m-d H:i:s');
+$end   = $endDt->format('Y-m-d H:i:s');
 
 if ($end <= $start) {
     die('End time must be after start time.');

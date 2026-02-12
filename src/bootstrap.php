@@ -16,3 +16,11 @@ if (!defined('CONFIG_PATH')) {
 
 require_once SRC_PATH . '/config_loader.php';
 require_once SRC_PATH . '/datetime_helpers.php';
+
+// Set PHP's default timezone to the app's configured timezone so that
+// all date/time functions (new DateTime(), strtotime(), date(), etc.)
+// use the correct timezone by default.
+$appTz = app_get_timezone();
+if ($appTz) {
+    date_default_timezone_set($appTz->getName());
+}

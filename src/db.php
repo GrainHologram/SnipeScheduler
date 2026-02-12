@@ -37,3 +37,11 @@ try {
 } catch (PDOException $e) {
     throw new RuntimeException('Could not connect to booking database: ' . $e->getMessage(), 0, $e);
 }
+
+// Align the MySQL session timezone with the app's configured timezone so that
+// CURRENT_TIMESTAMP (used by created_at columns) matches PHP-generated dates.
+$appTz = app_get_timezone();
+if ($appTz) {
+    $offset = (new DateTime('now', $appTz))->format('P'); // e.g. "-05:00"
+    $pdo->exec('SET time_zone = ' . $pdo->quote($offset));
+}
