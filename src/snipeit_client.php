@@ -288,7 +288,7 @@ function get_bookable_models(
 }
 
 /**
- * Fetch all model categories from Snipe-IT.
+ * Fetch unique categories from requestable asset models in Snipe-IT.
  * Always returned A–Z by name (client-side sort).
  *
  * @return array
@@ -297,23 +297,30 @@ function get_bookable_models(
 function get_model_categories(): array
 {
     $params = [
-        'limit' => 500,
+        'limit'       => 500,
+        'requestable' => 'true', // String required — Snipe-IT API ignores PHP bool true (API bug/quirk)
     ];
 
-    $data = snipeit_request('GET', 'categories', $params);
+    $data = snipeit_request('GET', 'models', $params);
 
     if (!isset($data['rows']) || !is_array($data['rows'])) {
         return [];
     }
 
-    $rows = $data['rows'];
-    // Keep only categories that have at least one requestable model if API returns requestable_count
-    $rows = array_values(array_filter($rows, function ($row) {
-        if (isset($row['requestable_count']) && is_numeric($row['requestable_count'])) {
-            return (int)$row['requestable_count'] > 0;
+    $seen = [];
+    $rows = [];
+    foreach ($data['rows'] as $model) {
+        $cat = $model['category'] ?? null;
+        if (!is_array($cat) || empty($cat['id'])) {
+            continue;
         }
-        return true;
-    }));
+        $cid = (int)$cat['id'];
+        if (isset($seen[$cid])) {
+            continue;
+        }
+        $seen[$cid] = true;
+        $rows[] = $cat;
+    }
 
     usort($rows, function ($a, $b) {
         $na = $a['name'] ?? '';
