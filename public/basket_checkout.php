@@ -21,15 +21,18 @@ if (!$startRaw || !$endRaw) {
     die('Start and end date/time are required.');
 }
 
-$startTs = strtotime($startRaw);
-$endTs   = strtotime($endRaw);
-
-if ($startTs === false || $endTs === false) {
+// Form values are in the app's local timezone; convert to UTC for DB storage
+$appTz = app_get_timezone();
+$utc   = new DateTimeZone('UTC');
+try {
+    $startDt = new DateTime($startRaw, $appTz);
+    $endDt   = new DateTime($endRaw, $appTz);
+} catch (Throwable $e) {
     die('Invalid date/time.');
 }
 
-$start = date('Y-m-d H:i:s', $startTs);
-$end   = date('Y-m-d H:i:s', $endTs);
+$start = $startDt->setTimezone($utc)->format('Y-m-d H:i:s');
+$end   = $endDt->setTimezone($utc)->format('Y-m-d H:i:s');
 
 if ($end <= $start) {
     die('End time must be after start time.');

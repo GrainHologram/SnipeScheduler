@@ -13,9 +13,10 @@ $isStaff = !empty($currentUser['is_staff']) || $isAdmin;
 $basket = $_SESSION['basket'] ?? [];
 
 // Preview availability dates (from GET) with sensible defaults
-$now = new DateTime();
+$appTz = app_get_timezone();
+$now = new DateTime('now', $appTz);
 $defaultStart = $now->format('Y-m-d\TH:i');
-$defaultEnd   = (new DateTime('tomorrow 9:00'))->format('Y-m-d\TH:i');
+$defaultEnd   = (new DateTime('tomorrow 9:00', $appTz))->format('Y-m-d\TH:i');
 
 $previewStartRaw = $_GET['start_datetime'] ?? '';
 $previewEndRaw   = $_GET['end_datetime'] ?? '';
@@ -41,16 +42,24 @@ $previewEnd   = null;
 $previewError = '';
 
 if ($previewStartRaw && $previewEndRaw) {
-    $startTs = strtotime($previewStartRaw);
-    $endTs   = strtotime($previewEndRaw);
+    $utc = new DateTimeZone('UTC');
+    try {
+        // Form values are in the app's local timezone
+        $startDt = new DateTime($previewStartRaw, $appTz);
+        $endDt   = new DateTime($previewEndRaw, $appTz);
+    } catch (Throwable $e) {
+        $startDt = null;
+        $endDt   = null;
+    }
 
-    if ($startTs === false || $endTs === false) {
+    if (!$startDt || !$endDt) {
         $previewError = 'Invalid date/time for availability preview.';
-    } elseif ($endTs <= $startTs) {
+    } elseif ($endDt <= $startDt) {
         $previewError = 'End time must be after start time for availability preview.';
     } else {
-        $previewStart = date('Y-m-d H:i:s', $startTs);
-        $previewEnd   = date('Y-m-d H:i:s', $endTs);
+        // Convert to UTC for DB queries
+        $previewStart = $startDt->setTimezone($utc)->format('Y-m-d H:i:s');
+        $previewEnd   = $endDt->setTimezone($utc)->format('Y-m-d H:i:s');
     }
 }
 

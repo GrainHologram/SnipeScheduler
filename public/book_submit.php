@@ -17,19 +17,22 @@ if (!$assetId || !$startRaw || !$endRaw) {
     die('Missing required fields.');
 }
 
-$startTs = strtotime($startRaw);
-$endTs   = strtotime($endRaw);
-
-if ($startTs === false || $endTs === false) {
+// Form values are in the app's local timezone; convert to UTC for DB storage
+$appTz = app_get_timezone();
+$utc   = new DateTimeZone('UTC');
+try {
+    $startDt = new DateTime($startRaw, $appTz);
+    $endDt   = new DateTime($endRaw, $appTz);
+} catch (Throwable $e) {
     die('Invalid date/time.');
 }
 
-$start = date('Y-m-d H:i:s', $startTs);
-$end   = date('Y-m-d H:i:s', $endTs);
-
-if ($end <= $start) {
+if ($endDt <= $startDt) {
     die('End time must be after start time.');
 }
+
+$start = $startDt->setTimezone($utc)->format('Y-m-d H:i:s');
+$end   = $endDt->setTimezone($utc)->format('Y-m-d H:i:s');
 
 // Load asset from Snipe-IT
 try {

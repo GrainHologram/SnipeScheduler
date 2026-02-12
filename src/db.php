@@ -37,3 +37,4 @@ try {
 } catch (PDOException $e) {
     throw new RuntimeException('Could not connect to booking database: ' . $e->getMessage(), 0, $e);
 }
+

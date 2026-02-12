@@ -10,9 +10,10 @@ require_once SRC_PATH . '/activity_log.php';
 require_once SRC_PATH . '/email.php';
 require_once SRC_PATH . '/layout.php';
 
-$now = new DateTime();
+$appTz = app_get_timezone();
+$now = new DateTime('now', $appTz);
 $defaultStart = $now->format('Y-m-d\TH:i');
-$defaultEnd   = (new DateTime('tomorrow 9:00'))->format('Y-m-d\TH:i');
+$defaultEnd   = (new DateTime('tomorrow 9:00', $appTz))->format('Y-m-d\TH:i');
 
 $startRaw = $_POST['start_datetime'] ?? $defaultStart;
 $endRaw   = $_POST['end_datetime'] ?? $defaultEnd;
@@ -172,16 +173,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $startRaw        = trim($_POST['start_datetime'] ?? $startRaw);
         $endRaw          = trim($_POST['end_datetime'] ?? $endRaw);
 
-        $startTs = strtotime($startRaw);
-        $endTs   = strtotime($endRaw);
+        // Form values are in the app's local timezone; convert to UTC
+        $utc = new DateTimeZone('UTC');
+        try {
+            $startDt = new DateTime($startRaw, $appTz);
+            $endDt   = new DateTime($endRaw, $appTz);
+        } catch (Throwable $e) {
+            $startDt = null;
+            $endDt   = null;
+        }
 
         if ($checkoutTo === '') {
             $errors[] = 'Please enter the Snipe-IT user (email or name) to check out to.';
         } elseif (empty($checkoutAssets)) {
             $errors[] = 'There are no assets in the checkout list.';
-        } elseif ($startTs === false || $endTs === false) {
+        } elseif (!$startDt || !$endDt) {
             $errors[] = 'Invalid start or end date/time.';
-        } elseif ($endTs <= $startTs) {
+        } elseif ($endDt <= $startDt) {
             $errors[] = 'End date/time must be after start date/time.';
         } else {
             try {
@@ -262,7 +270,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!empty($reservationConflicts) && !$overrideAllowed) {
                         $errors[] = 'Some assets are reserved for this time. Review who reserved them below or tick "Override" to proceed anyway.';
                     } else {
-                        $expectedCheckinIso = date('Y-m-d H:i:s', $endTs);
+                        $expectedCheckinIso = $endDt->setTimezone($utc)->format('Y-m-d H:i:s');
 
                         foreach ($checkoutAssets as $asset) {
                             $assetId  = (int)$asset['id'];
@@ -277,8 +285,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
 
                     if (empty($errors)) {
-                        $reservationStart = date('Y-m-d H:i:s', $startTs);
-                        $reservationEnd   = date('Y-m-d H:i:s', $endTs);
+                        $reservationStart = $startDt->setTimezone($utc)->format('Y-m-d H:i:s');
+                        $reservationEnd   = $endDt->setTimezone($utc)->format('Y-m-d H:i:s');
                         $assetTags = array_map(function ($a) {
                             $tag   = $a['asset_tag'] ?? '';
                             $model = $a['model'] ?? '';
@@ -365,7 +373,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $staffName  = trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''));
                         $staffDisplayName = $staffName !== '' ? $staffName : ($currentUser['email'] ?? 'Staff');
                         $assetLines = $assetsText;
-                        $dueDisplay = app_format_datetime($endTs);
+                        $dueDisplay = app_format_datetime($reservationEnd);
                         $bodyLines = [
                             'Assets checked out:',
                             $assetLines,
