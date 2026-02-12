@@ -42,7 +42,9 @@ $previewEnd   = null;
 $previewError = '';
 
 if ($previewStartRaw && $previewEndRaw) {
+    $utc = new DateTimeZone('UTC');
     try {
+        // Form values are in the app's local timezone
         $startDt = new DateTime($previewStartRaw, $appTz);
         $endDt   = new DateTime($previewEndRaw, $appTz);
     } catch (Throwable $e) {
@@ -55,8 +57,9 @@ if ($previewStartRaw && $previewEndRaw) {
     } elseif ($endDt <= $startDt) {
         $previewError = 'End time must be after start time for availability preview.';
     } else {
-        $previewStart = $startDt->format('Y-m-d H:i:s');
-        $previewEnd   = $endDt->format('Y-m-d H:i:s');
+        // Convert to UTC for DB queries
+        $previewStart = $startDt->setTimezone($utc)->format('Y-m-d H:i:s');
+        $previewEnd   = $endDt->setTimezone($utc)->format('Y-m-d H:i:s');
     }
 }
 

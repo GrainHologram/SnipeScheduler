@@ -71,11 +71,17 @@ function datetime_local_value(?string $isoDatetime): string
     if (!$isoDatetime) {
         return '';
     }
-    $ts = strtotime($isoDatetime);
-    if ($ts === false) {
+    // DB values are UTC; convert to app timezone for the form
+    $appTz = app_get_timezone();
+    try {
+        $dt = new DateTime($isoDatetime, new DateTimeZone('UTC'));
+        if ($appTz) {
+            $dt->setTimezone($appTz);
+        }
+        return $dt->format('Y-m-d\TH:i');
+    } catch (Throwable $e) {
         return '';
     }
-    return date('Y-m-d\TH:i', $ts);
 }
 
 $errors = [];
@@ -172,14 +178,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $addLabels   = $_POST['add_model_label'] ?? [];
     $addImages   = $_POST['add_model_image'] ?? [];
 
-    $startTs = strtotime($startRaw);
-    $endTs   = strtotime($endRaw);
+    // Form values are in the app's local timezone; convert to UTC for DB
+    $appTz = app_get_timezone();
+    $utc   = new DateTimeZone('UTC');
+    try {
+        $startDt = new DateTime($startRaw, $appTz);
+        $endDt   = new DateTime($endRaw, $appTz);
+    } catch (Throwable $e) {
+        $startDt = null;
+        $endDt   = null;
+    }
 
-    if ($startTs === false || $endTs === false) {
+    if (!$startDt || !$endDt) {
         $errors[] = 'Start and end date/time must be valid.';
     } else {
-        $start = date('Y-m-d H:i:s', $startTs);
-        $end   = date('Y-m-d H:i:s', $endTs);
+        $start = $startDt->setTimezone($utc)->format('Y-m-d H:i:s');
+        $end   = $endDt->setTimezone($utc)->format('Y-m-d H:i:s');
         if ($end <= $start) {
             $errors[] = 'End time must be after start time.';
         }
