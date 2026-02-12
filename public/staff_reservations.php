@@ -505,6 +505,10 @@ try {
                                                 </button>
                                             </form>
                                         <?php endif; ?>
+                                        <?php
+                                            $deletableStatuses = (load_config())['reservations']['deletable_statuses'] ?? ['pending', 'confirmed', 'cancelled', 'missed'];
+                                            if (in_array($status, $deletableStatuses, true)):
+                                        ?>
                                         <form method="post"
                                               action="delete_reservation.php"
                                               onsubmit="return confirm('Delete this reservation and all its items? This cannot be undone.');">
@@ -515,6 +519,7 @@ try {
                                                 Delete
                                             </button>
                                         </form>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>

@@ -26,7 +26,7 @@ if ($resId <= 0) {
 
 // Load reservation to check ownership
 $stmt = $pdo->prepare("
-    SELECT id, user_id
+    SELECT id, user_id, status
     FROM reservations
     WHERE id = :id
     LIMIT 1
@@ -47,6 +47,14 @@ $ownsReservation = $currentUserId !== ''
 if (!$isStaff && !$ownsReservation) {
     http_response_code(403);
     echo 'Access denied.';
+    exit;
+}
+
+$config = load_config();
+$deletableStatuses = $config['reservations']['deletable_statuses'] ?? ['pending', 'confirmed', 'cancelled', 'missed'];
+if (!in_array($reservation['status'] ?? '', $deletableStatuses, true)) {
+    http_response_code(403);
+    echo 'This reservation cannot be deleted.';
     exit;
 }
 

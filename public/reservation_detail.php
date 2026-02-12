@@ -143,6 +143,10 @@ $active  = 'staff_reservations.php'; // Treat detail view as part of booking his
             </div>
         <?php endif; ?>
 
+        <?php
+            $deletableStatuses = (load_config())['reservations']['deletable_statuses'] ?? ['pending', 'confirmed', 'cancelled', 'missed'];
+            if (in_array($reservation['status'] ?? '', $deletableStatuses, true)):
+        ?>
         <form method="post"
               action="delete_reservation.php"
               onsubmit="return confirm('Delete this booking and all its items? This cannot be undone.');">
@@ -151,6 +155,7 @@ $active  = 'staff_reservations.php'; // Treat detail view as part of booking his
                 Delete this booking
             </button>
         </form>
+        <?php endif; ?>
 
     </div>
 </div>
