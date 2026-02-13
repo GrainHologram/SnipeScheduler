@@ -543,7 +543,7 @@ function layout_checked_out_url(string $base, array $params): string
                                     <td><?= h($user) ?></td>
                                     <td><?= h(format_display_datetime($checkedOut)) ?></td>
                                     <td class="<?= $isOverdue ? 'text-danger fw-semibold' : '' ?>">
-                                        <?= h(format_display_datetime($expected)) ?>
+                                        <?= h(format_display_date($expected)) ?>
                                     </td>
                                     <td>
                                         <input type="datetime-local"
