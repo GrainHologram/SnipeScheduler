@@ -91,8 +91,15 @@ foreach ($assets as $a) {
     $tag    = $a['asset_tag'] ?? '';
     $model  = $a['model']['name'] ?? '';
     $expRaw = $a['_expected_checkin_norm'] ?? ($a['expected_checkin'] ?? '');
-    $expTs  = $expRaw ? strtotime($expRaw) : null;
-    $exp    = $expTs ? app_format_date($expTs) : 'unknown';
+    // Snipe-IT dates are in the app's local timezone, not UTC.
+    $appTz = app_get_timezone();
+    try {
+        $dtExp = $expRaw ? new DateTime($expRaw, $appTz) : null;
+        $expTs = $dtExp ? $dtExp->getTimestamp() : null;
+    } catch (Throwable $e) {
+        $expTs = null;
+    }
+    $exp    = $expRaw ? app_format_date_local($expRaw) : 'unknown';
     $daysOverdue = $expTs ? max(1, (int)floor((time() - $expTs) / 86400)) : 1;
 
     if (!isset($buckets[$email])) {

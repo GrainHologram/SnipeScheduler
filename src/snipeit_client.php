@@ -933,7 +933,14 @@ function fetch_checked_out_assets_from_snipeit(bool $overdueOnly = false, int $m
             if (is_string($expectedCheckin) && preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $expectedCheckin)) {
                 $normalizedExpected = $expectedCheckin . ' 23:59:59';
             }
-            $expTs = $normalizedExpected ? strtotime($normalizedExpected) : null;
+            // Snipe-IT dates are in the app's local timezone, not UTC.
+            $appTz = app_get_timezone();
+            try {
+                $dt = new DateTime($normalizedExpected, $appTz);
+                $expTs = $dt->getTimestamp();
+            } catch (Throwable $e) {
+                $expTs = null;
+            }
             if (!$expTs || $expTs > $now) {
                 continue;
             }
@@ -991,7 +998,14 @@ function list_checked_out_assets(bool $overdueOnly = false): array
             if (is_string($expectedCheckin) && preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $expectedCheckin)) {
                 $normalizedExpected = $expectedCheckin . ' 23:59:59';
             }
-            $expTs = $normalizedExpected ? strtotime($normalizedExpected) : null;
+            // Snipe-IT dates are in the app's local timezone, not UTC.
+            $appTz = app_get_timezone();
+            try {
+                $dt = new DateTime($normalizedExpected, $appTz);
+                $expTs = $dt->getTimestamp();
+            } catch (Throwable $e) {
+                $expTs = null;
+            }
             if (!$expTs || $expTs > $now) {
                 continue;
             }

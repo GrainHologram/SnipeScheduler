@@ -126,3 +126,56 @@ if (!function_exists('app_format_datetime')) {
         return $dt->format($format);
     }
 }
+
+/**
+ * Format a date that is already in the app's local timezone (e.g. from
+ * Snipe-IT API).  Unlike app_format_date(), this does NOT apply a
+ * UTC → local conversion.
+ */
+if (!function_exists('app_format_date_local')) {
+    function app_format_date_local($value, ?array $cfg = null): string
+    {
+        if (is_array($value)) {
+            $value = $value['datetime'] ?? ($value['date'] ?? '');
+        }
+        $text = trim((string)$value);
+        if ($text === '') {
+            return '';
+        }
+        $cfg = $cfg ?? load_config();
+        $appTz = app_get_timezone($cfg);
+        try {
+            $dt = new DateTime($text, $appTz);
+        } catch (Throwable $e) {
+            return $text;
+        }
+        return $dt->format(app_get_date_format($cfg));
+    }
+}
+
+/**
+ * Format a datetime that is already in the app's local timezone (e.g. from
+ * Snipe-IT API).  Unlike app_format_datetime(), this does NOT apply a
+ * UTC → local conversion.
+ */
+if (!function_exists('app_format_datetime_local')) {
+    function app_format_datetime_local($value, ?array $cfg = null): string
+    {
+        if (is_array($value)) {
+            $value = $value['datetime'] ?? ($value['date'] ?? '');
+        }
+        $text = trim((string)$value);
+        if ($text === '') {
+            return '';
+        }
+        $cfg = $cfg ?? load_config();
+        $appTz = app_get_timezone($cfg);
+        try {
+            $dt = new DateTime($text, $appTz);
+        } catch (Throwable $e) {
+            return $text;
+        }
+        $format = app_get_date_format($cfg) . ' ' . app_get_time_format($cfg);
+        return $dt->format($format);
+    }
+}

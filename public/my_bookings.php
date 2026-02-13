@@ -168,8 +168,8 @@ if (!empty($_GET['deleted'])) {
                                     <td><?= h($row['asset_tag'] ?? '') ?></td>
                                     <td><?= h($row['asset_name'] ?? '') ?></td>
                                     <td><?= h($row['model_name'] ?? '') ?></td>
-                                    <td><?= h(display_datetime($row['last_checkout'] ?? '')) ?></td>
-                                    <td><?= h(display_date($row['expected_checkin'] ?? '')) ?></td>
+                                    <td><?= h(app_format_datetime_local($row['last_checkout'] ?? '')) ?></td>
+                                    <td><?= h(app_format_date_local($row['expected_checkin'] ?? '')) ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
