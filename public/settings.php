@@ -388,6 +388,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $catalogue['allowed_categories'] = $allowedCategories;
 
+    $allStatuses = ['pending', 'confirmed', 'completed', 'cancelled', 'missed'];
+    $reservations = $config['reservations'] ?? [];
+    $selectedStatuses = $_POST['reservations_deletable_statuses'] ?? [];
+    if (!is_array($selectedStatuses)) {
+        $selectedStatuses = [];
+    }
+    $reservations['deletable_statuses'] = array_values(array_intersect($selectedStatuses, $allStatuses));
+
     $smtp = $config['smtp'] ?? [];
     $smtp['host']       = $post('smtp_host', $smtp['host'] ?? '');
     $smtp['port']       = (int)$post('smtp_port', $smtp['port'] ?? 587);
@@ -407,8 +415,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $newConfig['google_oauth'] = $google;
     $newConfig['microsoft_oauth'] = $ms;
     $newConfig['app']        = $app;
-    $newConfig['catalogue']  = $catalogue;
-    $newConfig['smtp']       = $smtp;
+    $newConfig['catalogue']     = $catalogue;
+    $newConfig['reservations']  = $reservations;
+    $newConfig['smtp']          = $smtp;
 
     // Keep posted values in the form
     $config        = $newConfig;
@@ -1070,6 +1079,41 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                                 <div class="form-text mt-1">
                                     When enabled, users with overdue assets cannot access the catalogue until items are returned.
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <?php
+                $deletableStatuses = $cfg(['reservations', 'deletable_statuses'], ['pending', 'confirmed', 'cancelled', 'missed']);
+                if (!is_array($deletableStatuses)) {
+                    $deletableStatuses = ['pending', 'confirmed', 'cancelled', 'missed'];
+                }
+                $allReservationStatuses = ['pending', 'confirmed', 'completed', 'cancelled', 'missed'];
+            ?>
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-1">Reservations</h5>
+                        <p class="text-muted small mb-3">Control which reservation statuses allow deletion.</p>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label fw-semibold">Deletable statuses</label>
+                                <div class="form-text mb-2">Reservations with these statuses can be deleted by staff and users. Unchecked statuses are protected from deletion.</div>
+                                <?php foreach ($allReservationStatuses as $status): ?>
+                                    <div class="form-check">
+                                        <input class="form-check-input"
+                                               type="checkbox"
+                                               name="reservations_deletable_statuses[]"
+                                               value="<?= h($status) ?>"
+                                               id="res_del_<?= h($status) ?>"
+                                            <?= in_array($status, $deletableStatuses, true) ? 'checked' : '' ?>>
+                                        <label class="form-check-label" for="res_del_<?= h($status) ?>">
+                                            <?= h(ucfirst($status)) ?>
+                                        </label>
+                                    </div>
+                                <?php endforeach; ?>
                             </div>
                         </div>
                     </div>
