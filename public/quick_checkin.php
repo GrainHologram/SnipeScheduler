@@ -111,6 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'assigned_id'    => $assignedId,
                     'assigned_email' => $assignedEmail,
                     'assigned_name'  => $assignedName,
+                    'checked_out'    => !empty($assigned),
                 ];
                 $label = $modelName !== '' ? $modelName : $assetName;
                 $messages[] = "Added asset {$assetTag} ({$label}) to check-in list.";
@@ -160,166 +161,185 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
 
-                    checkin_asset($assetId, $note);
-                    $messages[] = "Checked in asset {$assetTag}.";
                     $model = $asset['model'] ?? '';
                     $formatted = $model !== '' ? ($assetTag . ' (' . $model . ')') : $assetTag;
                     $assetTags[] = $formatted;
 
-                    if ($assignedEmail === '' && $assignedId > 0) {
-                        if (isset($userIdCache[$assignedId])) {
-                            $cached = $userIdCache[$assignedId];
-                            $assignedEmail = $cached['email'] ?? '';
-                            $assignedName = $assignedName !== '' ? $assignedName : ($cached['name'] ?? '');
-                        } else {
-                            try {
-                                $matchedUser = snipeit_request('GET', 'users/' . $assignedId);
-                                $matchedEmail = $matchedUser['email'] ?? ($matchedUser['username'] ?? '');
-                                $matchedName  = $matchedUser['name'] ?? ($matchedUser['username'] ?? '');
-                                $userIdCache[$assignedId] = [
-                                    'email' => $matchedEmail,
-                                    'name'  => $matchedName,
-                                ];
-                                if ($matchedEmail !== '') {
-                                    $assignedEmail = $matchedEmail;
-                                }
-                                if ($assignedName === '' && $matchedName !== '') {
-                                    $assignedName = $matchedName;
-                                }
-                            } catch (Throwable $e) {
-                                // Skip lookup failure; user details may be unavailable.
-                            }
-                        }
-                    }
-                    if ($assignedEmail === '' && $assignedName !== '') {
-                        $cacheKey = strtolower(trim($assignedName));
-                        if (isset($userLookupCache[$cacheKey])) {
-                            $assignedEmail = $userLookupCache[$cacheKey];
-                        } else {
-                            try {
-                                $matchedUser = find_single_user_by_email_or_name($assignedName);
-                                $matchedEmail = $matchedUser['email'] ?? ($matchedUser['username'] ?? '');
-                                if ($matchedEmail !== '') {
-                                    $assignedEmail = $matchedEmail;
-                                    $userLookupCache[$cacheKey] = $matchedEmail;
-                                }
-                            } catch (Throwable $e) {
-                                try {
-                                    $data = snipeit_request('GET', 'users', [
-                                        'search' => $assignedName,
-                                        'limit'  => 50,
-                                    ]);
-                                    $rows = $data['rows'] ?? [];
-                                    $exact = [];
-                                    $nameLower = strtolower(trim($assignedName));
-                                    foreach ($rows as $row) {
-                                        $rowName = strtolower(trim((string)($row['name'] ?? '')));
-                                        $rowEmail = strtolower(trim((string)($row['email'] ?? ($row['username'] ?? ''))));
-                                        if ($rowName !== '' && $rowName === $nameLower) {
-                                            $exact[] = $row;
-                                        } elseif ($rowEmail !== '' && $rowEmail === $nameLower) {
-                                            $exact[] = $row;
-                                        }
-                                    }
-                                    if (!empty($exact)) {
-                                        $picked = $exact[0];
-                                        $matchedEmail = $picked['email'] ?? ($picked['username'] ?? '');
-                                        if ($matchedEmail !== '') {
-                                            $assignedEmail = $matchedEmail;
-                                            $userLookupCache[$cacheKey] = $matchedEmail;
-                                        }
-                                        if ($assignedName === '') {
-                                            $assignedName = $picked['name'] ?? ($picked['username'] ?? '');
-                                        }
-                                    }
-                                } catch (Throwable $e2) {
-                                    // Skip lookup failure; user email may be unavailable.
-                                }
-                            }
-                        }
-                    }
-                    if ($assignedEmail === '' && $assignedName === '' && $assignedId === 0) {
-                        try {
-                            $history = snipeit_request('GET', 'hardware/' . $assetId . '/history');
-                            $rows = $history['rows'] ?? [];
-                            foreach ($rows as $row) {
-                                $action = strtolower((string)($row['action_type'] ?? ($row['action'] ?? '')));
-                                if ($action === '' || strpos($action, 'checkout') === false) {
-                                    continue;
-                                }
-                                $target = $row['target'] ?? null;
-                                $histId = 0;
-                                $histName = '';
-                                $histEmail = '';
-                                if (is_array($target)) {
-                                    $histId = (int)($target['id'] ?? 0);
-                                    $histName = $target['name'] ?? ($target['username'] ?? '');
-                                    $histEmail = $target['email'] ?? ($target['username'] ?? '');
-                                } else {
-                                    $histId = (int)($row['target_id'] ?? 0);
-                                    $histName = $row['target_name'] ?? ($row['checkedout_to'] ?? '');
-                                    $histEmail = $row['target_email'] ?? '';
-                                }
+                    $isCheckedOut = !empty($asset['checked_out']);
 
-                                if ($histEmail === '' && $histId > 0) {
-                                    if (isset($userIdCache[$histId])) {
-                                        $cached = $userIdCache[$histId];
-                                        $histEmail = $cached['email'] ?? '';
-                                        $histName = $histName !== '' ? $histName : ($cached['name'] ?? '');
-                                    } else {
-                                        try {
-                                            $matchedUser = snipeit_request('GET', 'users/' . $histId);
-                                            $matchedEmail = $matchedUser['email'] ?? ($matchedUser['username'] ?? '');
-                                            $matchedName  = $matchedUser['name'] ?? ($matchedUser['username'] ?? '');
-                                            $userIdCache[$histId] = [
-                                                'email' => $matchedEmail,
-                                                'name'  => $matchedName,
-                                            ];
-                                            $histEmail = $matchedEmail;
-                                            if ($histName === '' && $matchedName !== '') {
-                                                $histName = $matchedName;
-                                            }
-                                        } catch (Throwable $e) {
-                                            // Skip lookup failure; user details may be unavailable.
-                                        }
-                                    }
-                                }
-
-                                if ($histEmail !== '' || $histName !== '') {
-                                    $assignedEmail = $histEmail !== '' ? $histEmail : $assignedEmail;
-                                    $assignedName = $histName !== '' ? $histName : $assignedName;
-                                    break;
-                                }
-                            }
-                        } catch (Throwable $e) {
-                            // Skip history lookup failure.
+                    if (!$isCheckedOut) {
+                        // Asset is not currently checked out — add a note to its history instead of failing
+                        $noteText = 'Asset returned via quick check-in by ' . $staffDisplayName . '. Asset was not checked out at the time.';
+                        if ($note !== '') {
+                            $noteText .= ' Staff note: ' . $note;
                         }
-                    }
+                        add_asset_note($assetId, $noteText);
+                        $messages[] = "Noted asset {$assetTag} (not checked out).";
 
-                    $summaryLabel = '';
-                    if ($assignedEmail !== '') {
-                        $summaryLabel = $assignedName !== '' && $assignedName !== $assignedEmail
-                            ? ($assignedName . " <{$assignedEmail}>")
-                            : $assignedEmail;
-                    } elseif ($assignedName !== '') {
-                        $summaryLabel = $assignedName;
+                        $summaryLabel = 'Not checked out';
+                        if (!isset($summaryBuckets[$summaryLabel])) {
+                            $summaryBuckets[$summaryLabel] = [];
+                        }
+                        $summaryBuckets[$summaryLabel][] = $formatted;
                     } else {
-                        $summaryLabel = 'Unknown user';
-                    }
-                    if (!isset($summaryBuckets[$summaryLabel])) {
-                        $summaryBuckets[$summaryLabel] = [];
-                    }
-                    $summaryBuckets[$summaryLabel][] = $formatted;
+                        checkin_asset($assetId, $note);
+                        $messages[] = "Checked in asset {$assetTag}.";
 
-                    if ($assignedEmail !== '') {
-                        if (!isset($userBuckets[$assignedEmail])) {
-                            $displayName = $assignedName !== '' ? $assignedName : $assignedEmail;
-                            $userBuckets[$assignedEmail] = [
-                                'name' => $displayName,
-                                'assets' => [],
-                            ];
+                        if ($assignedEmail === '' && $assignedId > 0) {
+                            if (isset($userIdCache[$assignedId])) {
+                                $cached = $userIdCache[$assignedId];
+                                $assignedEmail = $cached['email'] ?? '';
+                                $assignedName = $assignedName !== '' ? $assignedName : ($cached['name'] ?? '');
+                            } else {
+                                try {
+                                    $matchedUser = snipeit_request('GET', 'users/' . $assignedId);
+                                    $matchedEmail = $matchedUser['email'] ?? ($matchedUser['username'] ?? '');
+                                    $matchedName  = $matchedUser['name'] ?? ($matchedUser['username'] ?? '');
+                                    $userIdCache[$assignedId] = [
+                                        'email' => $matchedEmail,
+                                        'name'  => $matchedName,
+                                    ];
+                                    if ($matchedEmail !== '') {
+                                        $assignedEmail = $matchedEmail;
+                                    }
+                                    if ($assignedName === '' && $matchedName !== '') {
+                                        $assignedName = $matchedName;
+                                    }
+                                } catch (Throwable $e) {
+                                    // Skip lookup failure; user details may be unavailable.
+                                }
+                            }
                         }
-                        $userBuckets[$assignedEmail]['assets'][] = $formatted;
+                        if ($assignedEmail === '' && $assignedName !== '') {
+                            $cacheKey = strtolower(trim($assignedName));
+                            if (isset($userLookupCache[$cacheKey])) {
+                                $assignedEmail = $userLookupCache[$cacheKey];
+                            } else {
+                                try {
+                                    $matchedUser = find_single_user_by_email_or_name($assignedName);
+                                    $matchedEmail = $matchedUser['email'] ?? ($matchedUser['username'] ?? '');
+                                    if ($matchedEmail !== '') {
+                                        $assignedEmail = $matchedEmail;
+                                        $userLookupCache[$cacheKey] = $matchedEmail;
+                                    }
+                                } catch (Throwable $e) {
+                                    try {
+                                        $data = snipeit_request('GET', 'users', [
+                                            'search' => $assignedName,
+                                            'limit'  => 50,
+                                        ]);
+                                        $rows = $data['rows'] ?? [];
+                                        $exact = [];
+                                        $nameLower = strtolower(trim($assignedName));
+                                        foreach ($rows as $row) {
+                                            $rowName = strtolower(trim((string)($row['name'] ?? '')));
+                                            $rowEmail = strtolower(trim((string)($row['email'] ?? ($row['username'] ?? ''))));
+                                            if ($rowName !== '' && $rowName === $nameLower) {
+                                                $exact[] = $row;
+                                            } elseif ($rowEmail !== '' && $rowEmail === $nameLower) {
+                                                $exact[] = $row;
+                                            }
+                                        }
+                                        if (!empty($exact)) {
+                                            $picked = $exact[0];
+                                            $matchedEmail = $picked['email'] ?? ($picked['username'] ?? '');
+                                            if ($matchedEmail !== '') {
+                                                $assignedEmail = $matchedEmail;
+                                                $userLookupCache[$cacheKey] = $matchedEmail;
+                                            }
+                                            if ($assignedName === '') {
+                                                $assignedName = $picked['name'] ?? ($picked['username'] ?? '');
+                                            }
+                                        }
+                                    } catch (Throwable $e2) {
+                                        // Skip lookup failure; user email may be unavailable.
+                                    }
+                                }
+                            }
+                        }
+                        if ($assignedEmail === '' && $assignedName === '' && $assignedId === 0) {
+                            try {
+                                $history = snipeit_request('GET', 'hardware/' . $assetId . '/history');
+                                $rows = $history['rows'] ?? [];
+                                foreach ($rows as $row) {
+                                    $action = strtolower((string)($row['action_type'] ?? ($row['action'] ?? '')));
+                                    if ($action === '' || strpos($action, 'checkout') === false) {
+                                        continue;
+                                    }
+                                    $target = $row['target'] ?? null;
+                                    $histId = 0;
+                                    $histName = '';
+                                    $histEmail = '';
+                                    if (is_array($target)) {
+                                        $histId = (int)($target['id'] ?? 0);
+                                        $histName = $target['name'] ?? ($target['username'] ?? '');
+                                        $histEmail = $target['email'] ?? ($target['username'] ?? '');
+                                    } else {
+                                        $histId = (int)($row['target_id'] ?? 0);
+                                        $histName = $row['target_name'] ?? ($row['checkedout_to'] ?? '');
+                                        $histEmail = $row['target_email'] ?? '';
+                                    }
+
+                                    if ($histEmail === '' && $histId > 0) {
+                                        if (isset($userIdCache[$histId])) {
+                                            $cached = $userIdCache[$histId];
+                                            $histEmail = $cached['email'] ?? '';
+                                            $histName = $histName !== '' ? $histName : ($cached['name'] ?? '');
+                                        } else {
+                                            try {
+                                                $matchedUser = snipeit_request('GET', 'users/' . $histId);
+                                                $matchedEmail = $matchedUser['email'] ?? ($matchedUser['username'] ?? '');
+                                                $matchedName  = $matchedUser['name'] ?? ($matchedUser['username'] ?? '');
+                                                $userIdCache[$histId] = [
+                                                    'email' => $matchedEmail,
+                                                    'name'  => $matchedName,
+                                                ];
+                                                $histEmail = $matchedEmail;
+                                                if ($histName === '' && $matchedName !== '') {
+                                                    $histName = $matchedName;
+                                                }
+                                            } catch (Throwable $e) {
+                                                // Skip lookup failure; user details may be unavailable.
+                                            }
+                                        }
+                                    }
+
+                                    if ($histEmail !== '' || $histName !== '') {
+                                        $assignedEmail = $histEmail !== '' ? $histEmail : $assignedEmail;
+                                        $assignedName = $histName !== '' ? $histName : $assignedName;
+                                        break;
+                                    }
+                                }
+                            } catch (Throwable $e) {
+                                // Skip history lookup failure.
+                            }
+                        }
+
+                        $summaryLabel = '';
+                        if ($assignedEmail !== '') {
+                            $summaryLabel = $assignedName !== '' && $assignedName !== $assignedEmail
+                                ? ($assignedName . " <{$assignedEmail}>")
+                                : $assignedEmail;
+                        } elseif ($assignedName !== '') {
+                            $summaryLabel = $assignedName;
+                        } else {
+                            $summaryLabel = 'Unknown user';
+                        }
+                        if (!isset($summaryBuckets[$summaryLabel])) {
+                            $summaryBuckets[$summaryLabel] = [];
+                        }
+                        $summaryBuckets[$summaryLabel][] = $formatted;
+
+                        if ($assignedEmail !== '') {
+                            if (!isset($userBuckets[$assignedEmail])) {
+                                $displayName = $assignedName !== '' ? $assignedName : $assignedEmail;
+                                $userBuckets[$assignedEmail] = [
+                                    'name' => $displayName,
+                                    'assets' => [],
+                                ];
+                            }
+                            $userBuckets[$assignedEmail]['assets'][] = $formatted;
+                        }
                     }
                 } catch (Throwable $e) {
                     $errors[] = "Failed to check in {$assetTag}: " . $e->getMessage();
@@ -490,10 +510,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                             } elseif ($assignedName !== '') {
                                                 $assignedLabel = $assignedName;
                                             } else {
-                                                $assignedLabel = 'Not checked out';
+                                                $assignedLabel = '';
                                             }
                                         ?>
-                                        <td><?= h($assignedLabel) ?></td>
+                                        <td><?php if ($assignedLabel !== ''): ?><?= h($assignedLabel) ?><?php else: ?><span class="badge bg-warning text-dark">Not checked out</span><?php endif; ?></td>
                                         <td>
                                             <a href="quick_checkin.php?remove=<?= (int)$asset['id'] ?>"
                                                class="btn btn-sm btn-outline-danger">

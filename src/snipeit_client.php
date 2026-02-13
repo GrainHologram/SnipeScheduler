@@ -831,6 +831,41 @@ function checkin_asset(int $assetId, string $note = ''): void
 }
 
 /**
+ * Add a note to an asset's activity log in Snipe-IT.
+ *
+ * @param int    $assetId
+ * @param string $note
+ * @return void
+ * @throws Exception
+ */
+function add_asset_note(int $assetId, string $note): void
+{
+    if ($assetId <= 0) {
+        throw new InvalidArgumentException('Invalid asset ID for note.');
+    }
+    if ($note === '') {
+        throw new InvalidArgumentException('Note text cannot be empty.');
+    }
+
+    $resp = snipeit_request('POST', 'notes/' . $assetId . '/store', ['note' => $note]);
+
+    $status = $resp['status'] ?? 'success';
+    if ($status !== 'success') {
+        $message = $resp['messages'] ?? ($resp['message'] ?? 'Unknown API response');
+        if (is_array($message)) {
+            $flat = [];
+            array_walk_recursive($message, function ($val) use (&$flat) {
+                if (is_string($val) && trim($val) !== '') {
+                    $flat[] = $val;
+                }
+            });
+            $message = $flat ? implode('; ', $flat) : 'Unknown API response';
+        }
+        throw new Exception('Snipe-IT add note did not succeed: ' . $message);
+    }
+}
+
+/**
  * Fetch checked-out assets (requestable only) directly from Snipe-IT.
  *
  * @param bool $overdueOnly
