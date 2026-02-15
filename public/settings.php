@@ -45,6 +45,15 @@ try {
     $categoryFetchError = $e->getMessage();
 }
 
+$snipeitGroups      = [];
+$groupsFetchError   = '';
+try {
+    $snipeitGroups = get_snipeit_groups();
+} catch (Throwable $e) {
+    $snipeitGroups    = [];
+    $groupsFetchError = $e->getMessage();
+}
+
 $definedValues = [
     'SNIPEIT_API_PAGE_LIMIT'    => defined('SNIPEIT_API_PAGE_LIMIT') ? SNIPEIT_API_PAGE_LIMIT : 12,
     'CATALOGUE_ITEMS_PER_PAGE'  => defined('CATALOGUE_ITEMS_PER_PAGE') ? CATALOGUE_ITEMS_PER_PAGE : 12,
@@ -398,6 +407,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $reservations['deletable_statuses'] = array_values(array_intersect($selectedStatuses, $allStatuses));
 
+    // Checkout limits
+    $checkoutLimits = $config['checkout_limits'] ?? [];
+    $checkoutLimits['enabled'] = isset($_POST['checkout_limits_enabled']);
+    $checkoutLimits['single_active_checkout'] = isset($_POST['checkout_single_active']);
+    $checkoutLimits['default'] = [
+        'max_checkout_hours' => max(0, (int)$post('checkout_default_max_checkout', 0)),
+        'max_renewal_hours'  => max(0, (int)$post('checkout_default_max_renewal', 0)),
+        'max_total_hours'    => max(0, (int)$post('checkout_default_max_total', 0)),
+    ];
+    $groupOverrides = [];
+    $overrideGroupIds   = $_POST['checkout_override_group_id'] ?? [];
+    $overrideCheckout   = $_POST['checkout_override_max_checkout'] ?? [];
+    $overrideRenewal    = $_POST['checkout_override_max_renewal'] ?? [];
+    $overrideTotal      = $_POST['checkout_override_max_total'] ?? [];
+    if (is_array($overrideGroupIds)) {
+        foreach ($overrideGroupIds as $idx => $gid) {
+            $gid = (int)$gid;
+            if ($gid <= 0) {
+                continue;
+            }
+            $groupOverrides[$gid] = [
+                'max_checkout_hours' => max(0, (int)($overrideCheckout[$idx] ?? 0)),
+                'max_renewal_hours'  => max(0, (int)($overrideRenewal[$idx] ?? 0)),
+                'max_total_hours'    => max(0, (int)($overrideTotal[$idx] ?? 0)),
+            ];
+        }
+    }
+    $checkoutLimits['group_overrides'] = $groupOverrides;
+
     $smtp = $config['smtp'] ?? [];
     $smtp['host']       = $post('smtp_host', $smtp['host'] ?? '');
     $smtp['port']       = (int)$post('smtp_port', $smtp['port'] ?? 587);
@@ -419,6 +457,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $newConfig['app']        = $app;
     $newConfig['catalogue']     = $catalogue;
     $newConfig['reservations']  = $reservations;
+    $newConfig['checkout_limits'] = $checkoutLimits;
     $newConfig['smtp']          = $smtp;
 
     // Keep posted values in the form
@@ -1132,6 +1171,99 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                 </div>
             </div>
 
+            <?php
+                $clEnabled = (bool)$cfg(['checkout_limits', 'enabled'], false);
+                $clDefaults = $cfg(['checkout_limits', 'default'], []);
+                if (!is_array($clDefaults)) { $clDefaults = []; }
+                $clDefMaxCheckout = (int)($clDefaults['max_checkout_hours'] ?? 0);
+                $clDefMaxRenewal  = (int)($clDefaults['max_renewal_hours'] ?? 0);
+                $clDefMaxTotal    = (int)($clDefaults['max_total_hours'] ?? 0);
+                $clOverrides = $cfg(['checkout_limits', 'group_overrides'], []);
+                if (!is_array($clOverrides)) { $clOverrides = []; }
+                $clSingleActive = (bool)$cfg(['checkout_limits', 'single_active_checkout'], false);
+            ?>
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-1">Checkout Duration Limits</h5>
+                        <p class="text-muted small mb-3">Restrict how long assets can be checked out. Configure defaults and optional per-group overrides (most permissive wins for multi-group users). 0 = unlimited.</p>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="checkout_limits_enabled" id="checkout_limits_enabled" <?= $clEnabled ? 'checked' : '' ?>>
+                                    <label class="form-check-label fw-semibold" for="checkout_limits_enabled">Enable checkout duration limits</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h6 class="fw-semibold mb-2">Defaults</h6>
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Max checkout hours</label>
+                                <input type="number" name="checkout_default_max_checkout" class="form-control" min="0" value="<?= $clDefMaxCheckout ?>">
+                                <div class="form-text">0 = unlimited. 168 = 7 days.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Max renewal hours</label>
+                                <input type="number" name="checkout_default_max_renewal" class="form-control" min="0" value="<?= $clDefMaxRenewal ?>">
+                                <div class="form-text">Maximum extension per renewal.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Max total hours</label>
+                                <input type="number" name="checkout_default_max_total" class="form-control" min="0" value="<?= $clDefMaxTotal ?>">
+                                <div class="form-text">Total including all renewals.</div>
+                            </div>
+                        </div>
+
+                        <h6 class="fw-semibold mb-2">Group Overrides</h6>
+                        <?php if ($groupsFetchError): ?>
+                            <div class="alert alert-warning small mb-3">
+                                Could not load groups from Snipe-IT: <?= h($groupsFetchError) ?>
+                            </div>
+                        <?php endif; ?>
+                        <div id="checkout-overrides-container">
+                            <?php $ovIdx = 0; foreach ($clOverrides as $gid => $ov): ?>
+                                <div class="row g-2 mb-2 checkout-override-row">
+                                    <div class="col-md-3">
+                                        <select name="checkout_override_group_id[]" class="form-select form-select-sm">
+                                            <option value="">-- Select group --</option>
+                                            <?php foreach ($snipeitGroups as $sg): ?>
+                                                <option value="<?= (int)$sg['id'] ?>" <?= (int)$sg['id'] === (int)$gid ? 'selected' : '' ?>><?= h($sg['name']) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <input type="number" name="checkout_override_max_checkout[]" class="form-control form-control-sm" min="0" value="<?= (int)($ov['max_checkout_hours'] ?? 0) ?>" placeholder="Checkout hrs">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <input type="number" name="checkout_override_max_renewal[]" class="form-control form-control-sm" min="0" value="<?= (int)($ov['max_renewal_hours'] ?? 0) ?>" placeholder="Renewal hrs">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <input type="number" name="checkout_override_max_total[]" class="form-control form-control-sm" min="0" value="<?= (int)($ov['max_total_hours'] ?? 0) ?>" placeholder="Total hrs">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button type="button" class="btn btn-sm btn-outline-danger checkout-override-remove">Remove</button>
+                                    </div>
+                                </div>
+                            <?php $ovIdx++; endforeach; ?>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary mb-3" id="checkout-override-add">Add group override</button>
+
+                        <hr class="my-3">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="checkout_single_active" id="checkout_single_active" <?= $clSingleActive ? 'checked' : '' ?>>
+                                    <label class="form-check-label fw-semibold" for="checkout_single_active">Enforce single active checkout per user</label>
+                                </div>
+                                <div class="form-text mt-1">When enabled, a user may only have one set of assets checked out at a time.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="col-12 d-flex justify-content-end">
                 <button type="submit" name="action" value="save" class="btn btn-primary">Save settings</button>
             </div>
@@ -1158,6 +1290,34 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
         el.classList.toggle('text-success', !isError);
         el.classList.toggle('text-danger', isError);
     };
+
+    // Checkout override dynamic rows
+    const overrideContainer = document.getElementById('checkout-overrides-container');
+    const overrideAddBtn = document.getElementById('checkout-override-add');
+    const groupOptionsJson = <?= json_encode(array_map(function ($g) { return ['id' => (int)$g['id'], 'name' => $g['name']]; }, $snipeitGroups)) ?>;
+
+    if (overrideAddBtn && overrideContainer) {
+        overrideAddBtn.addEventListener('click', function () {
+            const row = document.createElement('div');
+            row.className = 'row g-2 mb-2 checkout-override-row';
+            let opts = '<option value="">-- Select group --</option>';
+            groupOptionsJson.forEach(function (g) {
+                opts += '<option value="' + g.id + '">' + g.name.replace(/</g, '&lt;') + '</option>';
+            });
+            row.innerHTML = '<div class="col-md-3"><select name="checkout_override_group_id[]" class="form-select form-select-sm">' + opts + '</select></div>'
+                + '<div class="col-md-2"><input type="number" name="checkout_override_max_checkout[]" class="form-control form-control-sm" min="0" value="0" placeholder="Checkout hrs"></div>'
+                + '<div class="col-md-2"><input type="number" name="checkout_override_max_renewal[]" class="form-control form-control-sm" min="0" value="0" placeholder="Renewal hrs"></div>'
+                + '<div class="col-md-2"><input type="number" name="checkout_override_max_total[]" class="form-control form-control-sm" min="0" value="0" placeholder="Total hrs"></div>'
+                + '<div class="col-md-2"><button type="button" class="btn btn-sm btn-outline-danger checkout-override-remove">Remove</button></div>';
+            overrideContainer.appendChild(row);
+        });
+
+        overrideContainer.addEventListener('click', function (e) {
+            if (e.target.classList.contains('checkout-override-remove')) {
+                e.target.closest('.checkout-override-row').remove();
+            }
+        });
+    }
 
     form.querySelectorAll('[data-test-action]').forEach((btn) => {
         btn.addEventListener('click', (e) => {

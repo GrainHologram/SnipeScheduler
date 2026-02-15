@@ -1005,6 +1005,167 @@ function fetch_checked_out_assets_from_snipeit(bool $overdueOnly = false, int $m
 }
 
 /**
+ * Fetch all Snipe-IT groups (for settings UI dropdown).
+ *
+ * @return array  Array of ['id'=>int,'name'=>string] entries
+ * @throws Exception
+ */
+function get_snipeit_groups(): array
+{
+    $data = snipeit_request('GET', 'groups', ['limit' => 500]);
+    $rows = isset($data['rows']) && is_array($data['rows']) ? $data['rows'] : [];
+    $result = [];
+    foreach ($rows as $row) {
+        $id = (int)($row['id'] ?? 0);
+        $name = $row['name'] ?? '';
+        if ($id > 0 && $name !== '') {
+            $result[] = ['id' => $id, 'name' => $name];
+        }
+    }
+    usort($result, function ($a, $b) {
+        return strcasecmp($a['name'], $b['name']);
+    });
+    return $result;
+}
+
+/**
+ * Fetch a single Snipe-IT user by ID.
+ *
+ * @param int $userId
+ * @return array
+ * @throws Exception
+ */
+function get_user_by_id(int $userId): array
+{
+    if ($userId <= 0) {
+        throw new InvalidArgumentException('Invalid user ID.');
+    }
+    return snipeit_request('GET', 'users/' . $userId);
+}
+
+/**
+ * Get the groups a Snipe-IT user belongs to.
+ *
+ * Returns [['id'=>int,'name'=>string], ...].
+ * Uses session cache with 5-min TTL. If $userData is provided with
+ * groups.rows already populated, skips the API call.
+ *
+ * @param int        $userId
+ * @param array|null $userData  Optional pre-fetched user data
+ * @return array
+ */
+function get_user_groups(int $userId, ?array $userData = null): array
+{
+    static $cache = [];
+
+    if (isset($cache[$userId])) {
+        return $cache[$userId];
+    }
+
+    // Session cache with 5-min TTL
+    $sessionKey = 'snipeit_user_groups';
+    $sessionTtl = 300;
+    if (isset($_SESSION[$sessionKey][$userId])) {
+        $entry = $_SESSION[$sessionKey][$userId];
+        if (isset($entry['ts'], $entry['data']) && (time() - (int)$entry['ts']) <= $sessionTtl) {
+            $cache[$userId] = $entry['data'];
+            return $cache[$userId];
+        }
+    }
+
+    // Check if userData already has groups
+    $rows = null;
+    if ($userData !== null && isset($userData['groups']['rows']) && is_array($userData['groups']['rows'])) {
+        $rows = $userData['groups']['rows'];
+    }
+
+    if ($rows === null) {
+        try {
+            $data = get_user_by_id($userId);
+            $rows = isset($data['groups']['rows']) && is_array($data['groups']['rows'])
+                ? $data['groups']['rows']
+                : [];
+        } catch (Throwable $e) {
+            $rows = [];
+        }
+    }
+
+    $groups = [];
+    foreach ($rows as $row) {
+        $id = (int)($row['id'] ?? 0);
+        $name = $row['name'] ?? '';
+        if ($id > 0) {
+            $groups[] = ['id' => $id, 'name' => $name];
+        }
+    }
+
+    $cache[$userId] = $groups;
+    $_SESSION[$sessionKey][$userId] = ['ts' => time(), 'data' => $groups];
+    return $groups;
+}
+
+/**
+ * Fetch custom field definitions for a fieldset.
+ *
+ * @param int $fieldsetId
+ * @return array
+ * @throws Exception
+ */
+function get_fieldset_fields(int $fieldsetId): array
+{
+    if ($fieldsetId <= 0) {
+        return [];
+    }
+    $data = snipeit_request('GET', 'fieldsets/' . $fieldsetId . '/fields');
+    return isset($data['rows']) && is_array($data['rows']) ? $data['rows'] : [];
+}
+
+/**
+ * Get certification requirements for a model by scanning its fieldset
+ * for boolean custom fields named "Cert - {group}".
+ *
+ * Returns an array of certification names, e.g. ['Photography', 'Drone Pilot'].
+ * Static-cached per request.
+ *
+ * @param int $modelId
+ * @return array
+ */
+function get_model_certification_requirements(int $modelId): array
+{
+    static $cache = [];
+    if (isset($cache[$modelId])) {
+        return $cache[$modelId];
+    }
+
+    $cache[$modelId] = [];
+
+    try {
+        $model = get_model($modelId);
+        $fieldsetId = 0;
+        if (isset($model['fieldset']['id'])) {
+            $fieldsetId = (int)$model['fieldset']['id'];
+        }
+        if ($fieldsetId <= 0) {
+            return $cache[$modelId];
+        }
+
+        $fields = get_fieldset_fields($fieldsetId);
+        foreach ($fields as $field) {
+            $name = $field['name'] ?? '';
+            $type = strtolower($field['type'] ?? $field['element'] ?? '');
+            // Match fields named "Cert - Something" that are checkbox/boolean
+            if (preg_match('/^Cert\s*-\s*(.+)$/i', $name, $m)) {
+                $cache[$modelId][] = trim($m[1]);
+            }
+        }
+    } catch (Throwable $e) {
+        // Silently fail — no cert requirements if API fails
+    }
+
+    return $cache[$modelId];
+}
+
+/**
  * Fetch checked-out assets from the local cache table.
  *
  * @param bool $overdueOnly

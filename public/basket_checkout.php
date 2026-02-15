@@ -4,6 +4,7 @@ require_once SRC_PATH . '/auth.php';
 require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/activity_log.php';
 require_once SRC_PATH . '/snipeit_client.php';
+require_once SRC_PATH . '/checkout_rules.php';
 require_once SRC_PATH . '/layout.php';
 
 $userOverride = $_SESSION['booking_user_override'] ?? null;
@@ -42,6 +43,42 @@ if ($end <= $start) {
 $userName  = trim($user['first_name'] . ' ' . $user['last_name']);
 $userEmail = $user['email'];
 $userId    = $user['id']; // Snipe-IT user id
+
+// Checkout rules enforcement
+$clCfg = checkout_limits_config();
+$snipeUserId = (int)$userId;
+
+// Single active checkout
+if ($clCfg['enabled'] && $clCfg['single_active_checkout'] && $snipeUserId > 0 && check_user_has_active_checkout($snipeUserId)) {
+    die('You already have assets checked out. Please return them before making a new reservation. (Single active checkout is enforced.)');
+}
+
+// Duration limit
+if ($clCfg['enabled'] && $snipeUserId > 0) {
+    $durationErr = validate_checkout_duration($snipeUserId, $startDt, $endDt);
+    if ($durationErr !== null) {
+        die(htmlspecialchars($durationErr));
+    }
+}
+
+// Certification enforcement per model in basket
+if ($snipeUserId > 0) {
+    foreach ($basket as $modelId => $qty) {
+        $modelId = (int)$modelId;
+        if ($modelId <= 0) {
+            continue;
+        }
+        $certReqs = get_model_certification_requirements($modelId);
+        if (!empty($certReqs)) {
+            $missing = check_user_certifications($snipeUserId, $certReqs);
+            if (!empty($missing)) {
+                $modelData = get_model($modelId);
+                $modelName = $modelData['name'] ?? ('Model #' . $modelId);
+                die('You lack required certification(s) for "' . htmlspecialchars($modelName) . '": ' . htmlspecialchars(implode(', ', $missing)));
+            }
+        }
+    }
+}
 
 $pdo->beginTransaction();
 

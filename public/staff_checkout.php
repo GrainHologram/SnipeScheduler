@@ -12,6 +12,7 @@ require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/activity_log.php';
 require_once SRC_PATH . '/booking_helpers.php';
 require_once SRC_PATH . '/snipeit_client.php';
+require_once SRC_PATH . '/checkout_rules.php';
 require_once SRC_PATH . '/email.php';
 require_once SRC_PATH . '/layout.php';
 
@@ -597,6 +598,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         if ($userId <= 0) {
                             throw new Exception('Matched user has no valid ID.');
+                        }
+
+                        // Single active checkout enforcement
+                        $clCfg = checkout_limits_config();
+                        if ($clCfg['enabled'] && $clCfg['single_active_checkout'] && check_user_has_active_checkout($userId)) {
+                            throw new Exception('This user already has assets checked out. Single active checkout is enforced. Please check in existing items first.');
+                        }
+
+                        // Duration limit enforcement
+                        if ($clCfg['enabled'] && $selectedStart !== '' && $selectedEnd !== '') {
+                            $appTz = app_get_timezone();
+                            try {
+                                $startDt = new DateTime($selectedStart, new DateTimeZone('UTC'));
+                                $endDt = new DateTime($selectedEnd, new DateTimeZone('UTC'));
+                                $durationErr = validate_checkout_duration($userId, $startDt, $endDt);
+                                if ($durationErr !== null) {
+                                    throw new Exception($durationErr);
+                                }
+                            } catch (Exception $e) {
+                                if (strpos($e->getMessage(), 'Checkout duration exceeds') !== false || strpos($e->getMessage(), 'already has assets checked out') !== false) {
+                                    throw $e;
+                                }
+                            }
+                        }
+
+                        // Certification enforcement per model
+                        foreach ($selectedItems as $item) {
+                            $mid = (int)$item['model_id'];
+                            $certReqs = get_model_certification_requirements($mid);
+                            if (!empty($certReqs)) {
+                                $missing = check_user_certifications($userId, $certReqs);
+                                if (!empty($missing)) {
+                                    throw new Exception("User lacks required certification(s) for model {$item['name']}: " . implode(', ', $missing));
+                                }
+                            }
                         }
 
                         foreach ($assetsToCheckout as $a) {
