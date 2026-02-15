@@ -1126,8 +1126,11 @@ function get_fieldset_fields(int $fieldsetId): array
 }
 
 /**
- * Get certification requirements for a model by scanning its fieldset
- * for boolean custom fields named "Cert - {group}".
+ * Get certification requirements for a model by scanning its requestable
+ * assets' custom fields for "Cert - {group}" fields set to "Yes".
+ *
+ * Only certifications that are actually enabled (value "Yes") on at least
+ * one requestable asset are returned.
  *
  * Returns an array of certification names, e.g. ['Photography', 'Drone Pilot'].
  * Static-cached per request.
@@ -1145,24 +1148,33 @@ function get_model_certification_requirements(int $modelId): array
     $cache[$modelId] = [];
 
     try {
-        $model = get_model($modelId);
-        $fieldsetId = 0;
-        if (isset($model['fieldset']['id'])) {
-            $fieldsetId = (int)$model['fieldset']['id'];
-        }
-        if ($fieldsetId <= 0) {
-            return $cache[$modelId];
-        }
+        $assets = list_assets_by_model($modelId, 500);
+        $found = [];
 
-        $fields = get_fieldset_fields($fieldsetId);
-        foreach ($fields as $field) {
-            $name = $field['name'] ?? '';
-            $type = strtolower($field['type'] ?? $field['element'] ?? '');
-            // Match fields named "Cert - Something" that are checkbox/boolean
-            if (preg_match('/^Cert\s*-\s*(.+)$/i', $name, $m)) {
-                $cache[$modelId][] = trim($m[1]);
+        foreach ($assets as $asset) {
+            if (empty($asset['requestable'])) {
+                continue;
+            }
+            $customFields = $asset['custom_fields'] ?? [];
+            if (!is_array($customFields)) {
+                continue;
+            }
+            foreach ($customFields as $cf) {
+                if (!is_array($cf)) {
+                    continue;
+                }
+                $fieldName = $cf['field'] ?? '';
+                $value = trim((string)($cf['value'] ?? ''));
+                if (preg_match('/^Cert\s*-\s*(.+)$/i', $fieldName, $m)
+                    && strcasecmp($value, 'Yes') === 0
+                ) {
+                    $certName = trim($m[1]);
+                    $found[$certName] = true;
+                }
             }
         }
+
+        $cache[$modelId] = array_keys($found);
     } catch (Throwable $e) {
         // Silently fail — no cert requirements if API fails
     }
