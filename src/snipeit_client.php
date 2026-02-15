@@ -1116,7 +1116,12 @@ function get_fieldset_fields(int $fieldsetId): array
     if ($fieldsetId <= 0) {
         return [];
     }
-    $data = snipeit_request('GET', 'fieldsets/' . $fieldsetId . '/fields');
+    $data = snipeit_request('GET', 'fieldsets/' . $fieldsetId);
+    // Fields are nested: { "fields": { "total": N, "rows": [...] } }
+    if (isset($data['fields']['rows']) && is_array($data['fields']['rows'])) {
+        return $data['fields']['rows'];
+    }
+    // Fallback: top-level rows (in case of alternate API response format)
     return isset($data['rows']) && is_array($data['rows']) ? $data['rows'] : [];
 }
 
