@@ -310,6 +310,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $snipe['api_token'] = $snipeTokenInput === '' ? ($loadedConfig['snipeit']['api_token'] ?? '') : $snipeTokenInput;
     }
     $snipe['verify_ssl'] = isset($_POST['snipe_verify_ssl']);
+    $snipe['timezone'] = $post('snipe_timezone', $snipe['timezone'] ?? '');
+    $snipe['expected_checkin_custom_field'] = $post('snipe_expected_checkin_custom_field', $snipe['expected_checkin_custom_field'] ?? '');
 
     $auth = $config['auth'] ?? [];
     $auth['ldap_enabled']        = isset($_POST['auth_ldap_enabled']);
@@ -706,6 +708,16 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                                     <input class="form-check-input" type="checkbox" name="snipe_verify_ssl" id="snipe_verify_ssl" <?= $cfg(['snipeit', 'verify_ssl'], false) ? 'checked' : '' ?>>
                                     <label class="form-check-label" for="snipe_verify_ssl">Verify SSL certificate</label>
                                 </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Snipe-IT server timezone</label>
+                                <input type="text" name="snipe_timezone" class="form-control" value="<?= h($cfg(['snipeit', 'timezone'], '')) ?>" placeholder="<?= h($cfg(['app', 'timezone'], 'Europe/Jersey')) ?>">
+                                <div class="form-text">PHP timezone of the Snipe-IT server. Leave blank if it matches the app timezone above.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Expected check-in custom field (DB column)</label>
+                                <input type="text" name="snipe_expected_checkin_custom_field" class="form-control" value="<?= h($cfg(['snipeit', 'expected_checkin_custom_field'], '')) ?>" placeholder="_snipeit_expected_return_datetime_5">
+                                <div class="form-text">DB column name of a Snipe-IT text custom field used to store full expected check-in datetime. Create the field in Snipe-IT admin first.</div>
                             </div>
                         </div>
                         <div class="d-flex justify-content-between align-items-center mt-3">

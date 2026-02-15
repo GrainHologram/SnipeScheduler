@@ -620,10 +620,10 @@ function expected_to_timestamp($value): ?int
     if (preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $value)) {
         $value .= ' 23:59:59';
     }
-    // Snipe-IT dates are in the app's local timezone, not UTC.
-    $appTz = app_get_timezone();
+    // Snipe-IT dates are in the Snipe-IT server's timezone.
+    $snipeTz = snipe_get_timezone();
     try {
-        $dt = new DateTime($value, $appTz);
+        $dt = new DateTime($value, $snipeTz);
         return $dt->getTimestamp();
     } catch (Throwable $e) {
         return null;

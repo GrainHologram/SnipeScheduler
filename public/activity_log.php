@@ -88,7 +88,7 @@ function format_activity_metadata(?string $metadataJson, array $labelMap, ?DateT
                 }
             } elseif ($value !== '' && $key === 'expected_checkin') {
                 try {
-                    $value = app_format_datetime_local($value);
+                    $value = app_format_datetime_local($value, null, snipe_get_timezone());
                 } catch (Throwable $e) {
                     // Keep raw value on parse errors.
                 }

@@ -168,8 +168,13 @@ if (!empty($_GET['deleted'])) {
                                     <td><?= h($row['asset_tag'] ?? '') ?></td>
                                     <td><?= h($row['asset_name'] ?? '') ?></td>
                                     <td><?= h($row['model_name'] ?? '') ?></td>
-                                    <td><?= h(app_format_datetime_local($row['last_checkout'] ?? '')) ?></td>
-                                    <td><?= h(app_format_date_local($row['expected_checkin'] ?? '')) ?></td>
+                                    <td><?= h(app_format_datetime_local($row['last_checkout'] ?? '', null, snipe_get_timezone())) ?></td>
+                                    <?php
+                                        $expVal = $row['expected_checkin'] ?? '';
+                                        $expStr = is_string($expVal) ? $expVal : '';
+                                        $expHasTime = $expStr !== '' && !preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $expStr);
+                                    ?>
+                                    <td><?= h($expHasTime ? app_format_datetime_local($expVal, null, snipe_get_timezone()) : app_format_date_local($expVal, null, snipe_get_timezone())) ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>

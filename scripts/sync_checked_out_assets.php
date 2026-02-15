@@ -107,6 +107,23 @@ try {
             $expectedCheckin = $expectedCheckin['datetime'] ?? ($expectedCheckin['date'] ?? '');
         }
 
+        // Prefer custom field value (full datetime) over date-only expected_checkin
+        $customField = snipe_get_expected_checkin_custom_field();
+        if ($customField !== null) {
+            $customFields = $asset['custom_fields'] ?? [];
+            if (is_array($customFields)) {
+                foreach ($customFields as $cf) {
+                    if (is_array($cf) && ($cf['field'] ?? '') === $customField) {
+                        $cfValue = trim((string)($cf['value'] ?? ''));
+                        if ($cfValue !== '') {
+                            $expectedCheckin = $cfValue;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
         $stmt->execute([
             ':asset_id' => $assetId,
             ':asset_tag' => $assetTag,

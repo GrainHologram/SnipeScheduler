@@ -128,12 +128,48 @@ if (!function_exists('app_format_datetime')) {
 }
 
 /**
- * Format a date that is already in the app's local timezone (e.g. from
- * Snipe-IT API).  Unlike app_format_date(), this does NOT apply a
- * UTC → local conversion.
+ * Return the Snipe-IT server timezone.
+ * Falls back to the app timezone when snipeit.timezone is empty.
+ */
+if (!function_exists('snipe_get_timezone')) {
+    function snipe_get_timezone(?array $cfg = null): ?DateTimeZone
+    {
+        $cfg = $cfg ?? load_config();
+        $tz = trim($cfg['snipeit']['timezone'] ?? '');
+        if ($tz !== '') {
+            try {
+                return new DateTimeZone($tz);
+            } catch (Throwable $e) {
+                // Invalid timezone string – fall through to app timezone.
+            }
+        }
+        return app_get_timezone($cfg);
+    }
+}
+
+/**
+ * Return the configured Snipe-IT custom field DB column name for
+ * expected check-in datetime, or null if not configured.
+ */
+if (!function_exists('snipe_get_expected_checkin_custom_field')) {
+    function snipe_get_expected_checkin_custom_field(?array $cfg = null): ?string
+    {
+        $cfg = $cfg ?? load_config();
+        $field = trim($cfg['snipeit']['expected_checkin_custom_field'] ?? '');
+        return $field !== '' ? $field : null;
+    }
+}
+
+/**
+ * Format a date that originates from Snipe-IT (in snipe_tz) for display
+ * in the app's local timezone.
+ *
+ * @param mixed             $value    Date string or array with datetime/date key
+ * @param array|null        $cfg      Config array
+ * @param DateTimeZone|null $sourceTz Source timezone (defaults to snipe_get_timezone())
  */
 if (!function_exists('app_format_date_local')) {
-    function app_format_date_local($value, ?array $cfg = null): string
+    function app_format_date_local($value, ?array $cfg = null, ?DateTimeZone $sourceTz = null): string
     {
         if (is_array($value)) {
             $value = $value['datetime'] ?? ($value['date'] ?? '');
@@ -143,9 +179,13 @@ if (!function_exists('app_format_date_local')) {
             return '';
         }
         $cfg = $cfg ?? load_config();
+        $sourceTz = $sourceTz ?? snipe_get_timezone($cfg);
         $appTz = app_get_timezone($cfg);
         try {
-            $dt = new DateTime($text, $appTz);
+            $dt = new DateTime($text, $sourceTz);
+            if ($appTz && $sourceTz->getName() !== $appTz->getName()) {
+                $dt->setTimezone($appTz);
+            }
         } catch (Throwable $e) {
             return $text;
         }
@@ -154,12 +194,15 @@ if (!function_exists('app_format_date_local')) {
 }
 
 /**
- * Format a datetime that is already in the app's local timezone (e.g. from
- * Snipe-IT API).  Unlike app_format_datetime(), this does NOT apply a
- * UTC → local conversion.
+ * Format a datetime that originates from Snipe-IT (in snipe_tz) for display
+ * in the app's local timezone.
+ *
+ * @param mixed             $value    Datetime string or array with datetime/date key
+ * @param array|null        $cfg      Config array
+ * @param DateTimeZone|null $sourceTz Source timezone (defaults to snipe_get_timezone())
  */
 if (!function_exists('app_format_datetime_local')) {
-    function app_format_datetime_local($value, ?array $cfg = null): string
+    function app_format_datetime_local($value, ?array $cfg = null, ?DateTimeZone $sourceTz = null): string
     {
         if (is_array($value)) {
             $value = $value['datetime'] ?? ($value['date'] ?? '');
@@ -169,9 +212,13 @@ if (!function_exists('app_format_datetime_local')) {
             return '';
         }
         $cfg = $cfg ?? load_config();
+        $sourceTz = $sourceTz ?? snipe_get_timezone($cfg);
         $appTz = app_get_timezone($cfg);
         try {
-            $dt = new DateTime($text, $appTz);
+            $dt = new DateTime($text, $sourceTz);
+            if ($appTz && $sourceTz->getName() !== $appTz->getName()) {
+                $dt->setTimezone($appTz);
+            }
         } catch (Throwable $e) {
             return $text;
         }

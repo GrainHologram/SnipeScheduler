@@ -714,11 +714,24 @@ function checkout_asset_to_user(int $assetId, int $userId, string $note = '', ?s
         $payload['note'] = $note;
     }
     if (!empty($expectedCheckin)) {
-        $payload['expected_checkin'] = $expectedCheckin;
+        // $expectedCheckin is UTC – convert to snipe_tz for Snipe-IT
+        $snipeTz = snipe_get_timezone();
+        try {
+            $dt = new DateTime($expectedCheckin, new DateTimeZone('UTC'));
+            $dt->setTimezone($snipeTz);
+            $snipeDateTime = $dt->format('Y-m-d H:i:s');
+        } catch (Throwable $e) {
+            $snipeDateTime = $expectedCheckin;
+        }
+        $payload['expected_checkin'] = $snipeDateTime;
+
+        // Write the full datetime to the custom field so the time is preserved
+        $customField = snipe_get_expected_checkin_custom_field();
+        if ($customField !== null) {
+            $payload[$customField] = $snipeDateTime;
+        }
     }
 
-    // Snipe-IT may also support expected_checkin, etc., but we
-    // keep it simple here.
     $resp = snipeit_request('POST', 'hardware/' . $assetId . '/checkout', $payload);
 
     // Basic sanity check: API should report success
@@ -764,9 +777,28 @@ function update_asset_expected_checkin(int $assetId, string $expectedDate): void
         throw new InvalidArgumentException('Expected check-in date cannot be empty.');
     }
 
+    // $expectedDate is in app_tz (from user input) – convert to snipe_tz
+    $appTz = app_get_timezone();
+    $snipeTz = snipe_get_timezone();
+    try {
+        $dt = new DateTime($expectedDate, $appTz);
+        if ($snipeTz && $appTz && $snipeTz->getName() !== $appTz->getName()) {
+            $dt->setTimezone($snipeTz);
+        }
+        $snipeDateTime = $dt->format('Y-m-d H:i:s');
+    } catch (Throwable $e) {
+        $snipeDateTime = $expectedDate;
+    }
+
     $payload = [
-        'expected_checkin' => $expectedDate,
+        'expected_checkin' => $snipeDateTime,
     ];
+
+    // Write the full datetime to the custom field so the time is preserved
+    $customField = snipe_get_expected_checkin_custom_field();
+    if ($customField !== null) {
+        $payload[$customField] = $snipeDateTime;
+    }
 
     $resp = snipeit_request('PATCH', 'hardware/' . $assetId, $payload);
     $status = $resp['status'] ?? 'success';
@@ -926,6 +958,23 @@ function fetch_checked_out_assets_from_snipeit(bool $overdueOnly = false, int $m
             $expectedCheckin = $expectedCheckin['datetime'] ?? ($expectedCheckin['date'] ?? '');
         }
 
+        // Prefer custom field value (full datetime) over date-only expected_checkin
+        $customField = snipe_get_expected_checkin_custom_field();
+        if ($customField !== null) {
+            $customFields = $row['custom_fields'] ?? [];
+            if (is_array($customFields)) {
+                foreach ($customFields as $cf) {
+                    if (is_array($cf) && ($cf['field'] ?? '') === $customField) {
+                        $cfValue = trim((string)($cf['value'] ?? ''));
+                        if ($cfValue !== '') {
+                            $expectedCheckin = $cfValue;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
         // Overdue check
         if ($overdueOnly) {
             // If Snipe-IT returns only a date (no time), treat it as due by end-of-day rather than midnight.
@@ -933,10 +982,10 @@ function fetch_checked_out_assets_from_snipeit(bool $overdueOnly = false, int $m
             if (is_string($expectedCheckin) && preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $expectedCheckin)) {
                 $normalizedExpected = $expectedCheckin . ' 23:59:59';
             }
-            // Snipe-IT dates are in the app's local timezone, not UTC.
-            $appTz = app_get_timezone();
+            // Snipe-IT dates are in the Snipe-IT server's timezone.
+            $snipeTz = snipe_get_timezone();
             try {
-                $dt = new DateTime($normalizedExpected, $appTz);
+                $dt = new DateTime($normalizedExpected, $snipeTz);
                 $expTs = $dt->getTimestamp();
             } catch (Throwable $e) {
                 $expTs = null;
@@ -998,10 +1047,10 @@ function list_checked_out_assets(bool $overdueOnly = false): array
             if (is_string($expectedCheckin) && preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $expectedCheckin)) {
                 $normalizedExpected = $expectedCheckin . ' 23:59:59';
             }
-            // Snipe-IT dates are in the app's local timezone, not UTC.
-            $appTz = app_get_timezone();
+            // Cached dates are in the Snipe-IT server's timezone.
+            $snipeTz = snipe_get_timezone();
             try {
-                $dt = new DateTime($normalizedExpected, $appTz);
+                $dt = new DateTime($normalizedExpected, $snipeTz);
                 $expTs = $dt->getTimestamp();
             } catch (Throwable $e) {
                 $expTs = null;
