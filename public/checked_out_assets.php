@@ -45,24 +45,12 @@ function load_asset_labels(PDO $pdo, array $assetIds): array
 
 function format_display_date($val): string
 {
-    if (is_array($val)) {
-        $val = $val['datetime'] ?? ($val['date'] ?? '');
-    }
-    if (empty($val)) {
-        return '';
-    }
-    return app_format_date($val);
+    return app_format_date_local($val, null, snipe_get_timezone());
 }
 
 function format_display_datetime($val): string
 {
-    if (is_array($val)) {
-        $val = $val['datetime'] ?? ($val['date'] ?? '');
-    }
-    if (empty($val)) {
-        return '';
-    }
-    return app_format_datetime($val);
+    return app_format_datetime_local($val, null, snipe_get_timezone());
 }
 
 function normalize_expected_datetime(?string $raw): string
@@ -71,11 +59,14 @@ function normalize_expected_datetime(?string $raw): string
     if ($raw === '') {
         return '';
     }
-    $ts = strtotime($raw);
-    if ($ts === false) {
+    // User input and Snipe-IT dates are in the app's local timezone.
+    $appTz = app_get_timezone();
+    try {
+        $dt = new DateTime($raw, $appTz);
+        return $dt->format('Y-m-d H:i');
+    } catch (Throwable $e) {
         return '';
     }
-    return date('Y-m-d H:i', $ts);
 }
 
 function expected_to_timestamp($value): ?int
@@ -90,11 +81,14 @@ function expected_to_timestamp($value): ?int
     if (preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $value)) {
         $value .= ' 23:59:59';
     }
-    $ts = strtotime($value);
-    if ($ts === false) {
+    // Snipe-IT dates are in the Snipe-IT server's timezone.
+    $snipeTz = snipe_get_timezone();
+    try {
+        $dt = new DateTime($value, $snipeTz);
+        return $dt->getTimestamp();
+    } catch (Throwable $e) {
         return null;
     }
-    return $ts;
 }
 
 $active    = basename($_SERVER['PHP_SELF']);
@@ -549,7 +543,11 @@ function layout_checked_out_url(string $base, array $params): string
                                     <td><?= h($user) ?></td>
                                     <td><?= h(format_display_datetime($checkedOut)) ?></td>
                                     <td class="<?= $isOverdue ? 'text-danger fw-semibold' : '' ?>">
-                                        <?= h(format_display_datetime($expected)) ?>
+                                        <?php
+                                            $expStr = is_string($expected) ? $expected : '';
+                                            $hasTime = $expStr !== '' && !preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $expStr);
+                                        ?>
+                                        <?= h($hasTime ? format_display_datetime($expected) : format_display_date($expected)) ?>
                                     </td>
                                     <td>
                                         <input type="datetime-local"

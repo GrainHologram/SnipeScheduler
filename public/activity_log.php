@@ -80,9 +80,15 @@ function format_activity_metadata(?string $metadataJson, array $labelMap, ?DateT
             $value = '';
         } else {
             $value = (string)$value;
-            if ($value !== '' && in_array($key, ['start', 'end', 'expected_checkin'], true)) {
+            if ($value !== '' && in_array($key, ['start', 'end'], true)) {
                 try {
                     $value = app_format_datetime($value, null, $tz);
+                } catch (Throwable $e) {
+                    // Keep raw value on parse errors.
+                }
+            } elseif ($value !== '' && $key === 'expected_checkin') {
+                try {
+                    $value = app_format_datetime_local($value, null, snipe_get_timezone());
                 } catch (Throwable $e) {
                     // Keep raw value on parse errors.
                 }

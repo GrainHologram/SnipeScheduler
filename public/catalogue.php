@@ -509,13 +509,7 @@ function label_safe(?string $str): string
 
 function format_overdue_date($val): string
 {
-    if (is_array($val)) {
-        $val = $val['datetime'] ?? ($val['date'] ?? '');
-    }
-    if (empty($val)) {
-        return '';
-    }
-    return app_format_date($val);
+    return app_format_date_local($val);
 }
 
 function normalize_lookup_key(?string $value): string
@@ -626,11 +620,14 @@ function expected_to_timestamp($value): ?int
     if (preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $value)) {
         $value .= ' 23:59:59';
     }
-    $ts = strtotime($value);
-    if ($ts === false) {
+    // Snipe-IT dates are in the Snipe-IT server's timezone.
+    $snipeTz = snipe_get_timezone();
+    try {
+        $dt = new DateTime($value, $snipeTz);
+        return $dt->getTimestamp();
+    } catch (Throwable $e) {
         return null;
     }
-    return $ts;
 }
 
 function fetch_overdue_assets_for_user(array $lookup, int $snipeUserId): array

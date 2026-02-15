@@ -37,6 +37,8 @@ return [
         'base_url'  => '',
         'api_token' => '',     // keep your existing token
         'verify_ssl' => false,
+        'timezone' => '',  // Snipe-IT server timezone (e.g. 'America/New_York'). Defaults to app timezone if empty.
+        'expected_checkin_custom_field' => '',  // DB column name for a Snipe-IT text custom field, e.g. '_snipeit_expected_return_datetime_5'
     ],
 
     'ldap' => [

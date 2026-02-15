@@ -112,8 +112,15 @@ foreach ($assets as $a) {
         $userName = $assigned;
     }
     $expRaw = $a['_expected_checkin_norm'] ?? ($a['expected_checkin'] ?? '');
-    $expTs  = $expRaw ? strtotime($expRaw) : null;
-    $exp    = $expTs ? app_format_date($expTs) : 'unknown';
+    // Snipe-IT dates are in the Snipe-IT server's timezone.
+    $snipeTz = snipe_get_timezone();
+    try {
+        $dtExp = $expRaw ? new DateTime($expRaw, $snipeTz) : null;
+        $expTs = $dtExp ? $dtExp->getTimestamp() : null;
+    } catch (Throwable $e) {
+        $expTs = null;
+    }
+    $exp    = $expRaw ? app_format_date_local($expRaw, null, $snipeTz) : 'unknown';
     $daysOverdue = $expTs ? max(1, (int)floor((time() - $expTs) / 86400)) : 1;
 
     $lineUser = $userEmail !== '' ? "{$userEmail}" . ($userName !== '' ? " ({$userName})" : '') : 'Unknown';
