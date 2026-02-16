@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS reservations (
     start_datetime DATETIME NOT NULL,
     end_datetime DATETIME NOT NULL,
 
-    status ENUM('pending','confirmed','completed','cancelled','missed') NOT NULL DEFAULT 'pending',
+    status ENUM('pending','confirmed','checked_out','completed','cancelled','missed') NOT NULL DEFAULT 'pending',
 
     -- Cached display string of items (for quick admin lists)
     asset_name_cache TEXT NULL,
@@ -134,4 +134,4 @@ CREATE TABLE IF NOT EXISTS schema_version (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT IGNORE INTO schema_version (version)
-VALUES ('v0.9.0-beta');
+VALUES ('v0.10.0-beta');

@@ -167,6 +167,37 @@ if (!function_exists('layout_render_nav')) {
     }
 }
 
+if (!function_exists('layout_status_badge')) {
+    /**
+     * Render a reservation status as a styled Bootstrap badge.
+     */
+    function layout_status_badge(string $status): string
+    {
+        $status = strtolower(trim($status));
+        $labels = [
+            'pending'     => 'Pending',
+            'confirmed'   => 'Confirmed',
+            'checked_out' => 'Checked Out',
+            'completed'   => 'Completed',
+            'cancelled'   => 'Cancelled',
+            'missed'      => 'Missed',
+        ];
+        $classes = [
+            'pending'     => 'bg-warning text-dark',
+            'confirmed'   => 'bg-info text-dark',
+            'checked_out' => 'status-badge-checked-out',
+            'completed'   => 'bg-success',
+            'cancelled'   => 'bg-secondary',
+            'missed'      => 'bg-danger',
+        ];
+        $label = $labels[$status] ?? ucfirst(str_replace('_', ' ', $status));
+        $class = $classes[$status] ?? 'bg-secondary';
+        return '<span class="badge ' . $class . '">'
+            . htmlspecialchars($label, ENT_QUOTES, 'UTF-8')
+            . '</span>';
+    }
+}
+
 if (!function_exists('layout_footer')) {
     function layout_footer(): void
     {

@@ -116,7 +116,7 @@ function model_booked_elsewhere(PDO $pdo, int $modelId, string $start, string $e
         WHERE ri.model_id = :model_id
           AND r.start_datetime < :end
           AND r.end_datetime > :start
-          AND r.status IN ('pending', 'confirmed', 'completed')
+          AND r.status IN ('pending', 'confirmed', 'checked_out')
     ";
 
     $params = [
@@ -700,7 +700,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         $upd = $pdo->prepare("
                             UPDATE reservations
-                               SET status = 'completed',
+                               SET status = 'checked_out',
                                    asset_name_cache = :assets_text
                              WHERE id = :id
                         ");

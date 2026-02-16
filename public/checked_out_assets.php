@@ -136,7 +136,7 @@ function sync_local_after_renewal(PDO $pdo, int $assetId, string $normalized, in
             UPDATE reservations
                SET end_datetime = :new_end
              WHERE snipeit_user_id = :uid
-               AND status = 'completed'
+               AND status = 'checked_out'
              ORDER BY created_at DESC
              LIMIT 1
         ")->execute([':new_end' => $endUtc, ':uid' => $userId]);

@@ -108,11 +108,11 @@ if (!empty($basket)) {
                 $sql = "
                     SELECT
                         COALESCE(SUM(CASE WHEN r.status IN ('pending','confirmed') THEN ri.quantity END), 0) AS pending_qty,
-                        COALESCE(SUM(CASE WHEN r.status = 'completed' THEN ri.quantity END), 0) AS completed_qty
+                        COALESCE(SUM(CASE WHEN r.status = 'checked_out' THEN ri.quantity END), 0) AS completed_qty
                     FROM reservation_items ri
                     JOIN reservations r ON r.id = ri.reservation_id
                     WHERE ri.model_id = :model_id
-                      AND r.status IN ('pending', 'confirmed', 'completed')
+                      AND r.status IN ('pending', 'confirmed', 'checked_out')
                       AND (r.start_datetime < :end AND r.end_datetime > :start)
                 ";
                 $stmt = $pdo->prepare($sql);

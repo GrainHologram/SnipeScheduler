@@ -468,7 +468,7 @@ try {
                                 </td>
                                 <td data-label="Start"><?= display_datetime($r['start_datetime'] ?? '') ?></td>
                                 <td data-label="End"><?= display_datetime($r['end_datetime'] ?? '') ?></td>
-                                <td data-label="Status"><?= h($r['status'] ?? '') ?></td>
+                                <td data-label="Status"><?= layout_status_badge($r['status'] ?? '') ?></td>
                                 <td data-label="Actions" class="actions-cell">
                                     <div class="d-flex gap-2">
                                         <a href="reservation_detail.php?id=<?= (int)$r['id'] ?>"

@@ -113,7 +113,7 @@ try {
             FROM reservation_items ri
             JOIN reservations r ON r.id = ri.reservation_id
             WHERE ri.model_id = :model_id
-              AND r.status IN ('pending','confirmed')
+              AND r.status IN ('pending','confirmed','checked_out')
               AND (r.start_datetime < :end AND r.end_datetime > :start)
         ";
         $stmt = $pdo->prepare($sql);

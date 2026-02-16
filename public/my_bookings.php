@@ -210,7 +210,7 @@ if (!empty($_GET['deleted'])) {
                                 <?= display_datetime($res['end_datetime'] ?? '') ?><br>
 
                                 <strong>Status:</strong>
-                                <?= h($res['status'] ?? '') ?><br>
+                                <?= layout_status_badge($res['status'] ?? '') ?><br>
 
                                 <?php if ($summary !== ''): ?>
                                     <strong>Items:</strong>

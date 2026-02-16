@@ -48,7 +48,7 @@ function qc_current_reservations_for_model(PDO $pdo, int $modelId): array
           FROM reservation_items ri
           JOIN reservations r ON r.id = ri.reservation_id
          WHERE ri.model_id = :model_id
-           AND r.status IN ('pending','confirmed')
+           AND r.status IN ('pending','confirmed','checked_out')
            AND r.start_datetime <= :now
            AND r.end_datetime   >= :now
          ORDER BY r.start_datetime ASC
@@ -354,7 +354,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ) VALUES (
                                     :user_name, :user_email, :user_id, :snipeit_user_id,
                                     0, :asset_name_cache,
-                                    :start_datetime, :end_datetime, 'completed'
+                                    :start_datetime, :end_datetime, 'checked_out'
                                 )
                             ");
                             $insertRes->execute([

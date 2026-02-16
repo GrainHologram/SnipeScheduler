@@ -35,7 +35,7 @@ Always convert at boundaries: use `app_format_date_local()` / `app_format_dateti
 
 ### Database
 The app owns its own MySQL database (separate from Snipe-IT). Key tables:
-- `reservations` — booking records with status enum: pending, confirmed, completed, cancelled, missed.
+- `reservations` — booking records with status enum: `pending`, `confirmed`, `checked_out`, `completed`, `cancelled`, `missed`.
 - `reservation_items` — models + quantities per reservation (FK to reservations).
 - `checked_out_asset_cache` — local cache of Snipe-IT checked-out assets, populated by cron.
 - `activity_log` — audit trail.
@@ -43,6 +43,24 @@ The app owns its own MySQL database (separate from Snipe-IT). Key tables:
 - `schema_version` — tracks applied migrations.
 
 Schema lives in `public/install/schema.sql`. Upgrades in `public/install/upgrade/`.
+
+### Reservation Lifecycle
+Reservations follow this status progression:
+
+```
+pending → confirmed → checked_out → completed
+                ↘                        ↗
+              (missed / cancelled)
+```
+
+- **`pending`** — user has submitted a reservation request.
+- **`confirmed`** — staff has confirmed/approved the reservation.
+- **`checked_out`** — staff has checked out assets to the user via `staff_checkout.php`. The reservation is actively held — assets are with the user.
+- **`completed`** — all assets have been returned (checked in). Transition happens automatically when the last asset is checked in via `checked_out_assets.php` or `quick_checkin.php`.
+- **`cancelled`** — reservation was cancelled before checkout.
+- **`missed`** — reservation was not collected within the missed cutoff window (only `pending`/`confirmed` reservations can be marked missed by `cron_mark_missed.php`).
+
+**Active vs finished:** Availability queries treat `pending`, `confirmed`, and `checked_out` as "active" statuses that reserve equipment capacity. `completed`, `cancelled`, and `missed` are terminal — they release capacity. Deletion and cancellation are blocked for `checked_out` reservations (configurable via `reservations.deletable_statuses`).
 
 ### Snipe-IT API Integration
 - All API calls go through `snipeit_request()` in `snipeit_client.php`.
@@ -57,7 +75,7 @@ Schema lives in `public/install/schema.sql`. Upgrades in `public/install/upgrade
 
 ### Cron Scripts (`scripts/`)
 - `sync_checked_out_assets.php` — Syncs checked-out assets from Snipe-IT API to local cache. Should run frequently (e.g., every minute).
-- `cron_mark_missed.php` — Marks uncollected reservations as missed after configurable cutoff.
+- `cron_mark_missed.php` — Marks uncollected `pending`/`confirmed` reservations as missed after configurable cutoff. Does not affect `checked_out` reservations.
 - `email_overdue_staff.php` / `email_overdue_users.php` — Overdue notification emails.
 
 ## Development Notes
@@ -69,3 +87,5 @@ Schema lives in `public/install/schema.sql`. Upgrades in `public/install/upgrade
 - Global variables are used extensively (`$pdo`, `$snipeBaseUrl`, `$snipeApiToken`, etc. via `global`).
 - The `h()` function (defined in `auth.php`) is the standard HTML-escape helper used across all pages.
 - Images from Snipe-IT are delivered through `public/image_proxy.php` to avoid exposing the Snipe-IT server to end users.
+- Snipe-IT assets have `last_checkout` (datetime), `last_checkin` (datetime), and `expected_checkin` (date) fields. Snipe-IT logging will log a datetime supplied to `expected_checkin`, but will truncate to a date on storage. All asset API calls should continue to supply a datetime to `expected_checkin`.
+
