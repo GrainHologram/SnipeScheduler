@@ -1007,9 +1007,9 @@ $active  = basename($_SERVER['PHP_SELF']);
                         <?php foreach ($selectedItems as $item): ?>
                             <?php
                                 $mid = (int)$item['model_id'];
-                                $storedForModel = $storedSelections[$mid] ?? [];
+                                $selectionsForModel = $presetSelections[$mid] ?? [];
                             ?>
-                            <?php foreach ($storedForModel as $idx => $aid): ?>
+                            <?php foreach ($selectionsForModel as $idx => $aid): ?>
                                 <input type="hidden" name="selected_assets[<?= $mid ?>][<?= (int)$idx ?>]" value="<?= (int)$aid ?>">
                             <?php endforeach; ?>
                         <?php endforeach; ?>
