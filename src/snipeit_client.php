@@ -724,12 +724,6 @@ function checkout_asset_to_user(int $assetId, int $userId, string $note = '', ?s
             $snipeDateTime = $expectedCheckin;
         }
         $payload['expected_checkin'] = $snipeDateTime;
-
-        // Write the full datetime to the custom field so the time is preserved
-        $customField = snipe_get_expected_checkin_custom_field();
-        if ($customField !== null) {
-            $payload[$customField] = $snipeDateTime;
-        }
     }
 
     $resp = snipeit_request('POST', 'hardware/' . $assetId . '/checkout', $payload);
@@ -756,6 +750,16 @@ function checkout_asset_to_user(int $assetId, int $userId, string $note = '', ?s
 
     if ($status !== 'success' || $hasExplicitError) {
         throw new Exception('Snipe-IT checkout did not succeed: ' . $message);
+    }
+
+    // Set custom field via PUT (checkout endpoint ignores custom fields)
+    if (!empty($expectedCheckin)) {
+        $customField = snipe_get_expected_checkin_custom_field();
+        if ($customField !== null) {
+            snipeit_request('PUT', 'hardware/' . $assetId, [
+                $customField => $snipeDateTime,
+            ]);
+        }
     }
 }
 
@@ -795,7 +799,7 @@ function update_asset_expected_checkin(int $assetId, string $expectedDate): void
     $snipeDate = (new DateTime($snipeDateTime))->format('Y-m-d');
 
     $payload = [
-        'expected_checkin' => $snipeDate,
+        'expected_checkin' => $snipeDateTime, // Testing with DateTime so time shows in logging.
     ];
 
     // Write the full datetime to the custom field so the time is preserved
