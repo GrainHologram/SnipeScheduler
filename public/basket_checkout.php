@@ -127,14 +127,13 @@ try {
 
         // Total requestable units in Snipe-IT
         $totalRequestable = count_requestable_assets_by_model($modelId);
-        $activeCheckedOut = count_checked_out_assets_by_model($modelId);
-        $availableNow = $totalRequestable > 0 ? max(0, $totalRequestable - $activeCheckedOut) : 0;
 
-        if ($totalRequestable > 0 && $existingBooked + $qty > $availableNow) {
+        if ($totalRequestable > 0 && $existingBooked + $qty > $totalRequestable) {
+            $available = max(0, $totalRequestable - $existingBooked);
             throw new Exception(
                 'Not enough units available for "' . ($model['name'] ?? ('ID '.$modelId)) . '" '
                 . 'in that time period. Requested ' . $qty . ', already booked ' . $existingBooked
-                . ', total available ' . $availableNow . '.'
+                . ', total available ' . $available . '.'
             );
         }
 

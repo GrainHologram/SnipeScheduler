@@ -142,10 +142,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'resto
                 $existingBooked = $row ? (int)$row['booked_qty'] : 0;
 
                 $totalRequestable = count_requestable_assets_by_model($mid);
-                $activeCheckedOut = count_checked_out_assets_by_model($mid);
-                $availableNow = $totalRequestable > 0 ? max(0, $totalRequestable - $activeCheckedOut) : 0;
 
-                if ($totalRequestable > 0 && $existingBooked + $qty > $availableNow) {
+                if ($totalRequestable > 0 && $existingBooked + $qty > $totalRequestable) {
                     throw new Exception('Not enough units available for "' . $modelName . '" in that time period.');
                 }
             }
