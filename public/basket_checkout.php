@@ -7,19 +7,27 @@ require_once SRC_PATH . '/snipeit_client.php';
 require_once SRC_PATH . '/checkout_rules.php';
 require_once SRC_PATH . '/layout.php';
 
+// Helper: redirect back to basket with an error message
+function basket_error(string $msg): void
+{
+    $_SESSION['basket_error'] = $msg;
+    header('Location: basket.php');
+    exit;
+}
+
 $userOverride = $_SESSION['booking_user_override'] ?? null;
 $user   = $userOverride ?: $currentUser;
 $basket = $_SESSION['basket'] ?? [];
 
 if (empty($basket)) {
-    die('Your basket is empty.');
+    basket_error('Your basket is empty.');
 }
 
 $startRaw = $_POST['start_datetime'] ?? '';
 $endRaw   = $_POST['end_datetime'] ?? '';
 
 if (!$startRaw || !$endRaw) {
-    die('Start and end date/time are required.');
+    basket_error('Start and end date/time are required.');
 }
 
 // Form values are in the app's local timezone; convert to UTC for DB storage
@@ -29,14 +37,14 @@ try {
     $startDt = new DateTime($startRaw, $appTz);
     $endDt   = new DateTime($endRaw, $appTz);
 } catch (Throwable $e) {
-    die('Invalid date/time.');
+    basket_error('Invalid date/time.');
 }
 
 $start = $startDt->setTimezone($utc)->format('Y-m-d H:i:s');
 $end   = $endDt->setTimezone($utc)->format('Y-m-d H:i:s');
 
 if ($end <= $start) {
-    die('End time must be after start time.');
+    basket_error('End time must be after start time.');
 }
 
 // Build user info from Snipe-IT user record
@@ -50,14 +58,14 @@ $snipeUserId = (int)$userId;
 
 // Single active checkout
 if ($clCfg['enabled'] && $clCfg['single_active_checkout'] && $snipeUserId > 0 && check_user_has_active_checkout($snipeUserId)) {
-    die('You already have assets checked out. Please return them before making a new reservation. (Single active checkout is enforced.)');
+    basket_error('You already have assets checked out. Please return them before making a new reservation. (Single active checkout is enforced.)');
 }
 
 // Duration limit
 if ($clCfg['enabled'] && $snipeUserId > 0) {
     $durationErr = validate_checkout_duration($snipeUserId, $startDt, $endDt);
     if ($durationErr !== null) {
-        die(htmlspecialchars($durationErr));
+        basket_error($durationErr);
     }
 }
 
@@ -74,7 +82,7 @@ if ($snipeUserId > 0) {
             if (!empty($missing)) {
                 $modelData = get_model($modelId);
                 $modelName = $modelData['name'] ?? ('Model #' . $modelId);
-                die('You lack required certification(s) for "' . htmlspecialchars($modelName) . '": ' . htmlspecialchars(implode(', ', $missing)));
+                basket_error('You lack required certification(s) for "' . $modelName . '": ' . implode(', ', $missing));
             }
         }
     }

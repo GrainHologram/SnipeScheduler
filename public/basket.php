@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../src/bootstrap.php';
 require_once SRC_PATH . '/auth.php';
 require_once SRC_PATH . '/snipeit_client.php';
+require_once SRC_PATH . '/checkout_rules.php';
 require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/layout.php';
 
@@ -155,6 +156,54 @@ if (!empty($basket)) {
     }
 }
 
+// Checkout rules validation (run when basket is non-empty)
+$checkoutErrors = [];
+$userOverride = $_SESSION['booking_user_override'] ?? null;
+$bookingUser  = $userOverride ?: $currentUser;
+$snipeUserId  = (int)($bookingUser['id'] ?? 0);
+
+if (!empty($basket) && $snipeUserId > 0) {
+    $clCfg = checkout_limits_config();
+
+    // Single active checkout
+    if ($clCfg['enabled'] && $clCfg['single_active_checkout'] && check_user_has_active_checkout($snipeUserId)) {
+        $checkoutErrors[] = 'You already have assets checked out. Please return them before making a new reservation. (Single active checkout is enforced.)';
+    }
+
+    // Duration limit (requires valid preview dates)
+    if ($clCfg['enabled'] && $previewStart && $previewEnd) {
+        try {
+            $valStartDt = new DateTime($previewStart, new DateTimeZone('UTC'));
+            $valEndDt   = new DateTime($previewEnd, new DateTimeZone('UTC'));
+            $durationErr = validate_checkout_duration($snipeUserId, $valStartDt, $valEndDt);
+            if ($durationErr !== null) {
+                $checkoutErrors[] = $durationErr;
+            }
+        } catch (Throwable $e) {
+            // Skip duration check if dates can't be parsed
+        }
+    }
+
+    // Certification enforcement per model in basket
+    foreach ($basket as $modelId => $qty) {
+        $modelId = (int)$modelId;
+        if ($modelId <= 0) {
+            continue;
+        }
+        $certReqs = get_model_certification_requirements($modelId);
+        if (!empty($certReqs)) {
+            $missing = check_user_certifications($snipeUserId, $certReqs);
+            if (!empty($missing)) {
+                $modelData = get_model($modelId);
+                $modelName = $modelData['name'] ?? ('Model #' . $modelId);
+                $checkoutErrors[] = 'You lack required certification(s) for "' . $modelName . '": ' . implode(', ', $missing);
+            }
+        }
+    }
+}
+
+$hasCheckoutErrors = !empty($checkoutErrors);
+
 ?>
 <!DOCTYPE html>
 <html>
@@ -195,6 +244,16 @@ if (!empty($basket)) {
                 <a href="logout.php" class="btn btn-link btn-sm">Log out</a>
             </div>
         </div>
+
+        <?php
+            $basketError = $_SESSION['basket_error'] ?? '';
+            unset($_SESSION['basket_error']);
+        ?>
+        <?php if ($basketError): ?>
+            <div class="alert alert-danger">
+                <?= h($basketError) ?>
+            </div>
+        <?php endif; ?>
 
         <?php if ($errorMsg): ?>
             <div class="alert alert-danger">
@@ -317,6 +376,17 @@ if (!empty($basket)) {
                 </form>
             </div>
 
+            <?php if ($hasCheckoutErrors): ?>
+                <div class="alert alert-danger">
+                    <strong>Cannot confirm booking:</strong>
+                    <ul class="mb-0 mt-1">
+                        <?php foreach ($checkoutErrors as $err): ?>
+                            <li><?= h($err) ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            <?php endif; ?>
+
             <!-- Final checkout form (uses the same dates, if provided) -->
             <form method="post" action="basket_checkout.php">
                 <input type="hidden" name="start_datetime"
@@ -331,7 +401,7 @@ if (!empty($basket)) {
 
                 <button class="btn btn-primary btn-lg px-4"
                         type="submit"
-                        <?= (!$previewStart || !$previewEnd) ? 'disabled' : '' ?>>
+                        <?= (!$previewStart || !$previewEnd || $hasCheckoutErrors) ? 'disabled' : '' ?>>
                     Confirm booking for all items
                 </button>
                 <?php if (!$previewStart || !$previewEnd): ?>
