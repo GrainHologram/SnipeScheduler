@@ -653,23 +653,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                         }
 
-                        // Duration limit enforcement (skip if appending — using existing expected date)
-                        if (!$appendToActive && $clCfg['enabled'] && $selectedStart !== '' && $selectedEnd !== '') {
-                            $appTz = app_get_timezone();
-                            try {
-                                $startDt = new DateTime($selectedStart, new DateTimeZone('UTC'));
-                                $endDt = new DateTime($selectedEnd, new DateTimeZone('UTC'));
-                                $durationErr = validate_checkout_duration($userId, $startDt, $endDt);
-                                if ($durationErr !== null) {
-                                    throw new Exception($durationErr);
-                                }
-                            } catch (Exception $e) {
-                                if (strpos($e->getMessage(), 'Checkout duration exceeds') !== false) {
-                                    throw $e;
-                                }
-                            }
-                        }
-
                         // Certification enforcement per model
                         foreach ($selectedItems as $item) {
                             $mid = (int)$item['model_id'];
