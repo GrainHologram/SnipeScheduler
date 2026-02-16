@@ -1247,16 +1247,22 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                             ]);
                         }
                         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-                        $pendingQty   = $row ? (int)$row['pending_qty'] : 0;
+                        $pendingQty     = $row ? (int)$row['pending_qty'] : 0;
+                        $checkedOutQty  = $row ? (int)$row['completed_qty'] : 0;
 
-                        // How many are actually still checked out (from local cache)
-                        if (array_key_exists($modelId, $checkedOutCounts)) {
-                            $activeCheckedOut = $checkedOutCounts[$modelId];
+                        if ($windowActive) {
+                            // Window mode: reservation overlap query already accounts for
+                            // checked_out reservations in the selected date range.
+                            $booked = $pendingQty + $checkedOutQty;
                         } else {
-                            $activeCheckedOut = count_checked_out_assets_by_model($modelId);
+                            // "Now" mode: use live cache count for currently checked-out assets.
+                            if (array_key_exists($modelId, $checkedOutCounts)) {
+                                $activeCheckedOut = $checkedOutCounts[$modelId];
+                            } else {
+                                $activeCheckedOut = count_checked_out_assets_by_model($modelId);
+                            }
+                            $booked = $pendingQty + $activeCheckedOut;
                         }
-
-                        $booked = $pendingQty + $activeCheckedOut;
                         $freeNow = max(0, $assetCount - $booked);
                         $maxQty = $freeNow;
                         $isRequestable = $assetCount > 0;

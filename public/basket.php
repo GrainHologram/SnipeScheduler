@@ -121,12 +121,13 @@ if (!empty($basket)) {
                     ':start'    => $previewStart,
                     ':end'      => $previewEnd,
                 ]);
-                $row          = $stmt->fetch();
-                $pendingQty   = $row ? (int)$row['pending_qty'] : 0;
+                $row            = $stmt->fetch();
+                $pendingQty     = $row ? (int)$row['pending_qty'] : 0;
+                $checkedOutQty  = $row ? (int)$row['completed_qty'] : 0;
 
-                // Checked-out assets from local cache
-                $activeCheckedOut = count_checked_out_assets_by_model($mid);
-                $booked = $pendingQty + $activeCheckedOut;
+                // Reservation overlap query already accounts for checked_out reservations
+                // in the selected date range — no need to add cache count on top.
+                $booked = $pendingQty + $checkedOutQty;
 
                 // Total requestable units in Snipe-IT
                 if ($requestableTotal === null) {
