@@ -19,10 +19,20 @@ require_once SRC_PATH . '/snipeit_client.php';
 require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/activity_log.php';
 
+function sync_log(string $msg): void
+{
+    echo '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n";
+}
+
+function sync_err(string $msg): void
+{
+    fwrite(STDERR, '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n");
+}
+
 try {
     $assets = fetch_checked_out_assets_from_snipeit(false, 0);
 } catch (Throwable $e) {
-    fwrite(STDERR, "[error] Failed to load checked-out assets: {$e->getMessage()}\n");
+    sync_err("[error] Failed to load checked-out assets: {$e->getMessage()}");
     exit(1);
 }
 
@@ -144,12 +154,12 @@ try {
     if ($pdo->inTransaction()) {
         $pdo->commit();
     }
-    echo "[done] Synced " . count($assets) . " checked-out asset(s).\n";
+    sync_log("[done] Synced " . count($assets) . " checked-out asset(s).");
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
-    fwrite(STDERR, "[error] Failed to sync checked-out assets: {$e->getMessage()}\n");
+    sync_err("[error] Failed to sync checked-out assets: {$e->getMessage()}");
     exit(1);
 }
 
@@ -216,8 +226,8 @@ try {
     }
 
     if ($completedCount > 0) {
-        echo "[done] Completed {$completedCount} reservation(s) (all assets returned).\n";
+        sync_log("[done] Completed {$completedCount} reservation(s) (all assets returned).");
     }
 } catch (Throwable $e) {
-    fwrite(STDERR, "[warn] Reservation completion check failed: {$e->getMessage()}\n");
+    sync_err("[warn] Reservation completion check failed: {$e->getMessage()}");
 }
