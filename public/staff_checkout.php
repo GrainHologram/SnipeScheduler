@@ -26,8 +26,14 @@ $active     = basename($_SERVER['PHP_SELF']);
 $isAdmin    = !empty($currentUser['is_admin']);
 $isStaff    = !empty($currentUser['is_staff']) || $isAdmin;
 $tz       = new DateTimeZone($timezone);
+$utc      = new DateTimeZone('UTC');
 $now      = new DateTime('now', $tz);
 $todayStr = $now->format('Y-m-d');
+// UTC boundaries of "today" in the app's local timezone (start_datetime is stored in UTC)
+$todayLocalStart = new DateTime($todayStr . ' 00:00:00', $tz);
+$todayLocalEnd   = new DateTime($todayStr . ' 23:59:59', $tz);
+$todayUtcStart   = $todayLocalStart->setTimezone($utc)->format('Y-m-d H:i:s');
+$todayUtcEnd     = $todayLocalEnd->setTimezone($utc)->format('Y-m-d H:i:s');
 
 // Only staff/admin allowed
 if (!$isStaff) {
@@ -141,12 +147,13 @@ try {
     $sql = "
         SELECT *
         FROM reservations
-        WHERE DATE(start_datetime) = :today
+        WHERE start_datetime >= :today_start
+          AND start_datetime <= :today_end
           AND status IN ('pending','confirmed')
         ORDER BY start_datetime ASC
     ";
     $stmt = $pdo->prepare($sql);
-    $stmt->execute([':today' => $todayStr]);
+    $stmt->execute([':today_start' => $todayUtcStart, ':today_end' => $todayUtcEnd]);
     $todayBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
     $todayBookings = [];
@@ -234,11 +241,13 @@ if ($selectedReservationId) {
         SELECT *
         FROM reservations
         WHERE id = :id
-          AND DATE(start_datetime) = :today
+          AND start_datetime >= :today_start
+          AND start_datetime <= :today_end
     ");
     $stmt->execute([
-        ':id'    => $selectedReservationId,
-        ':today' => $todayStr,
+        ':id'          => $selectedReservationId,
+        ':today_start' => $todayUtcStart,
+        ':today_end'   => $todayUtcEnd,
     ]);
     $selectedReservation = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
 

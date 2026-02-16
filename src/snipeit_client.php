@@ -1159,19 +1159,24 @@ function get_model_certification_requirements(int $modelId): array
             if (!is_array($customFields)) {
                 continue;
             }
-            foreach ($customFields as $cf) {
+            foreach ($customFields as $fieldKey => $cf) {
                 if (!is_array($cf)) {
                     continue;
                 }
-                $fieldName = $cf['field'] ?? '';
+                // Try both the inner 'field' property and the array key
+                // (Snipe-IT may use display name as key with DB column as 'field', or vice versa)
+                $candidates = array_filter([$cf['field'] ?? '', (string)$fieldKey]);
                 $value = strtolower(trim((string)($cf['value'] ?? '')));
                 // Accept any truthy value: "Yes", "1", "true"
                 $isTruthy = in_array($value, ['yes', '1', 'true'], true);
-                if (preg_match('/^Cert\s*-\s*(.+)$/i', $fieldName, $m)
-                    && $isTruthy
-                ) {
-                    $certName = trim($m[1]);
-                    $found[$certName] = true;
+                if (!$isTruthy) {
+                    continue;
+                }
+                foreach ($candidates as $fieldName) {
+                    if (preg_match('/^Cert\s*-\s*(.+)$/i', $fieldName, $m)) {
+                        $found[trim($m[1])] = true;
+                        break;
+                    }
                 }
             }
         }
