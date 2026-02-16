@@ -350,7 +350,6 @@ input[type="checkbox"] {
 .model-card {
     border: 1px solid var(--border);
     border-radius: 0.9rem;
-    overflow: hidden;
     display: flex;
     flex-direction: column;
     box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
@@ -367,6 +366,8 @@ input[type="checkbox"] {
     background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.08), rgba(255, 255, 255, 0.95));
     padding: 8px;
     border-bottom: 1px solid rgba(0,0,0,0.05);
+    border-radius: 0.9rem 0.9rem 0 0;
+    overflow: hidden;
 }
 
 /* Actual images: scale down to fit, never crop */
@@ -1220,6 +1221,11 @@ form .form-select {
 .basket-toast.show {
     opacity: 1;
     transform: translate(-50%, 0) scale(1);
+}
+
+/* Let catalogue cards grow when schedule details are expanded */
+.model-card:has(.schedule-open) {
+    height: auto !important;
 }
 
 /* Schedule info on catalogue cards */
