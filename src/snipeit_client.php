@@ -868,6 +868,14 @@ function checkin_asset(int $assetId, string $note = ''): void
     if ($status !== 'success' || $hasExplicitError) {
         throw new Exception('Snipe-IT checkin did not succeed: ' . $message);
     }
+
+    // Clear expected checkin custom field (checkin endpoint doesn't touch custom fields)
+    $customField = snipe_get_expected_checkin_custom_field();
+    if ($customField !== null) {
+        snipeit_request('PUT', 'hardware/' . $assetId, [
+            $customField => '',
+        ]);
+    }
 }
 
 /**
