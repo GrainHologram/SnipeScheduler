@@ -5,6 +5,7 @@
 require_once __DIR__ . '/../src/bootstrap.php';
 require_once SRC_PATH . '/auth.php';
 require_once SRC_PATH . '/snipeit_client.php';
+require_once SRC_PATH . '/checkout_rules.php';
 require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/activity_log.php';
 require_once SRC_PATH . '/email.php';
@@ -47,7 +48,7 @@ function qc_current_reservations_for_model(PDO $pdo, int $modelId): array
           FROM reservation_items ri
           JOIN reservations r ON r.id = ri.reservation_id
          WHERE ri.model_id = :model_id
-           AND r.status IN ('pending','confirmed')
+           AND r.status IN ('pending','confirmed','checked_out')
            AND r.start_datetime <= :now
            AND r.end_datetime   >= :now
          ORDER BY r.start_datetime ASC
@@ -224,6 +225,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         throw new Exception('Matched user has no valid ID.');
                     }
 
+                    // Checkout rules enforcement
+                    $clCfg = checkout_limits_config();
+
+                    // Single active checkout
+                    if ($clCfg['enabled'] && $clCfg['single_active_checkout'] && check_user_has_active_checkout($userId)) {
+                        $errors[] = 'This user already has assets checked out. Single active checkout is enforced. Please check in existing items first.';
+                    }
+
+                    // Duration limit
+                    if (empty($errors) && $clCfg['enabled'] && $startDt && $endDt) {
+                        $durationErr = validate_checkout_duration($userId, $startDt, $endDt);
+                        if ($durationErr !== null) {
+                            $errors[] = $durationErr;
+                        }
+                    }
+
+                    // Certification enforcement per model
+                    if (empty($errors)) {
+                        $checkedModels = [];
+                        foreach ($checkoutAssets as $asset) {
+                            $mid = (int)($asset['model_id'] ?? 0);
+                            if ($mid <= 0 || isset($checkedModels[$mid])) {
+                                continue;
+                            }
+                            $checkedModels[$mid] = true;
+                            $certReqs = get_model_certification_requirements($mid);
+                            if (!empty($certReqs)) {
+                                $missing = check_user_certifications($userId, $certReqs);
+                                if (!empty($missing)) {
+                                    $modelLabel = $asset['model'] ?? ('Model #' . $mid);
+                                    $errors[] = "User lacks required certification(s) for {$modelLabel}: " . implode(', ', $missing);
+                                }
+                            }
+                        }
+                    }
+
                     // Check for active reservations on these models right now, but only warn when
                     // reserved qty would exceed available stock after this checkout.
                     $reservationConflicts = [];
@@ -317,7 +354,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ) VALUES (
                                     :user_name, :user_email, :user_id, :snipeit_user_id,
                                     0, :asset_name_cache,
-                                    :start_datetime, :end_datetime, 'completed'
+                                    :start_datetime, :end_datetime, 'checked_out'
                                 )
                             ");
                             $insertRes->execute([

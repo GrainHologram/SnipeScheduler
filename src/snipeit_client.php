@@ -724,12 +724,6 @@ function checkout_asset_to_user(int $assetId, int $userId, string $note = '', ?s
             $snipeDateTime = $expectedCheckin;
         }
         $payload['expected_checkin'] = $snipeDateTime;
-
-        // Write the full datetime to the custom field so the time is preserved
-        $customField = snipe_get_expected_checkin_custom_field();
-        if ($customField !== null) {
-            $payload[$customField] = $snipeDateTime;
-        }
     }
 
     $resp = snipeit_request('POST', 'hardware/' . $assetId . '/checkout', $payload);
@@ -756,6 +750,16 @@ function checkout_asset_to_user(int $assetId, int $userId, string $note = '', ?s
 
     if ($status !== 'success' || $hasExplicitError) {
         throw new Exception('Snipe-IT checkout did not succeed: ' . $message);
+    }
+
+    // Set custom field via PUT (checkout endpoint ignores custom fields)
+    if (!empty($expectedCheckin)) {
+        $customField = snipe_get_expected_checkin_custom_field();
+        if ($customField !== null) {
+            snipeit_request('PUT', 'hardware/' . $assetId, [
+                $customField => $snipeDateTime,
+            ]);
+        }
     }
 }
 
@@ -790,8 +794,12 @@ function update_asset_expected_checkin(int $assetId, string $expectedDate): void
         $snipeDateTime = $expectedDate;
     }
 
+    // Snipe-IT stores expected_checkin as DATE (no time), so send date-only
+    // for the native field; the custom field keeps the full datetime.
+    $snipeDate = (new DateTime($snipeDateTime))->format('Y-m-d');
+
     $payload = [
-        'expected_checkin' => $snipeDateTime,
+        'expected_checkin' => $snipeDateTime, // Testing with DateTime so time shows in logging.
     ];
 
     // Write the full datetime to the custom field so the time is preserved
@@ -800,7 +808,7 @@ function update_asset_expected_checkin(int $assetId, string $expectedDate): void
         $payload[$customField] = $snipeDateTime;
     }
 
-    $resp = snipeit_request('PATCH', 'hardware/' . $assetId, $payload);
+    $resp = snipeit_request('PUT', 'hardware/' . $assetId, $payload);
     $status = $resp['status'] ?? 'success';
     $messagesField = $resp['messages'] ?? ($resp['message'] ?? '');
     $flatMessages  = [];
@@ -859,6 +867,14 @@ function checkin_asset(int $assetId, string $note = ''): void
 
     if ($status !== 'success' || $hasExplicitError) {
         throw new Exception('Snipe-IT checkin did not succeed: ' . $message);
+    }
+
+    // Clear expected checkin custom field (checkin endpoint doesn't touch custom fields)
+    $customField = snipe_get_expected_checkin_custom_field();
+    if ($customField !== null) {
+        snipeit_request('PUT', 'hardware/' . $assetId, [
+            $customField => '',
+        ]);
     }
 }
 
@@ -1002,6 +1018,191 @@ function fetch_checked_out_assets_from_snipeit(bool $overdueOnly = false, int $m
     }
 
     return $filtered;
+}
+
+/**
+ * Fetch all Snipe-IT groups (for settings UI dropdown).
+ *
+ * @return array  Array of ['id'=>int,'name'=>string] entries
+ * @throws Exception
+ */
+function get_snipeit_groups(): array
+{
+    $data = snipeit_request('GET', 'groups', ['limit' => 500]);
+    $rows = isset($data['rows']) && is_array($data['rows']) ? $data['rows'] : [];
+    $result = [];
+    foreach ($rows as $row) {
+        $id = (int)($row['id'] ?? 0);
+        $name = $row['name'] ?? '';
+        if ($id > 0 && $name !== '') {
+            $result[] = ['id' => $id, 'name' => $name];
+        }
+    }
+    usort($result, function ($a, $b) {
+        return strcasecmp($a['name'], $b['name']);
+    });
+    return $result;
+}
+
+/**
+ * Fetch a single Snipe-IT user by ID.
+ *
+ * @param int $userId
+ * @return array
+ * @throws Exception
+ */
+function get_user_by_id(int $userId): array
+{
+    if ($userId <= 0) {
+        throw new InvalidArgumentException('Invalid user ID.');
+    }
+    return snipeit_request('GET', 'users/' . $userId);
+}
+
+/**
+ * Get the groups a Snipe-IT user belongs to.
+ *
+ * Returns [['id'=>int,'name'=>string], ...].
+ * Uses session cache with 5-min TTL. If $userData is provided with
+ * groups.rows already populated, skips the API call.
+ *
+ * @param int        $userId
+ * @param array|null $userData  Optional pre-fetched user data
+ * @return array
+ */
+function get_user_groups(int $userId, ?array $userData = null): array
+{
+    static $cache = [];
+
+    if (isset($cache[$userId])) {
+        return $cache[$userId];
+    }
+
+    // Session cache with 5-min TTL
+    $sessionKey = 'snipeit_user_groups';
+    $sessionTtl = 300;
+    if (isset($_SESSION[$sessionKey][$userId])) {
+        $entry = $_SESSION[$sessionKey][$userId];
+        if (isset($entry['ts'], $entry['data']) && (time() - (int)$entry['ts']) <= $sessionTtl) {
+            $cache[$userId] = $entry['data'];
+            return $cache[$userId];
+        }
+    }
+
+    // Check if userData already has groups
+    $rows = null;
+    if ($userData !== null && isset($userData['groups']['rows']) && is_array($userData['groups']['rows'])) {
+        $rows = $userData['groups']['rows'];
+    }
+
+    if ($rows === null) {
+        try {
+            $data = get_user_by_id($userId);
+            $rows = isset($data['groups']['rows']) && is_array($data['groups']['rows'])
+                ? $data['groups']['rows']
+                : [];
+        } catch (Throwable $e) {
+            $rows = [];
+        }
+    }
+
+    $groups = [];
+    foreach ($rows as $row) {
+        $id = (int)($row['id'] ?? 0);
+        $name = $row['name'] ?? '';
+        if ($id > 0) {
+            $groups[] = ['id' => $id, 'name' => $name];
+        }
+    }
+
+    $cache[$userId] = $groups;
+    $_SESSION[$sessionKey][$userId] = ['ts' => time(), 'data' => $groups];
+    return $groups;
+}
+
+/**
+ * Fetch custom field definitions for a fieldset.
+ *
+ * @param int $fieldsetId
+ * @return array
+ * @throws Exception
+ */
+function get_fieldset_fields(int $fieldsetId): array
+{
+    if ($fieldsetId <= 0) {
+        return [];
+    }
+    $data = snipeit_request('GET', 'fieldsets/' . $fieldsetId);
+    // Fields are nested: { "fields": { "total": N, "rows": [...] } }
+    if (isset($data['fields']['rows']) && is_array($data['fields']['rows'])) {
+        return $data['fields']['rows'];
+    }
+    // Fallback: top-level rows (in case of alternate API response format)
+    return isset($data['rows']) && is_array($data['rows']) ? $data['rows'] : [];
+}
+
+/**
+ * Get certification requirements for a model by scanning its requestable
+ * assets' custom fields for "Cert - {group}" fields set to "Yes".
+ *
+ * Only certifications that are actually enabled (value "Yes") on at least
+ * one requestable asset are returned.
+ *
+ * Returns an array of certification names, e.g. ['Photography', 'Drone Pilot'].
+ * Static-cached per request.
+ *
+ * @param int $modelId
+ * @return array
+ */
+function get_model_certification_requirements(int $modelId): array
+{
+    static $cache = [];
+    if (isset($cache[$modelId])) {
+        return $cache[$modelId];
+    }
+
+    $cache[$modelId] = [];
+
+    try {
+        $assets = list_assets_by_model($modelId, 500);
+        $found = [];
+
+        foreach ($assets as $asset) {
+            if (empty($asset['requestable'])) {
+                continue;
+            }
+            $customFields = $asset['custom_fields'] ?? [];
+            if (!is_array($customFields)) {
+                continue;
+            }
+            foreach ($customFields as $fieldKey => $cf) {
+                if (!is_array($cf)) {
+                    continue;
+                }
+                // Try both the inner 'field' property and the array key
+                // (Snipe-IT may use display name as key with DB column as 'field', or vice versa)
+                $candidates = array_filter([$cf['field'] ?? '', (string)$fieldKey]);
+                $value = strtolower(trim((string)($cf['value'] ?? '')));
+                // Accept any truthy value: "Yes", "1", "true"
+                $isTruthy = in_array($value, ['yes', '1', 'true'], true);
+                if (!$isTruthy) {
+                    continue;
+                }
+                foreach ($candidates as $fieldName) {
+                    if (preg_match('/^Cert\s*-\s*(.+)$/i', $fieldName, $m)) {
+                        $found[trim($m[1])] = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        $cache[$modelId] = array_keys($found);
+    } catch (Throwable $e) {
+        // Silently fail — no cert requirements if API fails
+    }
+
+    return $cache[$modelId];
 }
 
 /**

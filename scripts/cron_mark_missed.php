@@ -22,7 +22,7 @@ try {
     if ($type !== '' && stripos($type, 'missed') === false) {
         $pdo->exec("
             ALTER TABLE reservations
-            MODIFY status ENUM('pending','confirmed','completed','cancelled','missed')
+            MODIFY status ENUM('pending','confirmed','checked_out','completed','cancelled','missed')
             NOT NULL DEFAULT 'pending'
         ");
         echo "[" . date('Y-m-d H:i:s') . "] Updated reservations.status enum to include 'missed'\n";

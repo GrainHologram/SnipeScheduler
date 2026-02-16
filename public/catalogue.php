@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../src/bootstrap.php';
 require_once SRC_PATH . '/auth.php';
 require_once SRC_PATH . '/snipeit_client.php';
+require_once SRC_PATH . '/checkout_rules.php';
 require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/layout.php';
 
@@ -736,6 +737,7 @@ $overdueAssets = [];
 $overdueErr = '';
 $catalogueBlocked = false;
 $skipOverdueCheck = !$blockCatalogueOverdue;
+$catalogueSnipeUserId = 0;
 $activeUserEmail = trim($activeUser['email'] ?? '');
 $activeUserUsername = trim($activeUser['username'] ?? '');
 $activeUserDisplay = trim($activeUser['display_name'] ?? '');
@@ -788,8 +790,31 @@ if (!$skipOverdueCheck && !$catalogueBlocked && empty($overdueAssets)) {
 
         $overdueAssets = fetch_overdue_assets_for_user($lookupSqlValues, $snipeUserId);
         $catalogueBlocked = !empty($overdueAssets);
+        $catalogueSnipeUserId = $snipeUserId;
     } catch (Throwable $e) {
         $overdueErr = $debugOn ? $e->getMessage() : 'Unable to check overdue items at the moment.';
+    }
+}
+
+// If we didn't resolve the Snipe-IT user ID above (e.g. overdue check was skipped),
+// try to resolve it now for certification/checkout-rules checks.
+if ($catalogueSnipeUserId <= 0) {
+    $lookupQueries = array_values(array_filter(array_unique([
+        $activeUserEmail,
+        $activeUserUsername,
+        $activeUserDisplay,
+        $activeUserName,
+    ]), 'strlen'));
+    foreach ($lookupQueries as $query) {
+        try {
+            $matched = find_single_user_by_email_or_name($query);
+            $catalogueSnipeUserId = (int)($matched['id'] ?? 0);
+            if ($catalogueSnipeUserId > 0) {
+                break;
+            }
+        } catch (Throwable $e) {
+            // Try next identifier.
+        }
     }
 }
 
@@ -1191,11 +1216,11 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                             $stmt = $pdo->prepare("
                                 SELECT
                                     COALESCE(SUM(CASE WHEN r.status IN ('pending','confirmed') THEN ri.quantity END), 0) AS pending_qty,
-                                    COALESCE(SUM(CASE WHEN r.status = 'completed' THEN ri.quantity END), 0) AS completed_qty
+                                    COALESCE(SUM(CASE WHEN r.status = 'checked_out' THEN ri.quantity END), 0) AS completed_qty
                                 FROM reservation_items ri
                                 JOIN reservations r ON r.id = ri.reservation_id
                                 WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed','completed')
+                                  AND r.status IN ('pending','confirmed','checked_out')
                                   AND (r.start_datetime < :end AND r.end_datetime > :start)
                             ");
                             $stmt->execute([
@@ -1208,11 +1233,11 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                             $stmt = $pdo->prepare("
                                 SELECT
                                     COALESCE(SUM(CASE WHEN r.status IN ('pending','confirmed') THEN ri.quantity END), 0) AS pending_qty,
-                                    COALESCE(SUM(CASE WHEN r.status = 'completed' THEN ri.quantity END), 0) AS completed_qty
+                                    COALESCE(SUM(CASE WHEN r.status = 'checked_out' THEN ri.quantity END), 0) AS completed_qty
                                 FROM reservation_items ri
                                 JOIN reservations r ON r.id = ri.reservation_id
                                 WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed','completed')
+                                  AND r.status IN ('pending','confirmed','checked_out')
                                   AND r.start_datetime <= :now
                                   AND r.end_datetime   > :now
                             ");
@@ -1222,16 +1247,22 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                             ]);
                         }
                         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-                        $pendingQty   = $row ? (int)$row['pending_qty'] : 0;
+                        $pendingQty     = $row ? (int)$row['pending_qty'] : 0;
+                        $checkedOutQty  = $row ? (int)$row['completed_qty'] : 0;
 
-                        // How many are actually still checked out (from local cache)
-                        if (array_key_exists($modelId, $checkedOutCounts)) {
-                            $activeCheckedOut = $checkedOutCounts[$modelId];
+                        if ($windowActive) {
+                            // Window mode: reservation overlap query already accounts for
+                            // checked_out reservations in the selected date range.
+                            $booked = $pendingQty + $checkedOutQty;
                         } else {
-                            $activeCheckedOut = count_checked_out_assets_by_model($modelId);
+                            // "Now" mode: use live cache count for currently checked-out assets.
+                            if (array_key_exists($modelId, $checkedOutCounts)) {
+                                $activeCheckedOut = $checkedOutCounts[$modelId];
+                            } else {
+                                $activeCheckedOut = count_checked_out_assets_by_model($modelId);
+                            }
+                            $booked = $pendingQty + $activeCheckedOut;
                         }
-
-                        $booked = $pendingQty + $activeCheckedOut;
                         $freeNow = max(0, $assetCount - $booked);
                         $maxQty = $freeNow;
                         $isRequestable = $assetCount > 0;
@@ -1245,6 +1276,19 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     if (is_array($notes)) {
                         $notes = $notes['text'] ?? '';
                     }
+
+                    // Certification requirements
+                    $certRequirements = [];
+                    $missingCerts = [];
+                    try {
+                        $certRequirements = get_model_certification_requirements($modelId);
+                        if (!empty($certRequirements) && $catalogueSnipeUserId > 0) {
+                            $missingCerts = check_user_certifications($catalogueSnipeUserId, $certRequirements);
+                        }
+                    } catch (Throwable $e) {
+                        // Silently fail — don't block catalogue
+                    }
+                    $certBlocked = !empty($missingCerts);
 
                     $proxiedImage = '';
                     if ($imagePath !== '') {
@@ -1287,6 +1331,13 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                             <?= label_safe($notes) ?>
                                         </div>
                                     <?php endif; ?>
+                                    <?php if (!empty($certRequirements)): ?>
+                                        <div class="mt-2">
+                                            <?php foreach ($certRequirements as $certName): ?>
+                                                <span class="badge bg-warning text-dark">Certification: <?= h($certName) ?></span>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php endif; ?>
                                 </p>
 
                                 <form method="post"
@@ -1298,7 +1349,16 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                         <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
                                     <?php endif; ?>
 
-                                    <?php if ($isRequestable && $freeNow > 0): ?>
+                                    <?php if ($certBlocked): ?>
+                                        <div class="alert alert-warning small mb-0">
+                                            Requires certification: <?= h(implode(', ', $missingCerts)) ?>
+                                        </div>
+                                        <button type="button"
+                                                class="btn btn-sm btn-secondary w-100 mt-2"
+                                                disabled>
+                                            Add to basket
+                                        </button>
+                                    <?php elseif ($isRequestable && $freeNow > 0): ?>
                                         <div class="row g-2 align-items-center mb-2">
                                             <div class="col-6">
                                                 <label class="form-label mb-0 small">Quantity</label>

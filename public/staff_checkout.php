@@ -12,6 +12,7 @@ require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/activity_log.php';
 require_once SRC_PATH . '/booking_helpers.php';
 require_once SRC_PATH . '/snipeit_client.php';
+require_once SRC_PATH . '/checkout_rules.php';
 require_once SRC_PATH . '/email.php';
 require_once SRC_PATH . '/layout.php';
 
@@ -25,8 +26,14 @@ $active     = basename($_SERVER['PHP_SELF']);
 $isAdmin    = !empty($currentUser['is_admin']);
 $isStaff    = !empty($currentUser['is_staff']) || $isAdmin;
 $tz       = new DateTimeZone($timezone);
+$utc      = new DateTimeZone('UTC');
 $now      = new DateTime('now', $tz);
 $todayStr = $now->format('Y-m-d');
+// UTC boundaries of "today" in the app's local timezone (start_datetime is stored in UTC)
+$todayLocalStart = new DateTime($todayStr . ' 00:00:00', $tz);
+$todayLocalEnd   = new DateTime($todayStr . ' 23:59:59', $tz);
+$todayUtcStart   = $todayLocalStart->setTimezone($utc)->format('Y-m-d H:i:s');
+$todayUtcEnd     = $todayLocalEnd->setTimezone($utc)->format('Y-m-d H:i:s');
 
 // Only staff/admin allowed
 if (!$isStaff) {
@@ -109,7 +116,7 @@ function model_booked_elsewhere(PDO $pdo, int $modelId, string $start, string $e
         WHERE ri.model_id = :model_id
           AND r.start_datetime < :end
           AND r.end_datetime > :start
-          AND r.status IN ('pending', 'confirmed', 'completed')
+          AND r.status IN ('pending', 'confirmed', 'checked_out')
     ";
 
     $params = [
@@ -140,12 +147,13 @@ try {
     $sql = "
         SELECT *
         FROM reservations
-        WHERE DATE(start_datetime) = :today
+        WHERE start_datetime >= :today_start
+          AND start_datetime <= :today_end
           AND status IN ('pending','confirmed')
         ORDER BY start_datetime ASC
     ";
     $stmt = $pdo->prepare($sql);
-    $stmt->execute([':today' => $todayStr]);
+    $stmt->execute([':today_start' => $todayUtcStart, ':today_end' => $todayUtcEnd]);
     $todayBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
     $todayBookings = [];
@@ -179,6 +187,8 @@ $selectedBulkUserId = 0;
 $bulkCheckoutToValue = '';
 $bulkNoteValue = '';
 $reservationNoteValue = '';
+$showAppendOverride = false;
+$activeCheckoutExpected = '';
 
 // Current counts per model already in checkout list (for quota enforcement)
 $currentModelCounts = [];
@@ -233,11 +243,13 @@ if ($selectedReservationId) {
         SELECT *
         FROM reservations
         WHERE id = :id
-          AND DATE(start_datetime) = :today
+          AND start_datetime >= :today_start
+          AND start_datetime <= :today_end
     ");
     $stmt->execute([
-        ':id'    => $selectedReservationId,
-        ':today' => $todayStr,
+        ':id'          => $selectedReservationId,
+        ':today_start' => $todayUtcStart,
+        ':today_end'   => $todayUtcEnd,
     ]);
     $selectedReservation = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
 
@@ -599,9 +611,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             throw new Exception('Matched user has no valid ID.');
                         }
 
+                        // Single active checkout enforcement
+                        $clCfg = checkout_limits_config();
+                        $appendToActive = !empty($_POST['append_to_active']);
+                        $checkoutExpectedEnd = $selectedEnd; // default: reservation end
+
+                        if ($clCfg['enabled'] && $clCfg['single_active_checkout'] && check_user_has_active_checkout($userId)) {
+                            if ($appendToActive) {
+                                // Look up the existing expected check-in for this user
+                                $existingStmt = $pdo->prepare("
+                                    SELECT expected_checkin FROM checked_out_asset_cache
+                                     WHERE assigned_to_id = :uid AND expected_checkin IS NOT NULL
+                                     ORDER BY expected_checkin DESC LIMIT 1
+                                ");
+                                $existingStmt->execute([':uid' => $userId]);
+                                $existingExpected = $existingStmt->fetchColumn();
+                                if ($existingExpected) {
+                                    // Convert from Snipe-IT timezone to UTC for checkout_asset_to_user
+                                    $snipeTz = snipe_get_timezone();
+                                    try {
+                                        $existDt = new DateTime($existingExpected, $snipeTz);
+                                        $existDt->setTimezone(new DateTimeZone('UTC'));
+                                        $checkoutExpectedEnd = $existDt->format('Y-m-d H:i:s');
+                                    } catch (Throwable $e) {
+                                        $checkoutExpectedEnd = $existingExpected;
+                                    }
+                                }
+                                // Skip single active checkout block — appending to existing
+                            } else {
+                                // Block checkout but offer override
+                                $showAppendOverride = true;
+                                // Fetch the active expected check-in for display
+                                $existingStmt = $pdo->prepare("
+                                    SELECT expected_checkin FROM checked_out_asset_cache
+                                     WHERE assigned_to_id = :uid AND expected_checkin IS NOT NULL
+                                     ORDER BY expected_checkin DESC LIMIT 1
+                                ");
+                                $existingStmt->execute([':uid' => $userId]);
+                                $activeCheckoutExpected = $existingStmt->fetchColumn() ?: '';
+                                throw new Exception('This user already has assets checked out. Single active checkout is enforced.');
+                            }
+                        }
+
+                        // Certification enforcement per model
+                        foreach ($selectedItems as $item) {
+                            $mid = (int)$item['model_id'];
+                            $certReqs = get_model_certification_requirements($mid);
+                            if (!empty($certReqs)) {
+                                $missing = check_user_certifications($userId, $certReqs);
+                                if (!empty($missing)) {
+                                    throw new Exception("User lacks required certification(s) for model {$item['name']}: " . implode(', ', $missing));
+                                }
+                            }
+                        }
+
                         foreach ($assetsToCheckout as $a) {
-                            checkout_asset_to_user((int)$a['asset_id'], $userId, $note, $selectedEnd);
+                            checkout_asset_to_user((int)$a['asset_id'], $userId, $note, $checkoutExpectedEnd);
                             $checkoutMessages[] = "Checked out asset {$a['asset_tag']} to {$userName}.";
+                        }
+                        if ($appendToActive) {
+                            $checkoutMessages[] = "Appended to existing checkout (expected check-in: " . display_datetime($checkoutExpectedEnd) . ").";
                         }
 
                         // Mark reservation as checked out and store asset tags
@@ -614,7 +683,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         $upd = $pdo->prepare("
                             UPDATE reservations
-                               SET status = 'completed',
+                               SET status = 'checked_out',
                                    asset_name_cache = :assets_text
                              WHERE id = :id
                         ");
@@ -905,6 +974,33 @@ $active  = basename($_SERVER['PHP_SELF']);
                         <li><?= h($e) ?></li>
                     <?php endforeach; ?>
                 </ul>
+                <?php if ($showAppendOverride && $selectedReservation): ?>
+                    <hr class="my-2">
+                    <p class="mb-2">
+                        You can append these items to the user's active checkout.
+                        <?php if ($activeCheckoutExpected !== ''): ?>
+                            The existing expected check-in is <strong><?= h(display_datetime($activeCheckoutExpected)) ?></strong> — new items will use this date.
+                        <?php endif; ?>
+                    </p>
+                    <form method="post" class="d-inline">
+                        <input type="hidden" name="mode" value="reservation_checkout">
+                        <input type="hidden" name="append_to_active" value="1">
+                        <input type="hidden" name="reservation_note" value="<?= h($reservationNoteValue) ?>">
+                        <input type="hidden" name="reservation_user_id" value="<?= (int)$selectedReservationUserId ?>">
+                        <?php foreach ($selectedItems as $item): ?>
+                            <?php
+                                $mid = (int)$item['model_id'];
+                                $selectionsForModel = $presetSelections[$mid] ?? [];
+                            ?>
+                            <?php foreach ($selectionsForModel as $idx => $aid): ?>
+                                <input type="hidden" name="selected_assets[<?= $mid ?>][<?= (int)$idx ?>]" value="<?= (int)$aid ?>">
+                            <?php endforeach; ?>
+                        <?php endforeach; ?>
+                        <button type="submit" class="btn btn-warning btn-sm">
+                            Append to existing checkout
+                        </button>
+                    </form>
+                <?php endif; ?>
             </div>
         <?php endif; ?>
 

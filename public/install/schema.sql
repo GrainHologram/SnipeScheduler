@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS reservations (
     start_datetime DATETIME NOT NULL,
     end_datetime DATETIME NOT NULL,
 
-    status ENUM('pending','confirmed','completed','cancelled','missed') NOT NULL DEFAULT 'pending',
+    status ENUM('pending','confirmed','checked_out','completed','cancelled','missed') NOT NULL DEFAULT 'pending',
 
     -- Cached display string of items (for quick admin lists)
     asset_name_cache TEXT NULL,
@@ -95,7 +95,8 @@ CREATE TABLE IF NOT EXISTS checked_out_asset_cache (
     PRIMARY KEY (asset_id),
     KEY idx_checked_out_model (model_id),
     KEY idx_checked_out_expected (expected_checkin),
-    KEY idx_checked_out_updated (updated_at)
+    KEY idx_checked_out_updated (updated_at),
+    KEY idx_checked_out_assigned_to (assigned_to_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------
@@ -133,4 +134,4 @@ CREATE TABLE IF NOT EXISTS schema_version (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT IGNORE INTO schema_version (version)
-VALUES ('v0.8.0-beta');
+VALUES ('v0.10.0-beta');

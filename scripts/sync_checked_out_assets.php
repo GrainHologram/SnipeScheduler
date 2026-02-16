@@ -17,11 +17,22 @@ if (php_sapi_name() !== 'cli') {
 require_once __DIR__ . '/../src/bootstrap.php';
 require_once SRC_PATH . '/snipeit_client.php';
 require_once SRC_PATH . '/db.php';
+require_once SRC_PATH . '/activity_log.php';
+
+function sync_log(string $msg): void
+{
+    echo '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n";
+}
+
+function sync_err(string $msg): void
+{
+    fwrite(STDERR, '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n");
+}
 
 try {
     $assets = fetch_checked_out_assets_from_snipeit(false, 0);
 } catch (Throwable $e) {
-    fwrite(STDERR, "[error] Failed to load checked-out assets: {$e->getMessage()}\n");
+    sync_err("[error] Failed to load checked-out assets: {$e->getMessage()}");
     exit(1);
 }
 
@@ -143,11 +154,80 @@ try {
     if ($pdo->inTransaction()) {
         $pdo->commit();
     }
-    echo "[done] Synced " . count($assets) . " checked-out asset(s).\n";
+    sync_log("[done] Synced " . count($assets) . " checked-out asset(s).");
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
-    fwrite(STDERR, "[error] Failed to sync checked-out assets: {$e->getMessage()}\n");
+    sync_err("[error] Failed to sync checked-out assets: {$e->getMessage()}");
     exit(1);
+}
+
+// Transition checked_out reservations to completed when all assets have been returned.
+// Runs after the cache sync so the cache reflects the current Snipe-IT state.
+try {
+    $resStmt = $pdo->query("
+        SELECT id, asset_name_cache
+          FROM reservations
+         WHERE status = 'checked_out'
+    ");
+    $checkedOutReservations = $resStmt->fetchAll(PDO::FETCH_ASSOC);
+    $completedCount = 0;
+
+    foreach ($checkedOutReservations as $res) {
+        $cache = $res['asset_name_cache'] ?? '';
+        if ($cache === '') {
+            continue;
+        }
+
+        // Parse asset tags from cache: format is "TAG (Model), TAG2 (Model2)"
+        $resTags = [];
+        $parts = array_map('trim', explode(',', $cache));
+        foreach ($parts as $part) {
+            // Extract tag before first " (" or use whole string
+            if (preg_match('/^(\S+)\s*\(/', $part, $m)) {
+                $resTags[] = $m[1];
+            } else {
+                $resTags[] = $part;
+            }
+        }
+        $resTags = array_filter($resTags, function ($t) { return $t !== ''; });
+        if (empty($resTags)) {
+            continue;
+        }
+
+        // Check if any of the reservation's asset tags are still in the cache
+        $placeholders = implode(',', array_fill(0, count($resTags), '?'));
+        $tagStmt = $pdo->prepare("
+            SELECT COUNT(*) FROM checked_out_asset_cache
+             WHERE asset_tag IN ({$placeholders})
+        ");
+        $tagStmt->execute(array_values($resTags));
+        $stillOut = (int)$tagStmt->fetchColumn();
+
+        if ($stillOut === 0) {
+            $complStmt = $pdo->prepare("
+                UPDATE reservations
+                   SET status = 'completed'
+                 WHERE id = :id
+                   AND status = 'checked_out'
+            ");
+            $complStmt->execute([':id' => (int)$res['id']]);
+
+            activity_log_event('reservation_completed', 'Reservation completed (all assets returned)', [
+                'subject_type' => 'reservation',
+                'subject_id'   => (int)$res['id'],
+                'metadata'     => [
+                    'completed_via' => 'sync_script',
+                ],
+            ]);
+            $completedCount++;
+        }
+    }
+
+    if ($completedCount > 0) {
+        sync_log("[done] Completed {$completedCount} reservation(s) (all assets returned).");
+    }
+} catch (Throwable $e) {
+    sync_err("[warn] Reservation completion check failed: {$e->getMessage()}");
 }

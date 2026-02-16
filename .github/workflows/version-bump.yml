@@ -1,0 +1,44 @@
+name: Bump patch version
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  bump-version:
+    # Skip if the push was a version bump commit (prevent infinite loop)
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bump patch version
+        run: |
+          # Read version and strip any non-semver suffix (e.g. "1.0.0 RC1" -> "1.0.0")
+          raw=$(cat version.txt)
+          semver=$(echo "$raw" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')
+
+          if [ -z "$semver" ]; then
+            echo "::error::Could not parse semver from version.txt: $raw"
+            exit 1
+          fi
+
+          # Increment patch version
+          major=$(echo "$semver" | cut -d. -f1)
+          minor=$(echo "$semver" | cut -d. -f2)
+          patch=$(echo "$semver" | cut -d. -f3)
+          new_version="${major}.${minor}.$((patch + 1))"
+
+          echo "Bumping version: $raw -> $new_version"
+          echo "$new_version" > version.txt
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.txt
+          git commit -m "Bump version to $(cat version.txt) [skip ci]"
+          git push

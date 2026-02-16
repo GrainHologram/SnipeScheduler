@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../src/bootstrap.php';
 require_once SRC_PATH . '/auth.php';
 require_once SRC_PATH . '/snipeit_client.php';
+require_once SRC_PATH . '/checkout_rules.php';
 require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/activity_log.php';
 require_once SRC_PATH . '/layout.php';
@@ -91,6 +92,57 @@ function expected_to_timestamp($value): ?int
     }
 }
 
+/**
+ * After a successful Snipe-IT renewal, update the local cache and reservation.
+ *
+ * @param PDO    $pdo
+ * @param int    $assetId      The renewed asset ID
+ * @param string $normalized   New expected datetime in app_tz (Y-m-d H:i)
+ * @param int    $userId       Snipe-IT user ID (assigned_to_id)
+ */
+function sync_local_after_renewal(PDO $pdo, int $assetId, string $normalized, int $userId): void
+{
+    $appTz  = app_get_timezone();
+    $snipeTz = snipe_get_timezone();
+    $utc    = new DateTimeZone('UTC');
+
+    try {
+        $dt = new DateTime($normalized, $appTz);
+    } catch (Throwable $e) {
+        return;
+    }
+
+    // Convert to snipe_tz for the local cache (mirrors what the sync script stores)
+    $snipeDt = clone $dt;
+    if ($snipeTz && $appTz && $snipeTz->getName() !== $appTz->getName()) {
+        $snipeDt->setTimezone($snipeTz);
+    }
+    $snipeValue = $snipeDt->format('Y-m-d H:i:s');
+
+    // Update local checked_out_asset_cache
+    $pdo->prepare("
+        UPDATE checked_out_asset_cache
+           SET expected_checkin = :ec, updated_at = NOW()
+         WHERE asset_id = :aid
+    ")->execute([':ec' => $snipeValue, ':aid' => $assetId]);
+
+    // Update the associated reservation's end_datetime (stored in UTC)
+    if ($userId > 0) {
+        $utcDt = clone $dt;
+        $utcDt->setTimezone($utc);
+        $endUtc = $utcDt->format('Y-m-d H:i:s');
+
+        $pdo->prepare("
+            UPDATE reservations
+               SET end_datetime = :new_end
+             WHERE snipeit_user_id = :uid
+               AND status = 'checked_out'
+             ORDER BY created_at DESC
+             LIMIT 1
+        ")->execute([':new_end' => $endUtc, ':uid' => $userId]);
+    }
+}
+
 $active    = basename($_SERVER['PHP_SELF']);
 $isAdmin   = !empty($currentUser['is_admin']);
 $isStaff   = !empty($currentUser['is_staff']) || $isAdmin;
@@ -150,8 +202,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $normalized = normalize_expected_datetime($renewExpected);
         if ($renewId > 0 && $normalized !== '') {
             try {
+                // Look up asset to get user and checkout info for validation
+                $clCfg = checkout_limits_config();
+                if ($clCfg['enabled']) {
+                    $assetRow = $pdo->prepare("
+                        SELECT assigned_to_id, expected_checkin, last_checkout
+                          FROM checked_out_asset_cache
+                         WHERE asset_id = :aid
+                    ");
+                    $assetRow->execute([':aid' => $renewId]);
+                    $assetInfo = $assetRow->fetch(PDO::FETCH_ASSOC);
+                    $renewUserId = (int)($assetInfo['assigned_to_id'] ?? 0);
+
+                    if ($renewUserId > 0) {
+                        $newExpectedDt = new DateTime($normalized, app_get_timezone());
+                        $renewErr = validate_renewal_duration(
+                            $renewUserId,
+                            $assetInfo['expected_checkin'] ?? '',
+                            $newExpectedDt,
+                            $assetInfo['last_checkout'] ?? null
+                        );
+                        if ($renewErr !== null) {
+                            throw new Exception($renewErr);
+                        }
+                    }
+                }
+
                 update_asset_expected_checkin($renewId, $normalized);
+                $renewUserIdForSync = $renewUserId ?? 0;
+                sync_local_after_renewal($pdo, $renewId, $normalized, $renewUserIdForSync);
                 $messages[] = "Extended expected check-in to " . format_display_datetime($normalized) . " for asset #{$renewId}.";
+
+                // Single active checkout: update ALL assets for this user to same date
+                if ($clCfg['enabled'] && $clCfg['single_active_checkout'] && isset($renewUserId) && $renewUserId > 0) {
+                    $otherAssets = $pdo->prepare("
+                        SELECT asset_id FROM checked_out_asset_cache
+                         WHERE assigned_to_id = :uid AND asset_id != :aid
+                    ");
+                    $otherAssets->execute([':uid' => $renewUserId, ':aid' => $renewId]);
+                    $otherRows = $otherAssets->fetchAll(PDO::FETCH_COLUMN);
+                    foreach ($otherRows as $otherAid) {
+                        try {
+                            update_asset_expected_checkin((int)$otherAid, $normalized);
+                            sync_local_after_renewal($pdo, (int)$otherAid, $normalized, $renewUserId);
+                        } catch (Throwable $e) {
+                            // Log but don't fail the primary renewal
+                        }
+                    }
+                    if (!empty($otherRows)) {
+                        $messages[] = "Also updated expected check-in for " . count($otherRows) . " other asset(s) assigned to same user.";
+                    }
+                }
+
                 $labels = load_asset_labels($pdo, [$renewId]);
                 $label = $labels[$renewId] ?? ('Asset #' . $renewId);
                 activity_log_event('asset_renewed', 'Checked out asset renewed', [
@@ -179,30 +281,116 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (empty($bulkIds) || !is_array($bulkIds)) {
             $error = 'Select at least one asset to renew.';
         } else {
-            try {
-                $count = 0;
-                foreach ($bulkIds as $idRaw) {
-                    $aid = (int)$idRaw;
-                    if ($aid > 0) {
-                        update_asset_expected_checkin($aid, $bulkExpected);
-                        $count++;
+            $clCfg = checkout_limits_config();
+            $bulkAssetIds = array_values(array_filter(array_map('intval', $bulkIds), static function (int $id): bool {
+                return $id > 0;
+            }));
+            $bulkBlocked = [];
+            $bulkRenewed = [];
+            $bulkNewExpectedDt = new DateTime($bulkExpected, app_get_timezone());
+
+            // Pre-validate per-user duration limits
+            if ($clCfg['enabled'] && !empty($bulkAssetIds)) {
+                $phBulk = implode(',', array_fill(0, count($bulkAssetIds), '?'));
+                $bulkStmt = $pdo->prepare("
+                    SELECT asset_id, assigned_to_id, expected_checkin, last_checkout
+                      FROM checked_out_asset_cache
+                     WHERE asset_id IN ({$phBulk})
+                ");
+                $bulkStmt->execute($bulkAssetIds);
+                $bulkAssetRows = $bulkStmt->fetchAll(PDO::FETCH_ASSOC);
+                $bulkAssetMap = [];
+                foreach ($bulkAssetRows as $bar) {
+                    $bulkAssetMap[(int)$bar['asset_id']] = $bar;
+                }
+
+                foreach ($bulkAssetIds as $aid) {
+                    $info = $bulkAssetMap[$aid] ?? null;
+                    if ($info === null) {
+                        continue;
+                    }
+                    $bulkUserId = (int)($info['assigned_to_id'] ?? 0);
+                    if ($bulkUserId > 0) {
+                        $renewErr = validate_renewal_duration(
+                            $bulkUserId,
+                            $info['expected_checkin'] ?? '',
+                            $bulkNewExpectedDt,
+                            $info['last_checkout'] ?? null
+                        );
+                        if ($renewErr !== null) {
+                            $bulkBlocked[$aid] = $renewErr;
+                        }
                     }
                 }
-                $messages[] = "Extended expected check-in to " . format_display_datetime($bulkExpected) . " for {$count} asset(s).";
-                $assetIds = array_values(array_filter(array_map('intval', $bulkIds), static function (int $id): bool {
-                    return $id > 0;
-                }));
-                $labels = load_asset_labels($pdo, $assetIds);
-                $assetLabels = array_values(array_filter(array_map(static function (int $id) use ($labels): string {
-                    return $labels[$id] ?? ('Asset #' . $id);
-                }, $assetIds)));
-                activity_log_event('assets_renewed', 'Checked out assets renewed', [
-                    'metadata' => [
-                        'assets' => $assetLabels,
-                        'expected_checkin' => $bulkExpected,
-                        'count' => $count,
-                    ],
-                ]);
+            }
+
+            // Apply renewals for non-blocked assets
+            try {
+                foreach ($bulkAssetIds as $aid) {
+                    if (isset($bulkBlocked[$aid])) {
+                        continue;
+                    }
+                    update_asset_expected_checkin($aid, $bulkExpected);
+                    $bulkUid = (int)(($bulkAssetMap[$aid] ?? [])['assigned_to_id'] ?? 0);
+                    sync_local_after_renewal($pdo, $aid, $bulkExpected, $bulkUid);
+                    $bulkRenewed[] = $aid;
+                }
+
+                if (!empty($bulkRenewed)) {
+                    $messages[] = "Extended expected check-in to " . format_display_datetime($bulkExpected) . " for " . count($bulkRenewed) . " asset(s).";
+
+                    // Single active checkout: update ALL assets for each affected user
+                    if ($clCfg['enabled'] && $clCfg['single_active_checkout'] && isset($bulkAssetMap)) {
+                        $syncedUsers = [];
+                        foreach ($bulkRenewed as $aid) {
+                            $info = $bulkAssetMap[$aid] ?? null;
+                            $uid = (int)($info['assigned_to_id'] ?? 0);
+                            if ($uid <= 0 || isset($syncedUsers[$uid])) {
+                                continue;
+                            }
+                            $syncedUsers[$uid] = true;
+                            $otherAssets = $pdo->prepare("
+                                SELECT asset_id FROM checked_out_asset_cache
+                                 WHERE assigned_to_id = :uid AND asset_id NOT IN (" . implode(',', $bulkRenewed) . ")
+                            ");
+                            $otherAssets->execute([':uid' => $uid]);
+                            $otherRows = $otherAssets->fetchAll(PDO::FETCH_COLUMN);
+                            foreach ($otherRows as $otherAid) {
+                                try {
+                                    update_asset_expected_checkin((int)$otherAid, $bulkExpected);
+                                    sync_local_after_renewal($pdo, (int)$otherAid, $bulkExpected, $uid);
+                                } catch (Throwable $e) {
+                                    // Log but don't fail the primary renewals
+                                }
+                            }
+                            if (!empty($otherRows)) {
+                                $messages[] = "Also updated expected check-in for " . count($otherRows) . " other asset(s) assigned to user (single checkout sync).";
+                            }
+                        }
+                    }
+
+                    $labels = load_asset_labels($pdo, $bulkRenewed);
+                    $assetLabels = array_values(array_map(static function (int $id) use ($labels): string {
+                        return $labels[$id] ?? ('Asset #' . $id);
+                    }, $bulkRenewed));
+                    activity_log_event('assets_renewed', 'Checked out assets renewed', [
+                        'metadata' => [
+                            'assets' => $assetLabels,
+                            'expected_checkin' => $bulkExpected,
+                            'count' => count($bulkRenewed),
+                        ],
+                    ]);
+                }
+
+                if (!empty($bulkBlocked)) {
+                    $blockMsgs = [];
+                    $blockLabels = load_asset_labels($pdo, array_keys($bulkBlocked));
+                    foreach ($bulkBlocked as $aid => $reason) {
+                        $label = $blockLabels[$aid] ?? ('Asset #' . $aid);
+                        $blockMsgs[] = $label . ': ' . $reason;
+                    }
+                    $error = 'Some assets could not be renewed: ' . implode('; ', $blockMsgs);
+                }
             } catch (Throwable $e) {
                 $error = 'Could not renew selected assets: ' . $e->getMessage();
             }

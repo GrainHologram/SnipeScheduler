@@ -135,13 +135,29 @@ return [
     ],
 
     'reservations' => [
-        'deletable_statuses' => ['pending', 'confirmed', 'cancelled', 'missed'], // reservation statuses that allow deletion
+        'deletable_statuses' => ['pending', 'confirmed', 'cancelled', 'missed'], // statuses that allow deletion (checked_out and completed are not deletable)
     ],
 
     'catalogue' => [
         // Restrict which categories appear in the catalogue filter.
         // Leave empty to show all categories returned by Snipe-IT.
         'allowed_categories' => [],
+    ],
+
+    'checkout_limits' => [
+        'enabled' => false,  // master switch; false = no restrictions (backwards compatible)
+        'default' => [
+            'max_checkout_hours' => 0,   // 0 = unlimited
+            'max_renewal_hours'  => 0,   // 0 = unlimited
+            'max_total_hours'    => 0,   // 0 = unlimited (initial + all renewals)
+        ],
+        'group_overrides' => [
+            // Keyed by Snipe-IT group ID (int). Most permissive wins for multi-group users.
+            // Example:
+            // 5  => ['max_checkout_hours' => 168, 'max_renewal_hours' => 48, 'max_total_hours' => 336],
+            // 12 => ['max_checkout_hours' => 720, 'max_renewal_hours' => 168, 'max_total_hours' => 1440],
+        ],
+        'single_active_checkout' => false,  // true = enforce one active checkout per user
     ],
 
     'smtp' => [
