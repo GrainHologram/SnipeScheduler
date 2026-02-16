@@ -206,9 +206,24 @@ if (!function_exists('layout_footer')) {
         $version     = $versionRaw !== '' ? $versionRaw : 'dev';
         $versionEsc  = htmlspecialchars($version, ENT_QUOTES, 'UTF-8');
 
+        $commitHash = '';
+        $headFile = APP_ROOT . '/.git/HEAD';
+        if (is_file($headFile)) {
+            $head = trim((string)@file_get_contents($headFile));
+            if (str_starts_with($head, 'ref: ')) {
+                $refPath = APP_ROOT . '/.git/' . substr($head, 5);
+                if (is_file($refPath)) {
+                    $commitHash = substr(trim((string)@file_get_contents($refPath)), 0, 7);
+                }
+            } else {
+                $commitHash = substr($head, 0, 7);
+            }
+        }
+        $commitSuffix = $commitHash !== '' ? ' (' . $commitHash . ')' : '';
+
         echo '<script src="assets/nav.js"></script>';
         echo '<footer class="text-center text-muted mt-4 small">'
-            . 'SnipeScheduler Version ' . $versionEsc . ' - Created by '
+            . 'SnipeScheduler Version ' . $versionEsc . $commitSuffix . ' - Created by '
             . '<a href="https://www.linkedin.com/in/ben-pirozzolo-76212a88" target="_blank" rel="noopener noreferrer">Ben Pirozzolo</a>'
             . '</footer>';
     }
