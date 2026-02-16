@@ -164,6 +164,11 @@ $bookingUser  = $userOverride ?: $currentUser;
 $snipeUserId  = (int)($bookingUser['id'] ?? 0);
 
 if (!empty($basket) && $snipeUserId > 0) {
+    // Access group gate
+    if (!check_user_has_access_group($snipeUserId)) {
+        $checkoutErrors[] = 'You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.';
+    }
+
     $clCfg = checkout_limits_config();
 
     // Single active checkout

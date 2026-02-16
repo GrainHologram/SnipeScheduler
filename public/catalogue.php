@@ -819,6 +819,14 @@ if ($catalogueSnipeUserId <= 0) {
 }
 
 // ---------------------------------------------------------------------
+// Access group gate: user must belong to at least one "Access - *" group
+// ---------------------------------------------------------------------
+$accessBlocked = false;
+if ($catalogueSnipeUserId > 0) {
+    $accessBlocked = !check_user_has_access_group($catalogueSnipeUserId);
+}
+
+// ---------------------------------------------------------------------
 // Filters
 // ---------------------------------------------------------------------
 $searchRaw    = trim($_GET['q'] ?? '');
@@ -1520,7 +1528,16 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                         <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
                                     <?php endif; ?>
 
-                                    <?php if ($certBlocked): ?>
+                                    <?php if ($accessBlocked): ?>
+                                        <div class="alert alert-warning small mb-0">
+                                            You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.
+                                        </div>
+                                        <button type="button"
+                                                class="btn btn-sm btn-secondary w-100 mt-2"
+                                                disabled>
+                                            Add to basket
+                                        </button>
+                                    <?php elseif ($certBlocked): ?>
                                         <div class="alert alert-warning small mb-0">
                                             Requires certification: <?= h(implode(', ', $missingCerts)) ?>
                                         </div>

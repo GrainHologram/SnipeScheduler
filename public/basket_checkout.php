@@ -56,6 +56,11 @@ $userId    = $user['id']; // Snipe-IT user id
 $clCfg = checkout_limits_config();
 $snipeUserId = (int)$userId;
 
+// Access group gate
+if ($snipeUserId > 0 && !check_user_has_access_group($snipeUserId)) {
+    basket_error('You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.');
+}
+
 // Single active checkout
 if ($clCfg['enabled'] && $clCfg['single_active_checkout'] && $snipeUserId > 0 && check_user_has_active_checkout($snipeUserId)) {
     basket_error('You already have assets checked out. Please return them before making a new reservation. (Single active checkout is enforced.)');

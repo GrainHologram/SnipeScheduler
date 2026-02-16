@@ -284,6 +284,29 @@ function check_user_certifications(int $snipeitUserId, array $certRequirements):
 }
 
 /**
+ * Check if a user belongs to at least one "Access - *" group in Snipe-IT.
+ *
+ * @param int $snipeitUserId
+ * @return bool
+ */
+function check_user_has_access_group(int $snipeitUserId): bool
+{
+    if ($snipeitUserId <= 0) {
+        return false;
+    }
+
+    $groups = get_user_groups($snipeitUserId);
+    foreach ($groups as $g) {
+        $name = trim($g['name'] ?? '');
+        if (preg_match('/^Access\s*-/i', $name)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Check if a user currently has any checked-out assets.
  *
  * @param int $snipeitUserId
