@@ -790,8 +790,12 @@ function update_asset_expected_checkin(int $assetId, string $expectedDate): void
         $snipeDateTime = $expectedDate;
     }
 
+    // Snipe-IT stores expected_checkin as DATE (no time), so send date-only
+    // for the native field; the custom field keeps the full datetime.
+    $snipeDate = (new DateTime($snipeDateTime))->format('Y-m-d');
+
     $payload = [
-        'expected_checkin' => $snipeDateTime,
+        'expected_checkin' => $snipeDate,
     ];
 
     // Write the full datetime to the custom field so the time is preserved
@@ -800,7 +804,7 @@ function update_asset_expected_checkin(int $assetId, string $expectedDate): void
         $payload[$customField] = $snipeDateTime;
     }
 
-    $resp = snipeit_request('PATCH', 'hardware/' . $assetId, $payload);
+    $resp = snipeit_request('PUT', 'hardware/' . $assetId, $payload);
     $status = $resp['status'] ?? 'success';
     $messagesField = $resp['messages'] ?? ($resp['message'] ?? '');
     $flatMessages  = [];

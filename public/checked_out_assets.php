@@ -92,6 +92,57 @@ function expected_to_timestamp($value): ?int
     }
 }
 
+/**
+ * After a successful Snipe-IT renewal, update the local cache and reservation.
+ *
+ * @param PDO    $pdo
+ * @param int    $assetId      The renewed asset ID
+ * @param string $normalized   New expected datetime in app_tz (Y-m-d H:i)
+ * @param int    $userId       Snipe-IT user ID (assigned_to_id)
+ */
+function sync_local_after_renewal(PDO $pdo, int $assetId, string $normalized, int $userId): void
+{
+    $appTz  = app_get_timezone();
+    $snipeTz = snipe_get_timezone();
+    $utc    = new DateTimeZone('UTC');
+
+    try {
+        $dt = new DateTime($normalized, $appTz);
+    } catch (Throwable $e) {
+        return;
+    }
+
+    // Convert to snipe_tz for the local cache (mirrors what the sync script stores)
+    $snipeDt = clone $dt;
+    if ($snipeTz && $appTz && $snipeTz->getName() !== $appTz->getName()) {
+        $snipeDt->setTimezone($snipeTz);
+    }
+    $snipeValue = $snipeDt->format('Y-m-d H:i:s');
+
+    // Update local checked_out_asset_cache
+    $pdo->prepare("
+        UPDATE checked_out_asset_cache
+           SET expected_checkin = :ec, updated_at = NOW()
+         WHERE asset_id = :aid
+    ")->execute([':ec' => $snipeValue, ':aid' => $assetId]);
+
+    // Update the associated reservation's end_datetime (stored in UTC)
+    if ($userId > 0) {
+        $utcDt = clone $dt;
+        $utcDt->setTimezone($utc);
+        $endUtc = $utcDt->format('Y-m-d H:i:s');
+
+        $pdo->prepare("
+            UPDATE reservations
+               SET end_datetime = :new_end
+             WHERE snipeit_user_id = :uid
+               AND status = 'completed'
+             ORDER BY created_at DESC
+             LIMIT 1
+        ")->execute([':new_end' => $endUtc, ':uid' => $userId]);
+    }
+}
+
 $active    = basename($_SERVER['PHP_SELF']);
 $isAdmin   = !empty($currentUser['is_admin']);
 $isStaff   = !empty($currentUser['is_staff']) || $isAdmin;
@@ -178,6 +229,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 update_asset_expected_checkin($renewId, $normalized);
+                $renewUserIdForSync = $renewUserId ?? 0;
+                sync_local_after_renewal($pdo, $renewId, $normalized, $renewUserIdForSync);
                 $messages[] = "Extended expected check-in to " . format_display_datetime($normalized) . " for asset #{$renewId}.";
 
                 // Single active checkout: update ALL assets for this user to same date
@@ -191,6 +244,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     foreach ($otherRows as $otherAid) {
                         try {
                             update_asset_expected_checkin((int)$otherAid, $normalized);
+                            sync_local_after_renewal($pdo, (int)$otherAid, $normalized, $renewUserId);
                         } catch (Throwable $e) {
                             // Log but don't fail the primary renewal
                         }
@@ -277,6 +331,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         continue;
                     }
                     update_asset_expected_checkin($aid, $bulkExpected);
+                    $bulkUid = (int)(($bulkAssetMap[$aid] ?? [])['assigned_to_id'] ?? 0);
+                    sync_local_after_renewal($pdo, $aid, $bulkExpected, $bulkUid);
                     $bulkRenewed[] = $aid;
                 }
 
@@ -302,6 +358,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             foreach ($otherRows as $otherAid) {
                                 try {
                                     update_asset_expected_checkin((int)$otherAid, $bulkExpected);
+                                    sync_local_after_renewal($pdo, (int)$otherAid, $bulkExpected, $uid);
                                 } catch (Throwable $e) {
                                     // Log but don't fail the primary renewals
                                 }
