@@ -20,8 +20,8 @@ SnipeScheduler is a PHP/MySQL web app that adds equipment reservation and checko
 - **`db.php`** — Creates `$pdo` (PDO connection to the booking database). Include this file to get the connection.
 - **`snipeit_client.php`** — All Snipe-IT API interaction. Core function `snipeit_request()` handles HTTP, caching, and error handling. Higher-level functions for models, assets, users, checkout/checkin, groups, certifications.
 - **`auth.php`** — Session-based auth guard. Include at top of protected pages. Exposes `$currentUser` and the `h()` HTML-escape helper.
-- **`layout.php`** — Shared UI: nav rendering, theme/color CSS variables, logo, footer.
-- **`checkout_rules.php`** — Policy enforcement: checkout duration limits, renewal limits, certification requirements, single-active-checkout rule. Limits are per-group with most-permissive-wins logic.
+- **`layout.php`** — Shared UI: nav rendering, theme/color CSS variables, logo, footer. Provides `layout_status_badge()` for rendering reservation status badges.
+- **`checkout_rules.php`** — Policy enforcement: checkout duration limits, renewal limits, certification requirements, single-active-checkout rule. Limits are per-group with most-permissive-wins logic. Duration limits are enforced at reservation creation time (basket), not during staff checkout.
 - **`booking_helpers.php`** — Reservation item fetching and summary text building.
 - **`datetime_helpers.php`** — Timezone conversion, configurable date/time formatting. Three timezone contexts: PHP internally runs in UTC, `app_tz` for display, `snipe_tz` for Snipe-IT server dates.
 - **`activity_log.php`** — Audit logging to `activity_log` table.
@@ -56,7 +56,7 @@ pending → confirmed → checked_out → completed
 - **`pending`** — user has submitted a reservation request.
 - **`confirmed`** — staff has confirmed/approved the reservation.
 - **`checked_out`** — staff has checked out assets to the user via `staff_checkout.php`. The reservation is actively held — assets are with the user.
-- **`completed`** — all assets have been returned (checked in). Transition happens automatically when the last asset is checked in via `checked_out_assets.php` or `quick_checkin.php`.
+- **`completed`** — all assets have been returned (checked in). Transition happens automatically via the `sync_checked_out_assets.php` cron script when none of the reservation's assets remain in the checked-out cache.
 - **`cancelled`** — reservation was cancelled before checkout.
 - **`missed`** — reservation was not collected within the missed cutoff window (only `pending`/`confirmed` reservations can be marked missed by `cron_mark_missed.php`).
 
@@ -67,6 +67,7 @@ pending → confirmed → checked_out → completed
 - GET responses are cached to `config/cache/` with configurable TTL (`api_cache_ttl_seconds`).
 - Assets/models must have `requestable` flag set in Snipe-IT to appear in the catalogue.
 - The `checked_out_asset_cache` table avoids hitting the API on every page load — it's refreshed by the `sync_checked_out_assets.php` cron script.
+- Snipe-IT checkout/checkin endpoints (`POST /hardware/{id}/checkout` and `/checkin`) ignore custom fields. Custom field values must be set/cleared via a separate `PUT /hardware/{id}` call after checkout/checkin. See `checkout_asset_to_user()` and `checkin_asset()` in `snipeit_client.php`.
 
 ### Authentication & Authorization
 - Three auth providers: LDAP, Google OAuth, Microsoft Entra. At least one must be configured.
@@ -74,7 +75,7 @@ pending → confirmed → checked_out → completed
 - `$currentUser` session data drives role checks throughout the app.
 
 ### Cron Scripts (`scripts/`)
-- `sync_checked_out_assets.php` — Syncs checked-out assets from Snipe-IT API to local cache. Should run frequently (e.g., every minute).
+- `sync_checked_out_assets.php` — Syncs checked-out assets from Snipe-IT API to local cache. Also transitions `checked_out` reservations to `completed` when all their assets have been returned. Should run frequently (e.g., every minute).
 - `cron_mark_missed.php` — Marks uncollected `pending`/`confirmed` reservations as missed after configurable cutoff. Does not affect `checked_out` reservations.
 - `email_overdue_staff.php` / `email_overdue_users.php` — Overdue notification emails.
 
