@@ -1272,6 +1272,113 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         $maxQty     = 0;
                         $isRequestable = $assetCount > 0;
                     }
+                    // Fetch schedule info for this model (conflicting, prior, next reservations)
+                    $scheduleConflicts = [];
+                    $schedulePrior = null;
+                    $scheduleNext = null;
+                    try {
+                        if ($windowActive) {
+                            // Conflicting reservations in the selected window
+                            $schedStmt = $pdo->prepare("
+                                SELECT r.id, r.user_name, r.status, r.start_datetime, r.end_datetime,
+                                       COALESCE(SUM(ri.quantity), 0) AS qty
+                                FROM reservations r
+                                JOIN reservation_items ri ON ri.reservation_id = r.id
+                                WHERE ri.model_id = :mid
+                                  AND r.status IN ('pending','confirmed','checked_out')
+                                  AND r.start_datetime < :end
+                                  AND r.end_datetime > :start
+                                GROUP BY r.id
+                                ORDER BY r.start_datetime ASC
+                                LIMIT 10
+                            ");
+                            $schedStmt->execute([':mid' => $modelId, ':start' => $windowStartIso, ':end' => $windowEndIso]);
+
+                            // Prior reservation (ends before window start)
+                            $priorStmt = $pdo->prepare("
+                                SELECT r.start_datetime, r.end_datetime, r.status,
+                                       COALESCE(SUM(ri.quantity), 0) AS qty
+                                FROM reservations r
+                                JOIN reservation_items ri ON ri.reservation_id = r.id
+                                WHERE ri.model_id = :mid
+                                  AND r.status IN ('pending','confirmed','checked_out')
+                                  AND r.end_datetime <= :start
+                                GROUP BY r.id
+                                ORDER BY r.end_datetime DESC
+                                LIMIT 1
+                            ");
+                            $priorStmt->execute([':mid' => $modelId, ':start' => $windowStartIso]);
+
+                            // Next reservation (starts after window end)
+                            $nextStmt = $pdo->prepare("
+                                SELECT r.start_datetime, r.end_datetime, r.status,
+                                       COALESCE(SUM(ri.quantity), 0) AS qty
+                                FROM reservations r
+                                JOIN reservation_items ri ON ri.reservation_id = r.id
+                                WHERE ri.model_id = :mid
+                                  AND r.status IN ('pending','confirmed','checked_out')
+                                  AND r.start_datetime >= :end
+                                GROUP BY r.id
+                                ORDER BY r.start_datetime ASC
+                                LIMIT 1
+                            ");
+                            $nextStmt->execute([':mid' => $modelId, ':end' => $windowEndIso]);
+                        } else {
+                            // "Now" mode — overlapping reservations
+                            $schedStmt = $pdo->prepare("
+                                SELECT r.id, r.user_name, r.status, r.start_datetime, r.end_datetime,
+                                       COALESCE(SUM(ri.quantity), 0) AS qty
+                                FROM reservations r
+                                JOIN reservation_items ri ON ri.reservation_id = r.id
+                                WHERE ri.model_id = :mid
+                                  AND r.status IN ('pending','confirmed','checked_out')
+                                  AND r.start_datetime <= :now
+                                  AND r.end_datetime > :now
+                                GROUP BY r.id
+                                ORDER BY r.start_datetime ASC
+                                LIMIT 10
+                            ");
+                            $schedStmt->execute([':mid' => $modelId, ':now' => $nowIso]);
+
+                            // Prior reservation (ended before now)
+                            $priorStmt = $pdo->prepare("
+                                SELECT r.start_datetime, r.end_datetime, r.status,
+                                       COALESCE(SUM(ri.quantity), 0) AS qty
+                                FROM reservations r
+                                JOIN reservation_items ri ON ri.reservation_id = r.id
+                                WHERE ri.model_id = :mid
+                                  AND r.status IN ('pending','confirmed','checked_out')
+                                  AND r.end_datetime <= :now
+                                GROUP BY r.id
+                                ORDER BY r.end_datetime DESC
+                                LIMIT 1
+                            ");
+                            $priorStmt->execute([':mid' => $modelId, ':now' => $nowIso]);
+
+                            // Next reservation (starts after now)
+                            $nextStmt = $pdo->prepare("
+                                SELECT r.start_datetime, r.end_datetime, r.status,
+                                       COALESCE(SUM(ri.quantity), 0) AS qty
+                                FROM reservations r
+                                JOIN reservation_items ri ON ri.reservation_id = r.id
+                                WHERE ri.model_id = :mid
+                                  AND r.status IN ('pending','confirmed','checked_out')
+                                  AND r.start_datetime > :now
+                                GROUP BY r.id
+                                ORDER BY r.start_datetime ASC
+                                LIMIT 1
+                            ");
+                            $nextStmt->execute([':mid' => $modelId, ':now' => $nowIso]);
+                        }
+
+                        $scheduleConflicts = $schedStmt->fetchAll(PDO::FETCH_ASSOC);
+                        $schedulePrior = $priorStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+                        $scheduleNext = $nextStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+                    } catch (Throwable $e) {
+                        // Non-fatal — schedule info is supplementary
+                    }
+                    $hasScheduleInfo = !empty($scheduleConflicts) || $schedulePrior || $scheduleNext;
+
                     $notes      = $model['notes'] ?? '';
                     if (is_array($notes)) {
                         $notes = $notes['text'] ?? '';
@@ -1339,6 +1446,58 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                         </div>
                                     <?php endif; ?>
                                 </p>
+
+                                <?php if ($hasScheduleInfo): ?>
+                                    <div class="schedule-info mt-2 mb-2">
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-secondary w-100 schedule-toggle"
+                                                onclick="this.parentElement.classList.toggle('schedule-open')">
+                                            View schedule
+                                        </button>
+                                        <div class="schedule-details">
+                                            <?php if ($schedulePrior): ?>
+                                                <div class="schedule-entry schedule-prior">
+                                                    <span class="schedule-label">Previous:</span>
+                                                    <?= layout_status_badge($schedulePrior['status']) ?>
+                                                    <span class="schedule-qty"><?= (int)$schedulePrior['qty'] ?> unit<?= (int)$schedulePrior['qty'] !== 1 ? 's' : '' ?></span>
+                                                    <span class="schedule-dates">
+                                                        <?= h(app_format_datetime_local($schedulePrior['start_datetime'])) ?>
+                                                        – <?= h(app_format_datetime_local($schedulePrior['end_datetime'])) ?>
+                                                    </span>
+                                                </div>
+                                            <?php endif; ?>
+
+                                            <?php if (!empty($scheduleConflicts)): ?>
+                                                <div class="schedule-section-label">Conflicts:</div>
+                                                <?php foreach ($scheduleConflicts as $conflict): ?>
+                                                    <div class="schedule-entry schedule-conflict">
+                                                        <?= layout_status_badge($conflict['status']) ?>
+                                                        <span class="schedule-qty"><?= (int)$conflict['qty'] ?> unit<?= (int)$conflict['qty'] !== 1 ? 's' : '' ?></span>
+                                                        <span class="schedule-dates">
+                                                            <?= h(app_format_datetime_local($conflict['start_datetime'])) ?>
+                                                            – <?= h(app_format_datetime_local($conflict['end_datetime'])) ?>
+                                                        </span>
+                                                        <?php if ($isStaff && !empty($conflict['user_name'])): ?>
+                                                            <span class="schedule-user text-muted">(<?= h($conflict['user_name']) ?>)</span>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            <?php endif; ?>
+
+                                            <?php if ($scheduleNext): ?>
+                                                <div class="schedule-entry schedule-next">
+                                                    <span class="schedule-label">Next:</span>
+                                                    <?= layout_status_badge($scheduleNext['status']) ?>
+                                                    <span class="schedule-qty"><?= (int)$scheduleNext['qty'] ?> unit<?= (int)$scheduleNext['qty'] !== 1 ? 's' : '' ?></span>
+                                                    <span class="schedule-dates">
+                                                        <?= h(app_format_datetime_local($scheduleNext['start_datetime'])) ?>
+                                                        – <?= h(app_format_datetime_local($scheduleNext['end_datetime'])) ?>
+                                                    </span>
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                <?php endif; ?>
 
                                 <form method="post"
                                       action="basket_add.php"
