@@ -1164,9 +1164,11 @@ function get_model_certification_requirements(int $modelId): array
                     continue;
                 }
                 $fieldName = $cf['field'] ?? '';
-                $value = trim((string)($cf['value'] ?? ''));
+                $value = strtolower(trim((string)($cf['value'] ?? '')));
+                // Accept any truthy value: "Yes", "1", "true"
+                $isTruthy = in_array($value, ['yes', '1', 'true'], true);
                 if (preg_match('/^Cert\s*-\s*(.+)$/i', $fieldName, $m)
-                    && strcasecmp($value, 'Yes') === 0
+                    && $isTruthy
                 ) {
                     $certName = trim($m[1]);
                     $found[$certName] = true;
