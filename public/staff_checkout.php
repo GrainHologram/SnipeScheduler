@@ -187,6 +187,8 @@ $selectedBulkUserId = 0;
 $bulkCheckoutToValue = '';
 $bulkNoteValue = '';
 $reservationNoteValue = '';
+$showAppendOverride = false;
+$activeCheckoutExpected = '';
 
 // Current counts per model already in checkout list (for quota enforcement)
 $currentModelCounts = [];
@@ -611,12 +613,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         // Single active checkout enforcement
                         $clCfg = checkout_limits_config();
+                        $appendToActive = !empty($_POST['append_to_active']);
+                        $checkoutExpectedEnd = $selectedEnd; // default: reservation end
+
                         if ($clCfg['enabled'] && $clCfg['single_active_checkout'] && check_user_has_active_checkout($userId)) {
-                            throw new Exception('This user already has assets checked out. Single active checkout is enforced. Please check in existing items first.');
+                            if ($appendToActive) {
+                                // Look up the existing expected check-in for this user
+                                $existingStmt = $pdo->prepare("
+                                    SELECT expected_checkin FROM checked_out_asset_cache
+                                     WHERE assigned_to_id = :uid AND expected_checkin IS NOT NULL
+                                     ORDER BY expected_checkin DESC LIMIT 1
+                                ");
+                                $existingStmt->execute([':uid' => $userId]);
+                                $existingExpected = $existingStmt->fetchColumn();
+                                if ($existingExpected) {
+                                    // Convert from Snipe-IT timezone to UTC for checkout_asset_to_user
+                                    $snipeTz = snipe_get_timezone();
+                                    try {
+                                        $existDt = new DateTime($existingExpected, $snipeTz);
+                                        $existDt->setTimezone(new DateTimeZone('UTC'));
+                                        $checkoutExpectedEnd = $existDt->format('Y-m-d H:i:s');
+                                    } catch (Throwable $e) {
+                                        $checkoutExpectedEnd = $existingExpected;
+                                    }
+                                }
+                                // Skip single active checkout block — appending to existing
+                            } else {
+                                // Block checkout but offer override
+                                $showAppendOverride = true;
+                                // Fetch the active expected check-in for display
+                                $existingStmt = $pdo->prepare("
+                                    SELECT expected_checkin FROM checked_out_asset_cache
+                                     WHERE assigned_to_id = :uid AND expected_checkin IS NOT NULL
+                                     ORDER BY expected_checkin DESC LIMIT 1
+                                ");
+                                $existingStmt->execute([':uid' => $userId]);
+                                $activeCheckoutExpected = $existingStmt->fetchColumn() ?: '';
+                                throw new Exception('This user already has assets checked out. Single active checkout is enforced.');
+                            }
                         }
 
-                        // Duration limit enforcement
-                        if ($clCfg['enabled'] && $selectedStart !== '' && $selectedEnd !== '') {
+                        // Duration limit enforcement (skip if appending — using existing expected date)
+                        if (!$appendToActive && $clCfg['enabled'] && $selectedStart !== '' && $selectedEnd !== '') {
                             $appTz = app_get_timezone();
                             try {
                                 $startDt = new DateTime($selectedStart, new DateTimeZone('UTC'));
@@ -626,7 +664,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     throw new Exception($durationErr);
                                 }
                             } catch (Exception $e) {
-                                if (strpos($e->getMessage(), 'Checkout duration exceeds') !== false || strpos($e->getMessage(), 'already has assets checked out') !== false) {
+                                if (strpos($e->getMessage(), 'Checkout duration exceeds') !== false) {
                                     throw $e;
                                 }
                             }
@@ -645,8 +683,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
 
                         foreach ($assetsToCheckout as $a) {
-                            checkout_asset_to_user((int)$a['asset_id'], $userId, $note, $selectedEnd);
+                            checkout_asset_to_user((int)$a['asset_id'], $userId, $note, $checkoutExpectedEnd);
                             $checkoutMessages[] = "Checked out asset {$a['asset_tag']} to {$userName}.";
+                        }
+                        if ($appendToActive) {
+                            $checkoutMessages[] = "Appended to existing checkout (expected check-in: " . display_datetime($checkoutExpectedEnd) . ").";
                         }
 
                         // Mark reservation as checked out and store asset tags
@@ -950,6 +991,33 @@ $active  = basename($_SERVER['PHP_SELF']);
                         <li><?= h($e) ?></li>
                     <?php endforeach; ?>
                 </ul>
+                <?php if ($showAppendOverride && $selectedReservation): ?>
+                    <hr class="my-2">
+                    <p class="mb-2">
+                        You can append these items to the user's active checkout.
+                        <?php if ($activeCheckoutExpected !== ''): ?>
+                            The existing expected check-in is <strong><?= h(display_datetime($activeCheckoutExpected)) ?></strong> — new items will use this date.
+                        <?php endif; ?>
+                    </p>
+                    <form method="post" class="d-inline">
+                        <input type="hidden" name="mode" value="reservation_checkout">
+                        <input type="hidden" name="append_to_active" value="1">
+                        <input type="hidden" name="reservation_note" value="<?= h($reservationNoteValue) ?>">
+                        <input type="hidden" name="reservation_user_id" value="<?= (int)$selectedReservationUserId ?>">
+                        <?php foreach ($selectedItems as $item): ?>
+                            <?php
+                                $mid = (int)$item['model_id'];
+                                $storedForModel = $storedSelections[$mid] ?? [];
+                            ?>
+                            <?php foreach ($storedForModel as $idx => $aid): ?>
+                                <input type="hidden" name="selected_assets[<?= $mid ?>][<?= (int)$idx ?>]" value="<?= (int)$aid ?>">
+                            <?php endforeach; ?>
+                        <?php endforeach; ?>
+                        <button type="submit" class="btn btn-warning btn-sm">
+                            Append to existing checkout
+                        </button>
+                    </form>
+                <?php endif; ?>
             </div>
         <?php endif; ?>
 
