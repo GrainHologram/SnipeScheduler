@@ -1447,7 +1447,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                     <?php endif; ?>
                                 </p>
 
-                                <?php if ($hasScheduleInfo): ?>
+                                <?php if ($hasScheduleInfo): $utcTz = new DateTimeZone('UTC'); ?>
                                     <div class="schedule-info mt-2 mb-2">
                                         <button type="button"
                                                 class="btn btn-sm btn-outline-secondary w-100 schedule-toggle"
@@ -1461,8 +1461,8 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                                     <?= layout_status_badge($schedulePrior['status']) ?>
                                                     <span class="schedule-qty"><?= (int)$schedulePrior['qty'] ?> unit<?= (int)$schedulePrior['qty'] !== 1 ? 's' : '' ?></span>
                                                     <span class="schedule-dates">
-                                                        <?= h(app_format_datetime_local($schedulePrior['start_datetime'])) ?>
-                                                        – <?= h(app_format_datetime_local($schedulePrior['end_datetime'])) ?>
+                                                        <?= h(app_format_datetime_local($schedulePrior['start_datetime'], null, $utcTz)) ?>
+                                                        – <?= h(app_format_datetime_local($schedulePrior['end_datetime'], null, $utcTz)) ?>
                                                     </span>
                                                 </div>
                                             <?php endif; ?>
@@ -1474,8 +1474,8 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                                         <?= layout_status_badge($conflict['status']) ?>
                                                         <span class="schedule-qty"><?= (int)$conflict['qty'] ?> unit<?= (int)$conflict['qty'] !== 1 ? 's' : '' ?></span>
                                                         <span class="schedule-dates">
-                                                            <?= h(app_format_datetime_local($conflict['start_datetime'])) ?>
-                                                            – <?= h(app_format_datetime_local($conflict['end_datetime'])) ?>
+                                                            <?= h(app_format_datetime_local($conflict['start_datetime'], null, $utcTz)) ?>
+                                                            – <?= h(app_format_datetime_local($conflict['end_datetime'], null, $utcTz)) ?>
                                                         </span>
                                                         <?php if ($isStaff && !empty($conflict['user_name'])): ?>
                                                             <span class="schedule-user text-muted">(<?= h($conflict['user_name']) ?>)</span>
@@ -1490,8 +1490,8 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                                     <?= layout_status_badge($scheduleNext['status']) ?>
                                                     <span class="schedule-qty"><?= (int)$scheduleNext['qty'] ?> unit<?= (int)$scheduleNext['qty'] !== 1 ? 's' : '' ?></span>
                                                     <span class="schedule-dates">
-                                                        <?= h(app_format_datetime_local($scheduleNext['start_datetime'])) ?>
-                                                        – <?= h(app_format_datetime_local($scheduleNext['end_datetime'])) ?>
+                                                        <?= h(app_format_datetime_local($scheduleNext['start_datetime'], null, $utcTz)) ?>
+                                                        – <?= h(app_format_datetime_local($scheduleNext['end_datetime'], null, $utcTz)) ?>
                                                     </span>
                                                 </div>
                                             <?php endif; ?>
