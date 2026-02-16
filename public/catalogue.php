@@ -842,14 +842,22 @@ if ($windowStartRaw === '' && $windowEndRaw === '') {
     }
 }
 
-$windowStartTs = $windowStartRaw !== '' ? strtotime($windowStartRaw) : false;
-$windowEndTs   = $windowEndRaw !== '' ? strtotime($windowEndRaw) : false;
+// User-entered window dates are in app_tz; convert to UTC for DB queries
+$appTz = app_get_timezone($config);
 $windowActive  = false;
 $windowError   = '';
+$windowStartDt = null;
+$windowEndDt   = null;
 if ($windowStartRaw !== '' || $windowEndRaw !== '') {
-    if ($windowStartTs === false || $windowEndTs === false) {
+    try {
+        $windowStartDt = $windowStartRaw !== '' ? new DateTime($windowStartRaw, $appTz) : null;
+        $windowEndDt   = $windowEndRaw !== ''   ? new DateTime($windowEndRaw, $appTz)   : null;
+    } catch (Throwable $e) {
+        // fall through — null values trigger error below
+    }
+    if (!$windowStartDt || !$windowEndDt) {
         $windowError = 'Please enter a valid start and end date/time.';
-    } elseif ($windowEndTs <= $windowStartTs) {
+    } elseif ($windowEndDt <= $windowStartDt) {
         $windowError = 'End date/time must be after start date/time.';
     } else {
         $windowActive = true;
@@ -873,8 +881,12 @@ $modelErr    = '';
 $totalModels = 0;
 $totalPages  = 1;
 $nowIso      = date('Y-m-d H:i:s');
-$windowStartIso = $windowActive ? date('Y-m-d H:i:s', $windowStartTs) : '';
-$windowEndIso   = $windowActive ? date('Y-m-d H:i:s', $windowEndTs) : '';
+if ($windowActive) {
+    $windowStartDt->setTimezone(new DateTimeZone('UTC'));
+    $windowEndDt->setTimezone(new DateTimeZone('UTC'));
+}
+$windowStartIso = $windowActive ? $windowStartDt->format('Y-m-d H:i:s') : '';
+$windowEndIso   = $windowActive ? $windowEndDt->format('Y-m-d H:i:s') : '';
 $checkedOutCounts = [];
 ?>
 <!DOCTYPE html>
