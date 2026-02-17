@@ -126,17 +126,17 @@ function sync_local_after_renewal(PDO $pdo, int $assetId, string $normalized, in
          WHERE asset_id = :aid
     ")->execute([':ec' => $snipeValue, ':aid' => $assetId]);
 
-    // Update the associated reservation's end_datetime (stored in UTC)
+    // Update the associated checkout's end_datetime (stored in UTC)
     if ($userId > 0) {
         $utcDt = clone $dt;
         $utcDt->setTimezone($utc);
         $endUtc = $utcDt->format('Y-m-d H:i:s');
 
         $pdo->prepare("
-            UPDATE reservations
+            UPDATE checkouts
                SET end_datetime = :new_end
              WHERE snipeit_user_id = :uid
-               AND status = 'checked_out'
+               AND status IN ('open','partial')
              ORDER BY created_at DESC
              LIMIT 1
         ")->execute([':new_end' => $endUtc, ':uid' => $userId]);

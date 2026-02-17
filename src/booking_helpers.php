@@ -23,6 +23,7 @@ function get_reservation_items_with_names(PDO $pdo, int $reservationId): array
         SELECT model_id, quantity
         FROM reservation_items
         WHERE reservation_id = :res_id
+          AND deleted_at IS NULL
         ORDER BY model_id
     ";
 
@@ -96,4 +97,69 @@ function build_items_summary_text(array $items): string
     }
 
     return implode(', ', $parts);
+}
+
+/**
+ * Get all checkout_items for a checkout.
+ *
+ * @return array  Array of checkout_item rows
+ */
+function get_checkout_items(PDO $pdo, int $checkoutId): array
+{
+    $stmt = $pdo->prepare("
+        SELECT * FROM checkout_items
+         WHERE checkout_id = :cid
+         ORDER BY id
+    ");
+    $stmt->execute([':cid' => $checkoutId]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Get all checkouts linked to a reservation.
+ *
+ * @return array  Array of checkout rows
+ */
+function get_checkouts_for_reservation(PDO $pdo, int $reservationId): array
+{
+    $stmt = $pdo->prepare("
+        SELECT * FROM checkouts
+         WHERE reservation_id = :rid
+         ORDER BY created_at DESC
+    ");
+    $stmt->execute([':rid' => $reservationId]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Update a checkout's status based on its items' checked_in_at state.
+ *
+ * @return string  The new status ('open', 'partial', or 'closed')
+ */
+function recompute_checkout_status(PDO $pdo, int $checkoutId): string
+{
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) AS total,
+               SUM(CASE WHEN checked_in_at IS NOT NULL THEN 1 ELSE 0 END) AS returned
+          FROM checkout_items
+         WHERE checkout_id = :cid
+    ");
+    $stmt->execute([':cid' => $checkoutId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    $total    = (int)($row['total'] ?? 0);
+    $returned = (int)($row['returned'] ?? 0);
+
+    if ($total === 0 || $returned === 0) {
+        $newStatus = 'open';
+    } elseif ($returned >= $total) {
+        $newStatus = 'closed';
+    } else {
+        $newStatus = 'partial';
+    }
+
+    $upd = $pdo->prepare("UPDATE checkouts SET status = :s WHERE id = :id");
+    $upd->execute([':s' => $newStatus, ':id' => $checkoutId]);
+
+    return $newStatus;
 }

@@ -107,6 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'resto
                 SELECT model_id, quantity, model_name_cache
                 FROM reservation_items
                 WHERE reservation_id = :id
+                  AND deleted_at IS NULL
             ');
             $itemsStmt->execute([':id' => $restoreId]);
             $items = $itemsStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -129,6 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'resto
                     FROM reservation_items ri
                     JOIN reservations r ON r.id = ri.reservation_id
                     WHERE ri.model_id = :model_id
+                      AND ri.deleted_at IS NULL
                       AND r.status IN ('pending','confirmed')
                       AND (r.start_datetime < :end AND r.end_datetime > :start)
                 ";

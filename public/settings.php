@@ -399,7 +399,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $catalogue['allowed_categories'] = $allowedCategories;
 
-    $allStatuses = ['pending', 'confirmed', 'completed', 'cancelled', 'missed'];
+    $allStatuses = ['pending', 'confirmed', 'fulfilled', 'cancelled', 'missed'];
     $reservations = $config['reservations'] ?? [];
     $selectedStatuses = $_POST['reservations_deletable_statuses'] ?? [];
     if (!is_array($selectedStatuses)) {
@@ -1141,7 +1141,7 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                 if (!is_array($deletableStatuses)) {
                     $deletableStatuses = ['pending', 'confirmed', 'cancelled', 'missed'];
                 }
-                $allReservationStatuses = ['pending', 'confirmed', 'completed', 'cancelled', 'missed'];
+                $allReservationStatuses = ['pending', 'confirmed', 'fulfilled', 'cancelled', 'missed'];
             ?>
             <div class="col-12">
                 <div class="card">

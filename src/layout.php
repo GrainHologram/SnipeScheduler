@@ -177,20 +177,43 @@ if (!function_exists('layout_status_badge')) {
         $labels = [
             'pending'     => 'Pending',
             'confirmed'   => 'Confirmed',
-            'checked_out' => 'Checked Out',
-            'completed'   => 'Completed',
+            'fulfilled'   => 'Fulfilled',
             'cancelled'   => 'Cancelled',
             'missed'      => 'Missed',
         ];
         $classes = [
             'pending'     => 'bg-warning text-dark',
             'confirmed'   => 'bg-info text-dark',
-            'checked_out' => 'status-badge-checked-out',
-            'completed'   => 'bg-success',
+            'fulfilled'   => 'bg-success',
             'cancelled'   => 'bg-secondary',
             'missed'      => 'bg-danger',
         ];
         $label = $labels[$status] ?? ucfirst(str_replace('_', ' ', $status));
+        $class = $classes[$status] ?? 'bg-secondary';
+        return '<span class="badge ' . $class . '">'
+            . htmlspecialchars($label, ENT_QUOTES, 'UTF-8')
+            . '</span>';
+    }
+}
+
+if (!function_exists('layout_checkout_status_badge')) {
+    /**
+     * Render a checkout status as a styled Bootstrap badge.
+     */
+    function layout_checkout_status_badge(string $status): string
+    {
+        $status = strtolower(trim($status));
+        $labels = [
+            'open'    => 'Checked Out',
+            'partial' => 'Partial Return',
+            'closed'  => 'Returned',
+        ];
+        $classes = [
+            'open'    => 'status-badge-checked-out',
+            'partial' => 'bg-warning text-dark',
+            'closed'  => 'bg-success',
+        ];
+        $label = $labels[$status] ?? ucfirst($status);
         $class = $classes[$status] ?? 'bg-secondary';
         return '<span class="badge ' . $class . '">'
             . htmlspecialchars($label, ENT_QUOTES, 'UTF-8')

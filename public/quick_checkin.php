@@ -9,6 +9,7 @@ require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/activity_log.php';
 require_once SRC_PATH . '/email.php';
 require_once SRC_PATH . '/layout.php';
+require_once SRC_PATH . '/booking_helpers.php';
 
 $active  = basename($_SERVER['PHP_SELF']);
 $isAdmin = !empty($currentUser['is_admin']);
@@ -232,6 +233,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     } else {
                         checkin_asset($assetId, $note);
                         $messages[] = "Checked in asset {$assetTag}.";
+
+                        // Update checkout_items tracking
+                        $ciStmt = $pdo->prepare("
+                            SELECT ci.id, ci.checkout_id
+                              FROM checkout_items ci
+                              JOIN checkouts c ON c.id = ci.checkout_id
+                             WHERE ci.asset_id = :aid
+                               AND ci.checked_in_at IS NULL
+                               AND c.status IN ('open','partial')
+                             ORDER BY ci.checked_out_at DESC
+                             LIMIT 1
+                        ");
+                        $ciStmt->execute([':aid' => $assetId]);
+                        $ciRow = $ciStmt->fetch(PDO::FETCH_ASSOC);
+                        if ($ciRow) {
+                            $ciUpd = $pdo->prepare("UPDATE checkout_items SET checked_in_at = NOW() WHERE id = :id");
+                            $ciUpd->execute([':id' => (int)$ciRow['id']]);
+                            recompute_checkout_status($pdo, (int)$ciRow['checkout_id']);
+                        }
 
                         if ($assignedEmail === '' && $assignedId > 0) {
                             if (isset($userIdCache[$assignedId])) {

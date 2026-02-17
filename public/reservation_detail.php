@@ -144,6 +144,54 @@ $active  = 'staff_reservations.php'; // Treat detail view as part of booking his
         <?php endif; ?>
 
         <?php
+            // Show linked checkouts if reservation is fulfilled
+            $linkedCheckouts = get_checkouts_for_reservation($pdo, $id);
+            if (!empty($linkedCheckouts)):
+        ?>
+        <h5>Checkouts</h5>
+        <?php foreach ($linkedCheckouts as $co): ?>
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong>Checkout #<?= (int)$co['id'] ?></strong>
+                        <?= layout_checkout_status_badge($co['status'] ?? '') ?>
+                    </div>
+                    <div class="small text-muted mb-2">
+                        <?= h(display_datetime($co['start_datetime'] ?? '')) ?> &rarr; <?= h(display_datetime($co['end_datetime'] ?? '')) ?>
+                    </div>
+                    <?php $coItems = get_checkout_items($pdo, (int)$co['id']); ?>
+                    <?php if (!empty($coItems)): ?>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Asset Tag</th>
+                                        <th>Name</th>
+                                        <th>Model</th>
+                                        <th>Checked Out</th>
+                                        <th>Returned</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($coItems as $ci): ?>
+                                        <tr class="<?= $ci['checked_in_at'] ? 'table-success' : '' ?>">
+                                            <td><?= h($ci['asset_tag'] ?? '') ?></td>
+                                            <td><?= h($ci['asset_name'] ?? '') ?></td>
+                                            <td><?= h($ci['model_name'] ?? '') ?></td>
+                                            <td><?= h(display_datetime($ci['checked_out_at'] ?? '')) ?></td>
+                                            <td><?= $ci['checked_in_at'] ? h(display_datetime($ci['checked_in_at'])) : '<span class="badge bg-warning text-dark">Out</span>' ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php endforeach; ?>
+        <?php endif; ?>
+
+        <?php
             $deletableStatuses = (load_config())['reservations']['deletable_statuses'] ?? ['pending', 'confirmed', 'cancelled', 'missed'];
             if (in_array($reservation['status'] ?? '', $deletableStatuses, true)):
         ?>

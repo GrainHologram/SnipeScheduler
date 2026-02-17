@@ -44,26 +44,18 @@ $checkedOutItems = [];
 $checkedOutError = '';
 if ($tab === 'checked_out') {
     try {
-        $email = strtolower(trim($currentUser['email'] ?? ''));
-        $username = strtolower(trim($currentUser['username'] ?? ''));
-        $name = strtolower(trim($userName));
-
         $stmt = $pdo->prepare("
-            SELECT *
-              FROM checked_out_asset_cache
-             WHERE (assigned_to_email IS NOT NULL AND LOWER(assigned_to_email) = :email)
-                OR (assigned_to_username IS NOT NULL AND LOWER(assigned_to_username) = :username)
-                OR (assigned_to_name IS NOT NULL AND LOWER(assigned_to_name) = :name)
-             ORDER BY
-                CASE WHEN expected_checkin IS NULL OR expected_checkin = '' THEN 1 ELSE 0 END,
-                expected_checkin ASC,
-                last_checkout DESC
+            SELECT ci.asset_tag, ci.asset_name, ci.model_name,
+                   ci.checked_out_at, c.end_datetime,
+                   c.status AS checkout_status
+              FROM checkout_items ci
+              JOIN checkouts c ON c.id = ci.checkout_id
+             WHERE c.user_id = :uid
+               AND ci.checked_in_at IS NULL
+               AND c.status IN ('open','partial')
+             ORDER BY ci.checked_out_at DESC
         ");
-        $stmt->execute([
-            ':email' => $email,
-            ':username' => $username,
-            ':name' => $name,
-        ]);
+        $stmt->execute([':uid' => $currentUserId]);
         $checkedOutItems = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Exception $e) {
         $checkedOutItems = [];
@@ -158,8 +150,8 @@ if (!empty($_GET['deleted'])) {
                                 <th>Asset Tag</th>
                                 <th>Name</th>
                                 <th>Model</th>
-                                <th>Assigned Since</th>
-                                <th>Expected Check-in</th>
+                                <th>Checked Out</th>
+                                <th>Expected Return</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -168,13 +160,8 @@ if (!empty($_GET['deleted'])) {
                                     <td><?= h($row['asset_tag'] ?? '') ?></td>
                                     <td><?= h($row['asset_name'] ?? '') ?></td>
                                     <td><?= h($row['model_name'] ?? '') ?></td>
-                                    <td><?= h(app_format_datetime_local($row['last_checkout'] ?? '', null, snipe_get_timezone())) ?></td>
-                                    <?php
-                                        $expVal = $row['expected_checkin'] ?? '';
-                                        $expStr = is_string($expVal) ? $expVal : '';
-                                        $expHasTime = $expStr !== '' && !preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $expStr);
-                                    ?>
-                                    <td><?= h($expHasTime ? app_format_datetime_local($expVal, null, snipe_get_timezone()) : app_format_date_local($expVal, null, snipe_get_timezone())) ?></td>
+                                    <td><?= h(display_datetime($row['checked_out_at'] ?? '')) ?></td>
+                                    <td><?= h(display_datetime($row['end_datetime'] ?? '')) ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>

@@ -542,8 +542,10 @@ function is_asset_deployable(array $asset): bool
     if (!is_array($sl)) {
         return true; // no status info available — assume deployable
     }
-    $meta = $sl['status_meta'] ?? ($sl['status_type'] ?? '');
-    return $meta === 'deployable' || $meta === '';
+    $meta = strtolower($sl['status_meta'] ?? ($sl['status_type'] ?? ''));
+    // 'deployed' means checked out but operational — still deployable hardware.
+    // Only 'undeployable' and 'archived' are truly non-deployable.
+    return $meta !== 'undeployable' && $meta !== 'archived';
 }
 
 /**
@@ -569,6 +571,11 @@ function count_undeployable_assets_by_model(int $modelId): array
 
     foreach ($assets as $a) {
         if (empty($a['requestable'])) {
+            continue;
+        }
+        // Skip assets that are assigned/checked-out — those aren't "broken"
+        $assignedTo = $a['assigned_to'] ?? ($a['assigned_to_fullname'] ?? '');
+        if (!empty($assignedTo)) {
             continue;
         }
         if (!is_asset_deployable($a)) {

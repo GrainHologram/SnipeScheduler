@@ -163,71 +163,58 @@ try {
     exit(1);
 }
 
-// Transition checked_out reservations to completed when all assets have been returned.
-// Runs after the cache sync so the cache reflects the current Snipe-IT state.
+// Reconcile checkout_items against the cache.
+// If an asset is no longer in the checked_out_asset_cache, mark it as returned.
+require_once SRC_PATH . '/booking_helpers.php';
+
 try {
-    $resStmt = $pdo->query("
-        SELECT id, asset_name_cache
-          FROM reservations
-         WHERE status = 'checked_out'
-    ");
-    $checkedOutReservations = $resStmt->fetchAll(PDO::FETCH_ASSOC);
-    $completedCount = 0;
+    $openItems = $pdo->query("
+        SELECT ci.id, ci.asset_id, ci.checkout_id
+          FROM checkout_items ci
+          JOIN checkouts c ON c.id = ci.checkout_id
+         WHERE ci.checked_in_at IS NULL
+           AND c.status IN ('open','partial')
+    ")->fetchAll(PDO::FETCH_ASSOC);
 
-    foreach ($checkedOutReservations as $res) {
-        $cache = $res['asset_name_cache'] ?? '';
-        if ($cache === '') {
-            continue;
-        }
+    $returnedCount = 0;
+    $updatedCheckouts = [];
 
-        // Parse asset tags from cache: format is "TAG (Model), TAG2 (Model2)"
-        $resTags = [];
-        $parts = array_map('trim', explode(',', $cache));
-        foreach ($parts as $part) {
-            // Extract tag before first " (" or use whole string
-            if (preg_match('/^(\S+)\s*\(/', $part, $m)) {
-                $resTags[] = $m[1];
-            } else {
-                $resTags[] = $part;
-            }
-        }
-        $resTags = array_filter($resTags, function ($t) { return $t !== ''; });
-        if (empty($resTags)) {
-            continue;
-        }
-
-        // Check if any of the reservation's asset tags are still in the cache
-        $placeholders = implode(',', array_fill(0, count($resTags), '?'));
-        $tagStmt = $pdo->prepare("
-            SELECT COUNT(*) FROM checked_out_asset_cache
-             WHERE asset_tag IN ({$placeholders})
+    foreach ($openItems as $item) {
+        $cacheCheck = $pdo->prepare("
+            SELECT COUNT(*) FROM checked_out_asset_cache WHERE asset_id = :aid
         ");
-        $tagStmt->execute(array_values($resTags));
-        $stillOut = (int)$tagStmt->fetchColumn();
+        $cacheCheck->execute([':aid' => (int)$item['asset_id']]);
+        $stillInCache = (int)$cacheCheck->fetchColumn();
 
-        if ($stillOut === 0) {
-            $complStmt = $pdo->prepare("
-                UPDATE reservations
-                   SET status = 'completed'
-                 WHERE id = :id
-                   AND status = 'checked_out'
-            ");
-            $complStmt->execute([':id' => (int)$res['id']]);
+        if ($stillInCache === 0) {
+            $ciUpd = $pdo->prepare("UPDATE checkout_items SET checked_in_at = NOW() WHERE id = :id");
+            $ciUpd->execute([':id' => (int)$item['id']]);
+            $updatedCheckouts[(int)$item['checkout_id']] = true;
+            $returnedCount++;
+        }
+    }
 
-            activity_log_event('reservation_completed', 'Reservation completed (all assets returned)', [
-                'subject_type' => 'reservation',
-                'subject_id'   => (int)$res['id'],
+    $closedCount = 0;
+    foreach (array_keys($updatedCheckouts) as $checkoutId) {
+        $newStatus = recompute_checkout_status($pdo, $checkoutId);
+        if ($newStatus === 'closed') {
+            activity_log_event('checkout_closed', 'Checkout closed (all assets returned)', [
+                'subject_type' => 'checkout',
+                'subject_id'   => $checkoutId,
                 'metadata'     => [
-                    'completed_via' => 'sync_script',
+                    'closed_via' => 'sync_script',
                 ],
             ]);
-            $completedCount++;
+            $closedCount++;
         }
     }
 
-    if ($completedCount > 0) {
-        sync_log("[done] Completed {$completedCount} reservation(s) (all assets returned).");
+    if ($returnedCount > 0) {
+        sync_log("[done] Marked {$returnedCount} checkout item(s) as returned.");
+    }
+    if ($closedCount > 0) {
+        sync_log("[done] Closed {$closedCount} checkout(s) (all assets returned).");
     }
 } catch (Throwable $e) {
-    sync_err("[warn] Reservation completion check failed: {$e->getMessage()}");
+    sync_err("[warn] Checkout reconciliation failed: {$e->getMessage()}");
 }

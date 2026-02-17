@@ -35,12 +35,13 @@ CREATE TABLE IF NOT EXISTS reservations (
     user_name VARCHAR(255) NOT NULL, -- user display name
     user_email VARCHAR(255) NOT NULL,
     snipeit_user_id INT UNSIGNED DEFAULT NULL, -- optional link to Snipe-IT user id
+    name TEXT DEFAULT NULL,          -- user-entered label (e.g. "Studio A shoot")
 
     asset_id INT UNSIGNED NOT NULL DEFAULT 0,  -- optional: single-asset reservations
     start_datetime DATETIME NOT NULL,
     end_datetime DATETIME NOT NULL,
 
-    status ENUM('pending','confirmed','checked_out','completed','cancelled','missed') NOT NULL DEFAULT 'pending',
+    status ENUM('pending','confirmed','fulfilled','cancelled','missed') NOT NULL DEFAULT 'pending',
 
     -- Cached display string of items (for quick admin lists)
     asset_name_cache TEXT NULL,
@@ -63,6 +64,7 @@ CREATE TABLE IF NOT EXISTS reservation_items (
     model_id INT UNSIGNED NOT NULL,
     model_name_cache VARCHAR(255) NOT NULL,
     quantity INT UNSIGNED NOT NULL DEFAULT 1,
+    deleted_at DATETIME DEFAULT NULL,
 
     PRIMARY KEY (id),
     KEY idx_reservation_items_reservation (reservation_id),
@@ -72,6 +74,55 @@ CREATE TABLE IF NOT EXISTS reservation_items (
         FOREIGN KEY (reservation_id)
         REFERENCES reservations (id)
         ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------
+-- Checkouts table
+-- (tracks physical asset checkout sessions)
+-- ------------------------------------------------------
+CREATE TABLE IF NOT EXISTS checkouts (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    reservation_id INT UNSIGNED DEFAULT NULL,
+    parent_checkout_id INT UNSIGNED DEFAULT NULL,
+    user_id VARCHAR(64) NOT NULL,
+    user_name VARCHAR(255) NOT NULL,
+    user_email VARCHAR(255) NOT NULL,
+    snipeit_user_id INT UNSIGNED DEFAULT NULL,
+    name TEXT DEFAULT NULL,
+    start_datetime DATETIME NOT NULL,
+    end_datetime DATETIME NOT NULL,
+    status ENUM('open','partial','closed') NOT NULL DEFAULT 'open',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    KEY idx_checkouts_user_id (user_id),
+    KEY idx_checkouts_dates (start_datetime, end_datetime),
+    KEY idx_checkouts_status (status),
+    KEY idx_checkouts_reservation (reservation_id),
+    KEY idx_checkouts_parent (parent_checkout_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------
+-- Checkout items
+-- (per-asset rows for each checkout session)
+-- ------------------------------------------------------
+CREATE TABLE IF NOT EXISTS checkout_items (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    checkout_id INT UNSIGNED NOT NULL,
+    asset_id INT UNSIGNED NOT NULL,
+    asset_tag VARCHAR(255) NOT NULL,
+    asset_name VARCHAR(255) NOT NULL,
+    model_id INT UNSIGNED NOT NULL,
+    model_name VARCHAR(255) NOT NULL,
+    checked_out_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    checked_in_at DATETIME DEFAULT NULL,
+
+    PRIMARY KEY (id),
+    KEY idx_checkout_items_checkout (checkout_id),
+    KEY idx_checkout_items_asset (asset_id),
+    KEY idx_checkout_items_model (model_id),
+    CONSTRAINT fk_checkout_items_checkout
+        FOREIGN KEY (checkout_id) REFERENCES checkouts (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------
@@ -134,4 +185,4 @@ CREATE TABLE IF NOT EXISTS schema_version (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT IGNORE INTO schema_version (version)
-VALUES ('v0.10.0-beta');
+VALUES ('v1.1.0');
