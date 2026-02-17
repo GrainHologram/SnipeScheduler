@@ -1177,6 +1177,28 @@ function get_user_groups(int $userId, ?array $userData = null): array
 }
 
 /**
+ * Fetch hardware assets currently checked out to a specific Snipe-IT user.
+ *
+ * Uses GET /hardware?assigned_to={userId} and paginates through all results.
+ * Returns the raw asset rows from the API response.
+ *
+ * @param int $userId  Snipe-IT user ID
+ * @return array       Array of asset rows
+ * @throws Exception
+ */
+function get_assets_checked_out_to_user(int $userId): array
+{
+    if ($userId <= 0) {
+        throw new InvalidArgumentException('Invalid user ID.');
+    }
+
+    $data = snipeit_request('GET', 'users/' . $userId . '/assets');
+    $rows = isset($data['rows']) && is_array($data['rows']) ? $data['rows'] : [];
+
+    return $rows;
+}
+
+/**
  * Fetch custom field definitions for a fieldset.
  *
  * @param int $fieldsetId
