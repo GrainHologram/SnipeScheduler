@@ -257,6 +257,7 @@ $modelLimits         = [];
 $selectedStart       = '';
 $selectedEnd         = '';
 $modelAssets         = [];
+$modelUnavailable    = []; // mid => ['count' => N, 'statuses' => ['Under Repair', ...]]
 $presetSelections    = [];
 $selectedTotalQty    = 0;
 
@@ -309,6 +310,8 @@ if ($selectedReservationId) {
                     // Only include assets not already checked out/assigned
                     $assetsRaw = list_assets_by_model($mid, 300);
                     $filtered  = [];
+                    $unavailableCount = 0;
+                    $unavailableStatuses = [];
                     foreach ($assetsRaw as $a) {
                         if (empty($a['requestable'])) {
                             continue; // skip non-requestable assets
@@ -326,11 +329,23 @@ if ($selectedReservationId) {
                             continue;
                         }
                         if (!is_asset_deployable($a)) {
+                            // Requestable + unassigned but not deployable — track it
+                            $unavailableCount++;
+                            $statusName = is_array($a['status_label'] ?? null)
+                                ? ($a['status_label']['name'] ?? 'Undeployable')
+                                : (string)($a['status_label'] ?? 'Undeployable');
+                            $unavailableStatuses[$statusName] = true;
                             continue;
                         }
                         $filtered[] = $a;
                     }
                     $modelAssets[$mid] = $filtered;
+                    if ($unavailableCount > 0) {
+                        $modelUnavailable[$mid] = [
+                            'count'    => $unavailableCount,
+                            'statuses' => array_keys($unavailableStatuses),
+                        ];
+                    }
                 } catch (Throwable $e) {
                     $modelAssets[$mid] = [];
                 }
@@ -483,7 +498,164 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    if ($mode === 'add_asset') {
+    if ($mode === 'rebook_unavailable') {
+        if (!$selectedReservation) {
+            $checkoutErrors[] = 'Please select a reservation before rebooking.';
+        } elseif (!in_array($selectedReservation['status'], ['pending', 'confirmed'], true)) {
+            $checkoutErrors[] = 'Only pending or confirmed reservations can be rebooked.';
+        } else {
+            try {
+                $rebookModels = []; // mid => ['qty' => N, 'name' => '...']
+                foreach ($selectedItems as $item) {
+                    $mid = (int)($item['model_id'] ?? 0);
+                    $requestedQty = (int)($item['qty'] ?? 0);
+                    $deployableCount = count($modelAssets[$mid] ?? []);
+                    $rebookQty = max(0, $requestedQty - $deployableCount);
+
+                    if ($rebookQty > 0 && !empty($modelUnavailable[$mid]['count'])) {
+                        $rebookModels[$mid] = [
+                            'qty'            => $rebookQty,
+                            'name'           => $item['name'] ?? ('Model #' . $mid),
+                            'deployableCount' => $deployableCount,
+                        ];
+                    }
+                }
+
+                if (empty($rebookModels)) {
+                    $checkoutErrors[] = 'No items need rebooking — all models have sufficient deployable assets.';
+                } else {
+                    $pdo->beginTransaction();
+
+                    // Create new confirmed reservation with same user/dates
+                    $insertRes = $pdo->prepare("
+                        INSERT INTO reservations (
+                            user_name, user_email, user_id, snipeit_user_id,
+                            asset_id, asset_name_cache,
+                            start_datetime, end_datetime, status
+                        ) VALUES (
+                            :user_name, :user_email, :user_id, :snipeit_user_id,
+                            0, :asset_name_cache,
+                            :start_datetime, :end_datetime, 'confirmed'
+                        )
+                    ");
+                    $insertRes->execute([
+                        ':user_name'        => $selectedReservation['user_name'] ?? '',
+                        ':user_email'       => $selectedReservation['user_email'] ?? '',
+                        ':user_id'          => $selectedReservation['user_id'] ?? '',
+                        ':snipeit_user_id'  => $selectedReservation['snipeit_user_id'] ?? 0,
+                        ':asset_name_cache' => 'Pending checkout',
+                        ':start_datetime'   => $selectedStart,
+                        ':end_datetime'     => $selectedEnd,
+                    ]);
+                    $newReservationId = (int)$pdo->lastInsertId();
+
+                    // Create reservation_items for rebooked models
+                    $insertItem = $pdo->prepare("
+                        INSERT INTO reservation_items (
+                            reservation_id, model_id, model_name_cache, quantity
+                        ) VALUES (
+                            :reservation_id, :model_id, :model_name_cache, :quantity
+                        )
+                    ");
+                    $rebookSummary = [];
+                    foreach ($rebookModels as $mid => $info) {
+                        $insertItem->execute([
+                            ':reservation_id'    => $newReservationId,
+                            ':model_id'          => $mid,
+                            ':model_name_cache'  => $info['name'],
+                            ':quantity'           => $info['qty'],
+                        ]);
+                        $rebookSummary[] = $info['name'] . ' x' . $info['qty'];
+                    }
+
+                    // Adjust original reservation items
+                    foreach ($rebookModels as $mid => $info) {
+                        if ($info['deployableCount'] > 0) {
+                            // Reduce quantity to match deployable count
+                            $updItem = $pdo->prepare("
+                                UPDATE reservation_items
+                                   SET quantity = :qty
+                                 WHERE reservation_id = :rid
+                                   AND model_id = :mid
+                                   AND deleted_at IS NULL
+                            ");
+                            $updItem->execute([
+                                ':qty' => $info['deployableCount'],
+                                ':rid' => $selectedReservationId,
+                                ':mid' => $mid,
+                            ]);
+                        } else {
+                            // No deployable assets — soft-delete the item
+                            $delItem = $pdo->prepare("
+                                UPDATE reservation_items
+                                   SET deleted_at = NOW()
+                                 WHERE reservation_id = :rid
+                                   AND model_id = :mid
+                                   AND deleted_at IS NULL
+                            ");
+                            $delItem->execute([
+                                ':rid' => $selectedReservationId,
+                                ':mid' => $mid,
+                            ]);
+                        }
+                    }
+
+                    // Check if original reservation has any remaining active items
+                    $remainStmt = $pdo->prepare("
+                        SELECT COUNT(*) FROM reservation_items
+                         WHERE reservation_id = :rid
+                           AND deleted_at IS NULL
+                           AND quantity > 0
+                    ");
+                    $remainStmt->execute([':rid' => $selectedReservationId]);
+                    $remainingCount = (int)$remainStmt->fetchColumn();
+
+                    if ($remainingCount === 0) {
+                        // No active items left — cancel the original reservation
+                        $cancelStmt = $pdo->prepare("
+                            UPDATE reservations SET status = 'cancelled' WHERE id = :id
+                        ");
+                        $cancelStmt->execute([':id' => $selectedReservationId]);
+                    }
+
+                    $pdo->commit();
+
+                    activity_log_event('reservation_rebooked', 'Unavailable items rebooked to new reservation', [
+                        'subject_type' => 'reservation',
+                        'subject_id'   => $selectedReservationId,
+                        'metadata'     => [
+                            'original_reservation_id' => $selectedReservationId,
+                            'new_reservation_id'      => $newReservationId,
+                            'rebooked_models'         => $rebookSummary,
+                            'original_cancelled'      => $remainingCount === 0,
+                        ],
+                    ]);
+
+                    // Store success flash and redirect
+                    $_SESSION['rebook_success'] = [
+                        'new_id'   => $newReservationId,
+                        'models'   => $rebookSummary,
+                        'original_cancelled' => $remainingCount === 0,
+                    ];
+
+                    unset($_SESSION['reservation_selected_assets'][$selectedReservationId]);
+                    if ($remainingCount === 0) {
+                        unset($_SESSION['selected_reservation_id']);
+                    } else {
+                        $_SESSION['selected_reservation_fresh'] = 1;
+                    }
+
+                    header('Location: ' . $selfUrl);
+                    exit;
+                }
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                $checkoutErrors[] = 'Rebook failed: ' . $e->getMessage();
+            }
+        }
+    } elseif ($mode === 'add_asset') {
         $tag = trim($_POST['asset_tag'] ?? '');
         if (!$selectedReservation) {
             $checkoutErrors[] = 'Please select a reservation for today before adding assets.';
@@ -1003,6 +1175,21 @@ $active  = basename($_SERVER['PHP_SELF']);
             </div>
         </div>
 
+        <!-- Rebook success flash -->
+        <?php
+            $rebookSuccess = $_SESSION['rebook_success'] ?? null;
+            unset($_SESSION['rebook_success']);
+        ?>
+        <?php if ($rebookSuccess): ?>
+            <div class="alert alert-success">
+                <strong>Rebook successful.</strong>
+                New reservation <strong>#<?= (int)$rebookSuccess['new_id'] ?></strong> created with: <?= h(implode(', ', $rebookSuccess['models'] ?? [])) ?>.
+                <?php if (!empty($rebookSuccess['original_cancelled'])): ?>
+                    <br>The original reservation was cancelled (no remaining items).
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+
         <!-- Feedback messages -->
         <?php if (!empty($checkoutMessages)): ?>
             <div class="alert alert-success">
@@ -1168,9 +1355,15 @@ $active  = basename($_SERVER['PHP_SELF']);
                                             </td>
                                             <td>
                                                 <?php if (empty($options)): ?>
-                                                    <div class="alert alert-warning mb-0">
-                                                        No assets found in Snipe-IT for this model.
-                                                    </div>
+                                                    <?php if (!empty($modelUnavailable[$mid]['count'])): ?>
+                                                        <div class="alert alert-warning mb-0">
+                                                            All <?= (int)$modelUnavailable[$mid]['count'] ?> requestable unit(s) are unavailable (<?= h(implode(', ', $modelUnavailable[$mid]['statuses'])) ?>).
+                                                        </div>
+                                                    <?php else: ?>
+                                                        <div class="alert alert-warning mb-0">
+                                                            No assets found in Snipe-IT for this model.
+                                                        </div>
+                                                    <?php endif; ?>
                                                 <?php else: ?>
                                                     <div class="d-flex flex-column gap-2">
                                                         <?php for ($i = 0; $i < $qty; $i++): ?>
@@ -1204,6 +1397,11 @@ $active  = basename($_SERVER['PHP_SELF']);
                                                             </div>
                                                         <?php endfor; ?>
                                                     </div>
+                                                    <?php if (count($options) < $qty && !empty($modelUnavailable[$mid]['count'])): ?>
+                                                        <div class="form-text text-warning mt-1">
+                                                            <?= (int)$modelUnavailable[$mid]['count'] ?> of <?= (int)($modelUnavailable[$mid]['count'] + count($options)) ?> unit(s) unavailable (<?= h(implode(', ', $modelUnavailable[$mid]['statuses'])) ?>) — <?= (int)$modelUnavailable[$mid]['count'] ?> fewer than requested.
+                                                        </div>
+                                                    <?php endif; ?>
                                                 <?php endif; ?>
                                             </td>
                                         </tr>
@@ -1212,6 +1410,25 @@ $active  = basename($_SERVER['PHP_SELF']);
                             </div>
 <?php endforeach; ?>
 
+                        <?php
+                            // Compute total rebook shortfall for the button
+                            $totalRebookQty = 0;
+                            foreach ($selectedItems as $item) {
+                                $mid = (int)($item['model_id'] ?? 0);
+                                $requestedQty = (int)($item['qty'] ?? 0);
+                                $deployableCount = count($modelAssets[$mid] ?? []);
+                                $shortfall = max(0, $requestedQty - $deployableCount);
+                                if ($shortfall > 0 && !empty($modelUnavailable[$mid]['count'])) {
+                                    $totalRebookQty += $shortfall;
+                                }
+                            }
+                        ?>
+                        <?php if ($totalRebookQty > 0): ?>
+                            <button type="submit" name="mode" value="rebook_unavailable" class="btn btn-outline-warning mb-2">
+                                Rebook <?= $totalRebookQty ?> unavailable item(s) as new reservation
+                            </button>
+                            <br>
+                        <?php endif; ?>
                         <button type="submit" name="mode" value="reservation_checkout" class="btn btn-primary">
                             Check out selected assets for this reservation
                         </button>
