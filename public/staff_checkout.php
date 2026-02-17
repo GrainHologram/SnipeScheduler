@@ -492,7 +492,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new Exception('This asset is not requestable in Snipe-IT.');
                 }
                 if (!is_asset_deployable($asset)) {
-                    throw new Exception('This asset is currently flagged as "' . ($status ?: 'undeployable') . '" and cannot be checked out.');
+                    $statusName = $asset['status_label']['name'] ?? 'undeployable';
+                    throw new Exception('This asset is currently flagged as "' . $statusName . '" and cannot be checked out.');
                 }
 
                 // Enforce that the asset's model is in the selected reservation and within quantity.
