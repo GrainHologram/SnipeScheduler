@@ -74,6 +74,9 @@ pending → confirmed → checked_out → completed
 - Staff/admin roles are determined by LDAP group CN or email lists in config (`admin_group_cn`, `checkout_group_cn`, `google_admin_emails`, etc.).
 - `$currentUser` session data drives role checks throughout the app.
 
+### Access Group Requirement
+Users must belong to at least one Snipe-IT group matching the pattern `Access - *` (e.g., "Access - Lab Equipment", "Access - Studio") to make reservations. This is a global gate enforced in `catalogue.php`, `basket.php`, and `basket_checkout.php` via `check_user_has_access_group()` in `checkout_rules.php`. It is separate from per-model `Cert - *` certification requirements. No staff/admin exemption — all users must have an Access group.
+
 ### Cron Scripts (`scripts/`)
 - `sync_checked_out_assets.php` — Syncs checked-out assets from Snipe-IT API to local cache. Also transitions `checked_out` reservations to `completed` when all their assets have been returned. Should run frequently (e.g., every minute).
 - `cron_mark_missed.php` — Marks uncollected `pending`/`confirmed` reservations as missed after configurable cutoff. Does not affect `checked_out` reservations.

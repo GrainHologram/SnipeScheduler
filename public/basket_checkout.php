@@ -56,6 +56,11 @@ $userId    = $user['id']; // Snipe-IT user id
 $clCfg = checkout_limits_config();
 $snipeUserId = (int)$userId;
 
+// Access group gate
+if ($snipeUserId > 0 && !check_user_has_access_group($snipeUserId)) {
+    basket_error('You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.');
+}
+
 // Single active checkout
 if ($clCfg['enabled'] && $clCfg['single_active_checkout'] && $snipeUserId > 0 && check_user_has_active_checkout($snipeUserId)) {
     basket_error('You already have assets checked out. Please return them before making a new reservation. (Single active checkout is enforced.)');
@@ -127,14 +132,13 @@ try {
 
         // Total requestable units in Snipe-IT
         $totalRequestable = count_requestable_assets_by_model($modelId);
-        $activeCheckedOut = count_checked_out_assets_by_model($modelId);
-        $availableNow = $totalRequestable > 0 ? max(0, $totalRequestable - $activeCheckedOut) : 0;
 
-        if ($totalRequestable > 0 && $existingBooked + $qty > $availableNow) {
+        if ($totalRequestable > 0 && $existingBooked + $qty > $totalRequestable) {
+            $available = max(0, $totalRequestable - $existingBooked);
             throw new Exception(
                 'Not enough units available for "' . ($model['name'] ?? ('ID '.$modelId)) . '" '
                 . 'in that time period. Requested ' . $qty . ', already booked ' . $existingBooked
-                . ', total available ' . $availableNow . '.'
+                . ', total available ' . $available . '.'
             );
         }
 
