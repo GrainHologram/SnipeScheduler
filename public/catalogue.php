@@ -1478,7 +1478,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                             $uStatuses = implode(', ', $undeployInfo['status_names']);
                                     ?>
                                         <div class="mt-2">
-                                            <span class="badge bg-danger" title="<?= h($uStatuses) ?>"><?= $uCount ?> unit<?= $uCount !== 1 ? 's' : '' ?> under repair</span>
+                                            <span class="badge bg-danger" title="<?= h($uStatuses) ?>"><?= $uCount ?> unit<?= $uCount !== 1 ? 's' : '' ?> unavailable (<?= h($uStatuses) ?>)</span>
                                         </div>
                                     <?php endif; ?>
                                     <?php if (!empty($certRequirements)): ?>
