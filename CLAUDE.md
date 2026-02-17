@@ -35,8 +35,10 @@ Always convert at boundaries: use `app_format_date_local()` / `app_format_dateti
 
 ### Database
 The app owns its own MySQL database (separate from Snipe-IT). Key tables:
-- `reservations` — booking records with status enum: `pending`, `confirmed`, `checked_out`, `completed`, `cancelled`, `missed`.
-- `reservation_items` — models + quantities per reservation (FK to reservations).
+- `reservations` — booking records with status enum: `pending`, `confirmed`, `fulfilled`, `cancelled`, `missed`.
+- `reservation_items` — models + quantities per reservation (FK to reservations). Has `deleted_at` for soft-delete.
+- `checkouts` — physical checkout sessions with status enum: `open`, `partial`, `closed`. Links to reservation via `reservation_id`.
+- `checkout_items` — per-asset rows for each checkout. Has `checked_in_at` to track returns.
 - `checked_out_asset_cache` — local cache of Snipe-IT checked-out assets, populated by cron.
 - `activity_log` — audit trail.
 - `users` — local user records.
@@ -45,22 +47,32 @@ The app owns its own MySQL database (separate from Snipe-IT). Key tables:
 Schema lives in `public/install/schema.sql`. Upgrades in `public/install/upgrade/`.
 
 ### Reservation Lifecycle
-Reservations follow this status progression:
+Reservations track booking intent (scheduling). Status progression:
 
 ```
-pending → confirmed → checked_out → completed
-                ↘                        ↗
-              (missed / cancelled)
+pending → confirmed → fulfilled | cancelled | missed
 ```
 
 - **`pending`** — user has submitted a reservation request.
 - **`confirmed`** — staff has confirmed/approved the reservation.
-- **`checked_out`** — staff has checked out assets to the user via `staff_checkout.php`. The reservation is actively held — assets are with the user.
-- **`completed`** — all assets have been returned (checked in). Transition happens automatically via the `sync_checked_out_assets.php` cron script when none of the reservation's assets remain in the checked-out cache.
+- **`fulfilled`** — all non-deleted items have been checked out. A `checkouts` record exists with the physical asset tracking.
 - **`cancelled`** — reservation was cancelled before checkout.
 - **`missed`** — reservation was not collected within the missed cutoff window (only `pending`/`confirmed` reservations can be marked missed by `cron_mark_missed.php`).
 
-**Active vs finished:** Availability queries treat `pending`, `confirmed`, and `checked_out` as "active" statuses that reserve equipment capacity. `completed`, `cancelled`, and `missed` are terminal — they release capacity. Deletion and cancellation are blocked for `checked_out` reservations (configurable via `reservations.deletable_statuses`).
+**Active vs finished:** Availability queries treat `pending` and `confirmed` reservations as capacity-reserving. Active checkouts (`checkout_items` with `checked_in_at IS NULL`) also reserve capacity, queried separately from the `checkouts`/`checkout_items` tables. `fulfilled`, `cancelled`, and `missed` are terminal for reservations. Deletion is blocked for `fulfilled` reservations (configurable via `reservations.deletable_statuses`).
+
+### Checkout Lifecycle
+Checkouts track physical asset possession (who has what). Status progression:
+
+```
+open → partial → closed
+```
+
+- **`open`** — assets actively out with user, none returned yet.
+- **`partial`** — some `checkout_items` have `checked_in_at` set.
+- **`closed`** — all `checkout_items` have `checked_in_at` set (all assets returned).
+
+Each checkout has a `reservation_id` (nullable for walk-up checkouts) and per-asset `checkout_items` rows. The `checked_out_asset_cache` table remains as a Snipe-IT sync cache; `checkout_items` is the authoritative local checkout record. The sync cron reconciles `checkout_items` against the cache to detect returns made directly in Snipe-IT.
 
 ### Snipe-IT API Integration
 - All API calls go through `snipeit_request()` in `snipeit_client.php`.
@@ -68,6 +80,7 @@ pending → confirmed → checked_out → completed
 - Assets/models must have `requestable` flag set in Snipe-IT to appear in the catalogue.
 - The `checked_out_asset_cache` table avoids hitting the API on every page load — it's refreshed by the `sync_checked_out_assets.php` cron script.
 - Snipe-IT checkout/checkin endpoints (`POST /hardware/{id}/checkout` and `/checkin`) ignore custom fields. Custom field values must be set/cleared via a separate `PUT /hardware/{id}` call after checkout/checkin. See `checkout_asset_to_user()` and `checkin_asset()` in `snipeit_client.php`.
+- To get assets assigned to a specific user, use `GET /users/{id}/assets` (via `get_assets_checked_out_to_user()`). Do NOT use `GET /hardware?assigned_to=` — that parameter does not filter correctly and returns all assets.
 
 ### Authentication & Authorization
 - Three auth providers: LDAP, Google OAuth, Microsoft Entra. At least one must be configured.
@@ -77,9 +90,17 @@ pending → confirmed → checked_out → completed
 ### Access Group Requirement
 Users must belong to at least one Snipe-IT group matching the pattern `Access - *` (e.g., "Access - Lab Equipment", "Access - Studio") to make reservations. This is a global gate enforced in `catalogue.php`, `basket.php`, and `basket_checkout.php` via `check_user_has_access_group()` in `checkout_rules.php`. It is separate from per-model `Cert - *` certification requirements. No staff/admin exemption — all users must have an Access group.
 
+### Quick Checkin User Detection
+`public/quick_checkin.php` supports a "detected user" workflow for bulk check-ins. When staff scans the first asset, if that asset is checked out to a user, the page:
+- Stores the detected user in `$_SESSION['quick_checkin_detected_user']` (id, name, email).
+- Fetches all of that user's checked-out assets via `get_assets_checked_out_to_user()` and stores them in `$_SESSION['quick_checkin_user_assets']`.
+- Displays a panel showing the user's full checkout list. Assets already in the checkin list are highlighted green; others have an "Add" button.
+- The detected user is **locked** to the first scanned user — scanning assets from other users does not change the panel.
+- Both session keys are cleared after successful checkin or manual list clear.
+
 ### Cron Scripts (`scripts/`)
-- `sync_checked_out_assets.php` — Syncs checked-out assets from Snipe-IT API to local cache. Also transitions `checked_out` reservations to `completed` when all their assets have been returned. Should run frequently (e.g., every minute).
-- `cron_mark_missed.php` — Marks uncollected `pending`/`confirmed` reservations as missed after configurable cutoff. Does not affect `checked_out` reservations.
+- `sync_checked_out_assets.php` — Syncs checked-out assets from Snipe-IT API to local cache. Also reconciles `checkout_items` against the cache — if an asset is no longer checked out in Snipe-IT, its `checked_in_at` is set and the parent checkout status is recomputed. Should run frequently (e.g., every minute).
+- `cron_mark_missed.php` — Marks uncollected `pending`/`confirmed` reservations as missed after configurable cutoff.
 - `email_overdue_staff.php` / `email_overdue_users.php` — Overdue notification emails.
 
 ## Development Notes

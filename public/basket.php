@@ -105,14 +105,14 @@ if (!empty($basket)) {
                 $requestableTotal = $entry['requestable_count'] ?? null;
 
                 // How many units already booked in that time range?
+                // Pending/confirmed reservations overlapping the window
                 $sql = "
-                    SELECT
-                        COALESCE(SUM(CASE WHEN r.status IN ('pending','confirmed') THEN ri.quantity END), 0) AS pending_qty,
-                        COALESCE(SUM(CASE WHEN r.status = 'checked_out' THEN ri.quantity END), 0) AS completed_qty
+                    SELECT COALESCE(SUM(ri.quantity), 0) AS pending_qty
                     FROM reservation_items ri
                     JOIN reservations r ON r.id = ri.reservation_id
                     WHERE ri.model_id = :model_id
-                      AND r.status IN ('pending', 'confirmed', 'checked_out')
+                      AND ri.deleted_at IS NULL
+                      AND r.status IN ('pending', 'confirmed')
                       AND (r.start_datetime < :end AND r.end_datetime > :start)
                 ";
                 $stmt = $pdo->prepare($sql);
@@ -121,12 +121,27 @@ if (!empty($basket)) {
                     ':start'    => $previewStart,
                     ':end'      => $previewEnd,
                 ]);
-                $row            = $stmt->fetch();
-                $pendingQty     = $row ? (int)$row['pending_qty'] : 0;
-                $checkedOutQty  = $row ? (int)$row['completed_qty'] : 0;
+                $pendingQty = (int)(($stmt->fetch())['pending_qty'] ?? 0);
 
-                // Reservation overlap query already accounts for checked_out reservations
-                // in the selected date range — no need to add cache count on top.
+                // Active checkout items overlapping the window
+                $coSql = "
+                    SELECT COUNT(*) AS co_qty
+                    FROM checkout_items ci
+                    JOIN checkouts c ON c.id = ci.checkout_id
+                    WHERE ci.model_id = :model_id
+                      AND ci.checked_in_at IS NULL
+                      AND c.status IN ('open','partial')
+                      AND c.start_datetime < :end
+                      AND c.end_datetime > :start
+                ";
+                $coStmt = $pdo->prepare($coSql);
+                $coStmt->execute([
+                    ':model_id' => $mid,
+                    ':start'    => $previewStart,
+                    ':end'      => $previewEnd,
+                ]);
+                $checkedOutQty = (int)(($coStmt->fetch())['co_qty'] ?? 0);
+
                 $booked = $pendingQty + $checkedOutQty;
 
                 // Total requestable units in Snipe-IT

@@ -51,7 +51,7 @@ $sql = "
     SELECT COUNT(*) AS c
     FROM reservations
     WHERE asset_id = :asset_id
-      AND status IN ('pending','confirmed','checked_out')
+      AND status IN ('pending','confirmed')
       AND (
         (start_datetime < :end AND end_datetime > :start)
       )

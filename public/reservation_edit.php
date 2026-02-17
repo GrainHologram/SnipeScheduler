@@ -133,6 +133,7 @@ try {
         SELECT model_id, quantity, model_name_cache
         FROM reservation_items
         WHERE reservation_id = :id
+          AND deleted_at IS NULL
         ORDER BY model_id
     ');
     $itemsStmt->execute([':id' => $id]);
@@ -281,7 +282,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 FROM reservation_items ri
                 JOIN reservations r ON r.id = ri.reservation_id
                 WHERE ri.model_id = :model_id
-                  AND r.status IN (\'pending\',\'confirmed\',\'checked_out\')
+                  AND ri.deleted_at IS NULL
+                  AND r.status IN (\'pending\',\'confirmed\')
                   AND r.id <> :res_id
                   AND (r.start_datetime < :end AND r.end_datetime > :start)
             ';

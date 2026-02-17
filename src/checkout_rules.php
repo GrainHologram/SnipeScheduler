@@ -307,7 +307,7 @@ function check_user_has_access_group(int $snipeitUserId): bool
 }
 
 /**
- * Check if a user currently has any checked-out assets.
+ * Check if a user currently has any active checkouts.
  *
  * @param int $snipeitUserId
  * @return bool
@@ -323,9 +323,40 @@ function check_user_has_active_checkout(int $snipeitUserId): bool
 
     $stmt = $pdo->prepare("
         SELECT COUNT(*)
-          FROM checked_out_asset_cache
-         WHERE assigned_to_id = :uid
+          FROM checkouts
+         WHERE snipeit_user_id = :uid
+           AND parent_checkout_id IS NULL
+           AND status IN ('open','partial')
     ");
     $stmt->execute([':uid' => $snipeitUserId]);
     return (int)$stmt->fetchColumn() > 0;
+}
+
+/**
+ * Get the user's active parent checkout, if any.
+ *
+ * @param int $snipeitUserId
+ * @return array|null  Checkout row or null
+ */
+function get_user_active_checkout(int $snipeitUserId): ?array
+{
+    if ($snipeitUserId <= 0) {
+        return null;
+    }
+
+    global $pdo;
+    require_once SRC_PATH . '/db.php';
+
+    $stmt = $pdo->prepare("
+        SELECT *
+          FROM checkouts
+         WHERE snipeit_user_id = :uid
+           AND parent_checkout_id IS NULL
+           AND status IN ('open','partial')
+         ORDER BY created_at DESC
+         LIMIT 1
+    ");
+    $stmt->execute([':uid' => $snipeitUserId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $row ?: null;
 }

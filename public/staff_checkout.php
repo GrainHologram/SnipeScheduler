@@ -109,14 +109,16 @@ function model_booked_elsewhere(PDO $pdo, int $modelId, string $start, string $e
         return false;
     }
 
+    // Check pending/confirmed reservations
     $sql = "
         SELECT COALESCE(SUM(ri.quantity), 0) AS booked_qty
         FROM reservation_items ri
         JOIN reservations r ON r.id = ri.reservation_id
         WHERE ri.model_id = :model_id
+          AND ri.deleted_at IS NULL
           AND r.start_datetime < :end
           AND r.end_datetime > :start
-          AND r.status IN ('pending', 'confirmed', 'checked_out')
+          AND r.status IN ('pending', 'confirmed')
     ";
 
     $params = [
@@ -132,9 +134,29 @@ function model_booked_elsewhere(PDO $pdo, int $modelId, string $start, string $e
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    $reservedQty = (int)(($stmt->fetch(PDO::FETCH_ASSOC))['booked_qty'] ?? 0);
 
-    return ((int)($row['booked_qty'] ?? 0)) > 0;
+    // Check active checkouts (open/partial) for this model
+    $coSql = "
+        SELECT COUNT(*) AS checked_out_qty
+        FROM checkout_items ci
+        JOIN checkouts c ON c.id = ci.checkout_id
+        WHERE ci.model_id = :model_id
+          AND ci.checked_in_at IS NULL
+          AND c.start_datetime < :end
+          AND c.end_datetime > :start
+          AND c.status IN ('open', 'partial')
+    ";
+    $coParams = [
+        ':model_id' => $modelId,
+        ':start'    => $start,
+        ':end'      => $end,
+    ];
+    $coStmt = $pdo->prepare($coSql);
+    $coStmt->execute($coParams);
+    $checkedOutQty = (int)(($coStmt->fetch(PDO::FETCH_ASSOC))['checked_out_qty'] ?? 0);
+
+    return ($reservedQty + $checkedOutQty) > 0;
 }
 
 // ---------------------------------------------------------------------
@@ -379,6 +401,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     SELECT COALESCE(SUM(quantity), 0)
                       FROM reservation_items
                      WHERE reservation_id = :rid
+                       AND deleted_at IS NULL
                 ");
                 $totalStmt->execute([':rid' => $selectedReservationId]);
                 $totalQtyBefore = (int)$totalStmt->fetchColumn();
@@ -388,6 +411,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                       FROM reservation_items
                      WHERE reservation_id = :rid
                        AND model_id = :mid
+                       AND deleted_at IS NULL
                      LIMIT 1
                 ");
                 $stmt->execute([
@@ -624,38 +648,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $checkoutExpectedEnd = $selectedEnd; // default: reservation end
 
                         if ($clCfg['enabled'] && $clCfg['single_active_checkout'] && check_user_has_active_checkout($userId)) {
+                            $activeCheckout = get_user_active_checkout($userId);
                             if ($appendToActive) {
-                                // Look up the existing expected check-in for this user
-                                $existingStmt = $pdo->prepare("
-                                    SELECT expected_checkin FROM checked_out_asset_cache
-                                     WHERE assigned_to_id = :uid AND expected_checkin IS NOT NULL
-                                     ORDER BY expected_checkin DESC LIMIT 1
-                                ");
-                                $existingStmt->execute([':uid' => $userId]);
-                                $existingExpected = $existingStmt->fetchColumn();
-                                if ($existingExpected) {
-                                    // Convert from Snipe-IT timezone to UTC for checkout_asset_to_user
-                                    $snipeTz = snipe_get_timezone();
-                                    try {
-                                        $existDt = new DateTime($existingExpected, $snipeTz);
-                                        $existDt->setTimezone(new DateTimeZone('UTC'));
-                                        $checkoutExpectedEnd = $existDt->format('Y-m-d H:i:s');
-                                    } catch (Throwable $e) {
-                                        $checkoutExpectedEnd = $existingExpected;
-                                    }
+                                if ($activeCheckout) {
+                                    $checkoutExpectedEnd = $activeCheckout['end_datetime'];
                                 }
                                 // Skip single active checkout block — appending to existing
                             } else {
                                 // Block checkout but offer override
                                 $showAppendOverride = true;
-                                // Fetch the active expected check-in for display
-                                $existingStmt = $pdo->prepare("
-                                    SELECT expected_checkin FROM checked_out_asset_cache
-                                     WHERE assigned_to_id = :uid AND expected_checkin IS NOT NULL
-                                     ORDER BY expected_checkin DESC LIMIT 1
-                                ");
-                                $existingStmt->execute([':uid' => $userId]);
-                                $activeCheckoutExpected = $existingStmt->fetchColumn() ?: '';
+                                $activeCheckoutExpected = $activeCheckout ? $activeCheckout['end_datetime'] : '';
                                 throw new Exception('This user already has assets checked out. Single active checkout is enforced.');
                             }
                         }
@@ -680,7 +682,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $checkoutMessages[] = "Appended to existing checkout (expected check-in: " . display_datetime($checkoutExpectedEnd) . ").";
                         }
 
-                        // Mark reservation as checked out and store asset tags
+                        // Create checkout record and checkout_items
                         $assetTags = array_map(function ($a) {
                             $tag   = $a['asset_tag'] ?? '';
                             $model = $a['model_name'] ?? '';
@@ -688,9 +690,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }, $assetsToCheckout);
                         $assetsText = implode(', ', array_filter($assetTags));
 
+                        // Determine parent checkout for single-active-checkout
+                        $parentCheckoutId = null;
+                        if ($appendToActive) {
+                            $activeCheckout = get_user_active_checkout($userId);
+                            if ($activeCheckout) {
+                                $parentCheckoutId = (int)$activeCheckout['id'];
+                            }
+                        }
+
+                        $coInsert = $pdo->prepare("
+                            INSERT INTO checkouts
+                                (reservation_id, parent_checkout_id, user_id, user_name, user_email, snipeit_user_id, start_datetime, end_datetime, status)
+                            VALUES
+                                (:rid, :parent, :uid, :uname, :uemail, :suid, :start, :end, 'open')
+                        ");
+                        $coInsert->execute([
+                            ':rid'    => $selectedReservationId,
+                            ':parent' => $parentCheckoutId,
+                            ':uid'    => $selectedReservation['user_id'] ?? '',
+                            ':uname'  => $userName,
+                            ':uemail' => $selectedReservation['user_email'] ?? '',
+                            ':suid'   => $userId,
+                            ':start'  => $selectedStart,
+                            ':end'    => $checkoutExpectedEnd,
+                        ]);
+                        $newCheckoutId = (int)$pdo->lastInsertId();
+
+                        $ciInsert = $pdo->prepare("
+                            INSERT INTO checkout_items
+                                (checkout_id, asset_id, asset_tag, asset_name, model_id, model_name, checked_out_at)
+                            VALUES
+                                (:cid, :aid, :atag, :aname, :mid, :mname, NOW())
+                        ");
+                        foreach ($assetsToCheckout as $a) {
+                            $ciInsert->execute([
+                                ':cid'   => $newCheckoutId,
+                                ':aid'   => (int)$a['asset_id'],
+                                ':atag'  => $a['asset_tag'] ?? '',
+                                ':aname' => $a['asset_tag'] ?? '',
+                                ':mid'   => 0,
+                                ':mname' => $a['model_name'] ?? '',
+                            ]);
+                        }
+
+                        // Mark reservation as fulfilled
                         $upd = $pdo->prepare("
                             UPDATE reservations
-                               SET status = 'checked_out',
+                               SET status = 'fulfilled',
                                    asset_name_cache = :assets_text
                              WHERE id = :id
                         ");
@@ -698,15 +745,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ':id'          => $selectedReservationId,
                             ':assets_text' => $assetsText,
                         ]);
-                        $checkoutMessages[] = 'Reservation marked as checked out.';
+                        $checkoutMessages[] = 'Reservation fulfilled and checkout created.';
                         if ($selectedReservationId) {
                             unset($_SESSION['reservation_selected_assets'][$selectedReservationId]);
                         }
 
-                        activity_log_event('reservation_checked_out', 'Reservation checked out', [
-                            'subject_type' => 'reservation',
-                            'subject_id'   => $selectedReservationId,
+                        activity_log_event('checkout_created', 'Checkout created from reservation', [
+                            'subject_type' => 'checkout',
+                            'subject_id'   => $newCheckoutId,
                             'metadata'     => [
+                                'reservation_id' => $selectedReservationId,
                                 'checked_out_to' => $userName,
                                 'assets'         => $assetTags,
                                 'note'           => $note,
@@ -838,10 +886,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             return $model !== '' ? ($tag . ' (' . $model . ')') : $tag;
                         }, $checkoutAssets);
 
-                        activity_log_event('reservation_checked_out', 'Assets checked out from reservation', [
-                            'subject_type' => 'reservation',
+                        activity_log_event('checkout_created', 'Assets checked out from reservation', [
+                            'subject_type' => 'checkout',
                             'subject_id'   => $selectedReservationId,
                             'metadata'     => [
+                                'reservation_id' => $selectedReservationId,
                                 'checked_out_to' => $userName,
                                 'assets'         => $assetTags,
                                 'note'           => $note,

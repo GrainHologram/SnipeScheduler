@@ -48,7 +48,8 @@ function qc_current_reservations_for_model(PDO $pdo, int $modelId): array
           FROM reservation_items ri
           JOIN reservations r ON r.id = ri.reservation_id
          WHERE ri.model_id = :model_id
-           AND r.status IN ('pending','confirmed','checked_out')
+           AND ri.deleted_at IS NULL
+           AND r.status IN ('pending','confirmed')
            AND r.start_datetime <= :now
            AND r.end_datetime   >= :now
          ORDER BY r.start_datetime ASC
@@ -346,6 +347,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         try {
                             $pdo->beginTransaction();
 
+                            // Create fulfilled reservation for audit trail
                             $insertRes = $pdo->prepare("
                                 INSERT INTO reservations (
                                     user_name, user_email, user_id, snipeit_user_id,
@@ -354,7 +356,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ) VALUES (
                                     :user_name, :user_email, :user_id, :snipeit_user_id,
                                     0, :asset_name_cache,
-                                    :start_datetime, :end_datetime, 'checked_out'
+                                    :start_datetime, :end_datetime, 'fulfilled'
                                 )
                             ");
                             $insertRes->execute([
@@ -386,15 +388,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 }
                             }
 
+                            // Create checkout record + checkout_items
+                            $coInsert = $pdo->prepare("
+                                INSERT INTO checkouts (
+                                    reservation_id, user_id, user_name, user_email,
+                                    snipeit_user_id, start_datetime, end_datetime, status
+                                ) VALUES (
+                                    :rid, :uid, :uname, :uemail,
+                                    :suid, :start, :end, 'open'
+                                )
+                            ");
+                            $coInsert->execute([
+                                ':rid'   => $reservationId,
+                                ':uid'   => (string)$userId,
+                                ':uname' => $userName,
+                                ':uemail' => $user['email'] ?? '',
+                                ':suid'  => $userId,
+                                ':start' => $reservationStart,
+                                ':end'   => $reservationEnd,
+                            ]);
+                            $checkoutId = (int)$pdo->lastInsertId();
+
+                            $ciInsert = $pdo->prepare("
+                                INSERT INTO checkout_items (
+                                    checkout_id, asset_id, asset_tag, asset_name,
+                                    model_id, model_name, checked_out_at
+                                ) VALUES (
+                                    :cid, :aid, :atag, :aname,
+                                    :mid, :mname, NOW()
+                                )
+                            ");
+                            foreach ($checkoutAssets as $asset) {
+                                $ciInsert->execute([
+                                    ':cid'   => $checkoutId,
+                                    ':aid'   => (int)$asset['id'],
+                                    ':atag'  => $asset['asset_tag'] ?? '',
+                                    ':aname' => $asset['name'] ?? '',
+                                    ':mid'   => (int)($asset['model_id'] ?? 0),
+                                    ':mname' => $asset['model'] ?? '',
+                                ]);
+                            }
+
                             $pdo->commit();
                         } catch (Throwable $e) {
-                            $pdo->rollBack();
-                            $errors[] = 'Quick checkout completed, but could not record reservation history: ' . $e->getMessage();
+                            if ($pdo->inTransaction()) {
+                                $pdo->rollBack();
+                            }
+                            $errors[] = 'Quick checkout completed, but could not record checkout history: ' . $e->getMessage();
                         }
 
-                        activity_log_event('quick_checkout', 'Quick checkout completed', [
-                            'subject_type' => 'reservation',
-                            'subject_id'   => $reservationId ?? null,
+                        activity_log_event('checkout_created', 'Quick checkout completed', [
+                            'subject_type' => 'checkout',
+                            'subject_id'   => $checkoutId ?? null,
                             'metadata'     => [
                                 'checked_out_to' => $userName,
                                 'assets'         => $assetTags,

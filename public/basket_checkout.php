@@ -113,12 +113,14 @@ try {
         }
 
         // How many units of this model are already booked for this time range?
+        // Pending/confirmed reservations
         $sql = "
             SELECT COALESCE(SUM(ri.quantity), 0) AS booked_qty
             FROM reservation_items ri
             JOIN reservations r ON r.id = ri.reservation_id
             WHERE ri.model_id = :model_id
-              AND r.status IN ('pending','confirmed','checked_out')
+              AND ri.deleted_at IS NULL
+              AND r.status IN ('pending','confirmed')
               AND (r.start_datetime < :end AND r.end_datetime > :start)
         ";
         $stmt = $pdo->prepare($sql);
@@ -127,8 +129,27 @@ try {
             ':start'    => $start,
             ':end'      => $end,
         ]);
-        $row = $stmt->fetch();
-        $existingBooked = $row ? (int)$row['booked_qty'] : 0;
+        $reservedQty = (int)(($stmt->fetch())['booked_qty'] ?? 0);
+
+        // Active checkout items overlapping the window
+        $coStmt = $pdo->prepare("
+            SELECT COUNT(*) AS co_qty
+            FROM checkout_items ci
+            JOIN checkouts c ON c.id = ci.checkout_id
+            WHERE ci.model_id = :model_id
+              AND ci.checked_in_at IS NULL
+              AND c.status IN ('open','partial')
+              AND c.start_datetime < :end
+              AND c.end_datetime > :start
+        ");
+        $coStmt->execute([
+            ':model_id' => $modelId,
+            ':start'    => $start,
+            ':end'      => $end,
+        ]);
+        $checkedOutQty = (int)(($coStmt->fetch())['co_qty'] ?? 0);
+
+        $existingBooked = $reservedQty + $checkedOutQty;
 
         // Total requestable units in Snipe-IT
         $totalRequestable = count_requestable_assets_by_model($modelId);

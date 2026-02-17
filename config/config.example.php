@@ -135,7 +135,7 @@ return [
     ],
 
     'reservations' => [
-        'deletable_statuses' => ['pending', 'confirmed', 'cancelled', 'missed'], // statuses that allow deletion (checked_out and completed are not deletable)
+        'deletable_statuses' => ['pending', 'confirmed', 'cancelled', 'missed'], // statuses that allow deletion (fulfilled is not deletable)
     ],
 
     'catalogue' => [

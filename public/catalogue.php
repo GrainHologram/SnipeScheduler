@@ -1233,31 +1233,52 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         $assetCount = count_requestable_assets_by_model($modelId);
 
                         if ($windowActive) {
+                            // Pending/confirmed reservations overlapping the window
                             $stmt = $pdo->prepare("
-                                SELECT
-                                    COALESCE(SUM(CASE WHEN r.status IN ('pending','confirmed') THEN ri.quantity END), 0) AS pending_qty,
-                                    COALESCE(SUM(CASE WHEN r.status = 'checked_out' THEN ri.quantity END), 0) AS completed_qty
+                                SELECT COALESCE(SUM(ri.quantity), 0) AS pending_qty
                                 FROM reservation_items ri
                                 JOIN reservations r ON r.id = ri.reservation_id
                                 WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed','checked_out')
-                                  AND (r.start_datetime < :end AND r.end_datetime > :start)
+                                  AND ri.deleted_at IS NULL
+                                  AND r.status IN ('pending','confirmed')
+                                  AND r.start_datetime < :end
+                                  AND r.end_datetime > :start
                             ");
                             $stmt->execute([
                                 ':mid' => $modelId,
                                 ':start' => $windowStartIso,
                                 ':end' => $windowEndIso,
                             ]);
+                            $pendingQty = (int)(($stmt->fetch(PDO::FETCH_ASSOC))['pending_qty'] ?? 0);
+
+                            // Active checkout items overlapping the window
+                            $coStmt = $pdo->prepare("
+                                SELECT COUNT(*) AS co_qty
+                                FROM checkout_items ci
+                                JOIN checkouts c ON c.id = ci.checkout_id
+                                WHERE ci.model_id = :mid
+                                  AND ci.checked_in_at IS NULL
+                                  AND c.status IN ('open','partial')
+                                  AND c.start_datetime < :end
+                                  AND c.end_datetime > :start
+                            ");
+                            $coStmt->execute([
+                                ':mid' => $modelId,
+                                ':start' => $windowStartIso,
+                                ':end' => $windowEndIso,
+                            ]);
+                            $checkedOutQty = (int)(($coStmt->fetch(PDO::FETCH_ASSOC))['co_qty'] ?? 0);
+
+                            $booked = $pendingQty + $checkedOutQty;
                         } else {
-                            // Active reservations overlapping "now"
+                            // "Now" mode: pending/confirmed reservations
                             $stmt = $pdo->prepare("
-                                SELECT
-                                    COALESCE(SUM(CASE WHEN r.status IN ('pending','confirmed') THEN ri.quantity END), 0) AS pending_qty,
-                                    COALESCE(SUM(CASE WHEN r.status = 'checked_out' THEN ri.quantity END), 0) AS completed_qty
+                                SELECT COALESCE(SUM(ri.quantity), 0) AS pending_qty
                                 FROM reservation_items ri
                                 JOIN reservations r ON r.id = ri.reservation_id
                                 WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed','checked_out')
+                                  AND ri.deleted_at IS NULL
+                                  AND r.status IN ('pending','confirmed')
                                   AND r.start_datetime <= :now
                                   AND r.end_datetime   > :now
                             ");
@@ -1265,16 +1286,8 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                 ':mid' => $modelId,
                                 ':now' => $nowIso,
                             ]);
-                        }
-                        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-                        $pendingQty     = $row ? (int)$row['pending_qty'] : 0;
-                        $checkedOutQty  = $row ? (int)$row['completed_qty'] : 0;
+                            $pendingQty = (int)(($stmt->fetch(PDO::FETCH_ASSOC))['pending_qty'] ?? 0);
 
-                        if ($windowActive) {
-                            // Window mode: reservation overlap query already accounts for
-                            // checked_out reservations in the selected date range.
-                            $booked = $pendingQty + $checkedOutQty;
-                        } else {
                             // "Now" mode: use live cache count for currently checked-out assets.
                             if (array_key_exists($modelId, $checkedOutCounts)) {
                                 $activeCheckedOut = $checkedOutCounts[$modelId];
@@ -1305,7 +1318,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                 FROM reservations r
                                 JOIN reservation_items ri ON ri.reservation_id = r.id
                                 WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed','checked_out')
+                                  AND r.status IN ('pending','confirmed')
                                   AND r.start_datetime < :end
                                   AND r.end_datetime > :start
                                 GROUP BY r.id
@@ -1321,7 +1334,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                 FROM reservations r
                                 JOIN reservation_items ri ON ri.reservation_id = r.id
                                 WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed','checked_out')
+                                  AND r.status IN ('pending','confirmed')
                                   AND r.end_datetime <= :start
                                 GROUP BY r.id
                                 ORDER BY r.end_datetime DESC
@@ -1336,7 +1349,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                 FROM reservations r
                                 JOIN reservation_items ri ON ri.reservation_id = r.id
                                 WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed','checked_out')
+                                  AND r.status IN ('pending','confirmed')
                                   AND r.start_datetime >= :end
                                 GROUP BY r.id
                                 ORDER BY r.start_datetime ASC
@@ -1351,7 +1364,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                 FROM reservations r
                                 JOIN reservation_items ri ON ri.reservation_id = r.id
                                 WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed','checked_out')
+                                  AND r.status IN ('pending','confirmed')
                                   AND r.start_datetime <= :now
                                   AND r.end_datetime > :now
                                 GROUP BY r.id
@@ -1367,7 +1380,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                 FROM reservations r
                                 JOIN reservation_items ri ON ri.reservation_id = r.id
                                 WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed','checked_out')
+                                  AND r.status IN ('pending','confirmed')
                                   AND r.end_datetime <= :now
                                 GROUP BY r.id
                                 ORDER BY r.end_datetime DESC
@@ -1382,7 +1395,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                 FROM reservations r
                                 JOIN reservation_items ri ON ri.reservation_id = r.id
                                 WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed','checked_out')
+                                  AND r.status IN ('pending','confirmed')
                                   AND r.start_datetime > :now
                                 GROUP BY r.id
                                 ORDER BY r.start_datetime ASC
