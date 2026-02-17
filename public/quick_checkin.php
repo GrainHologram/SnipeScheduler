@@ -20,7 +20,21 @@ if (!$isStaff) {
     exit;
 }
 
-if (($_GET['ajax'] ?? '') === 'asset_search') {
+$ajaxMode = $_GET['ajax'] ?? '';
+
+// AJAX: return detected user's asset list from session
+if ($ajaxMode === 'user_assets') {
+    header('Content-Type: application/json');
+    $detectedUser = $_SESSION['quick_checkin_detected_user'] ?? null;
+    $userAssets   = $_SESSION['quick_checkin_user_assets'] ?? [];
+    echo json_encode([
+        'user'   => $detectedUser,
+        'assets' => $userAssets,
+    ]);
+    exit;
+}
+
+if ($ajaxMode === 'asset_search') {
     header('Content-Type: application/json');
     $q = trim($_GET['q'] ?? '');
     if ($q === '' || strlen($q) < 2) {
@@ -60,6 +74,20 @@ if (isset($_GET['remove'])) {
     if ($rid > 0 && isset($checkinAssets[$rid])) {
         unset($checkinAssets[$rid]);
     }
+    // Clear detected user if list is now empty
+    if (empty($checkinAssets)) {
+        unset($_SESSION['quick_checkin_detected_user']);
+        unset($_SESSION['quick_checkin_user_assets']);
+    }
+    header('Location: quick_checkin.php');
+    exit;
+}
+
+// Clear entire list
+if (isset($_GET['clear'])) {
+    $checkinAssets = [];
+    unset($_SESSION['quick_checkin_detected_user']);
+    unset($_SESSION['quick_checkin_user_assets']);
     header('Location: quick_checkin.php');
     exit;
 }
@@ -67,13 +95,19 @@ if (isset($_GET['remove'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $mode = $_POST['mode'] ?? '';
 
-    if ($mode === 'add_asset') {
-        $tag = trim($_POST['asset_tag'] ?? '');
-        if ($tag === '') {
+    if ($mode === 'add_asset' || $mode === 'add_asset_by_id') {
+        $tag     = trim($_POST['asset_tag'] ?? '');
+        $assetIdInput = (int)($_POST['asset_id'] ?? 0);
+
+        if ($mode === 'add_asset_by_id' && $assetIdInput <= 0) {
+            $errors[] = 'Invalid asset ID.';
+        } elseif ($mode === 'add_asset' && $tag === '') {
             $errors[] = 'Please scan or enter an asset tag.';
         } else {
             try {
-                $asset = find_asset_by_tag($tag);
+                $asset = ($mode === 'add_asset_by_id')
+                    ? snipeit_request('GET', 'hardware/' . $assetIdInput)
+                    : find_asset_by_tag($tag);
                 $assetId   = (int)($asset['id'] ?? 0);
                 $assetTag  = $asset['asset_tag'] ?? '';
                 $assetName = $asset['name'] ?? '';
@@ -113,6 +147,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'assigned_name'  => $assignedName,
                     'checked_out'    => !empty($assigned),
                 ];
+                // Detect user from first scanned asset (lock to first user)
+                if ($assignedId > 0 && !isset($_SESSION['quick_checkin_detected_user'])) {
+                    $_SESSION['quick_checkin_detected_user'] = [
+                        'id'    => $assignedId,
+                        'name'  => $assignedName,
+                        'email' => $assignedEmail,
+                    ];
+                    try {
+                        $_SESSION['quick_checkin_user_assets'] = get_assets_checked_out_to_user($assignedId);
+                    } catch (Throwable $e) {
+                        $_SESSION['quick_checkin_user_assets'] = [];
+                    }
+                }
+
                 $label = $modelName !== '' ? $modelName : $assetName;
                 $messages[] = "Added asset {$assetTag} ({$label}) to check-in list.";
             } catch (Throwable $e) {
@@ -399,6 +447,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             if ($hadCheckinAssets) {
                 $checkinAssets = [];
+                unset($_SESSION['quick_checkin_detected_user']);
+                unset($_SESSION['quick_checkin_user_assets']);
             }
         }
     }
@@ -477,6 +527,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </button>
                     </div>
                 </form>
+
+                <?php
+                // User assets panel — shows all assets checked out to the detected user
+                $detectedUser = $_SESSION['quick_checkin_detected_user'] ?? null;
+                $userAssets   = $_SESSION['quick_checkin_user_assets'] ?? [];
+                if ($detectedUser && !empty($userAssets)):
+                    $allUserAssetsAdded = true;
+                    foreach ($userAssets as $ua) {
+                        $uaId = (int)($ua['id'] ?? 0);
+                        if ($uaId > 0 && !isset($checkinAssets[$uaId])) {
+                            $allUserAssetsAdded = false;
+                            break;
+                        }
+                    }
+                    $detectedDisplayName = $detectedUser['name'] ?? $detectedUser['email'] ?? 'Unknown';
+                    $detectedEmail = $detectedUser['email'] ?? '';
+                    $showEmail = $detectedEmail !== '' && $detectedEmail !== $detectedDisplayName;
+                ?>
+                <div class="card bg-light mt-3">
+                    <div class="card-body">
+                        <h6 class="card-title d-flex align-items-center mb-2">
+                            <span>Assets checked out to <?= h($detectedDisplayName) ?></span>
+                            <?php if ($showEmail): ?>
+                                <small class="text-muted ms-1">(<?= h($detectedEmail) ?>)</small>
+                            <?php endif; ?>
+                            <?php if ($allUserAssetsAdded): ?>
+                                <span class="badge bg-success ms-2">All assets added</span>
+                            <?php endif; ?>
+                        </h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Asset Tag</th>
+                                        <th>Name</th>
+                                        <th>Model</th>
+                                        <th style="width: 100px;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($userAssets as $ua):
+                                        $uaId  = (int)($ua['id'] ?? 0);
+                                        $inCheckinList = $uaId > 0 && isset($checkinAssets[$uaId]);
+                                    ?>
+                                        <tr class="<?= $inCheckinList ? 'table-success' : '' ?>">
+                                            <td><?= h($ua['asset_tag'] ?? '') ?></td>
+                                            <td><?= h($ua['name'] ?? '') ?></td>
+                                            <td><?= h($ua['model']['name'] ?? '') ?></td>
+                                            <td>
+                                                <?php if ($inCheckinList): ?>
+                                                    <span class="badge bg-success">&#10003; Added</span>
+                                                <?php else: ?>
+                                                    <form method="post" class="d-inline">
+                                                        <input type="hidden" name="mode" value="add_asset_by_id">
+                                                        <input type="hidden" name="asset_id" value="<?= $uaId ?>">
+                                                        <button type="submit" class="btn btn-sm btn-outline-primary">Add</button>
+                                                    </form>
+                                                <?php endif; ?>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
 
                 <?php if (empty($checkinAssets)): ?>
                     <div class="alert alert-secondary">
