@@ -1383,3 +1383,123 @@ function list_checked_out_assets(bool $overdueOnly = false): array
 
     return $results;
 }
+
+/**
+ * Bulk-fetch all hardware and compute per-model stats for the catalogue.
+ *
+ * Replaces N per-model API calls with a single paginated fetch of all assets,
+ * then computes requestable counts, undeployable info, and cert requirements
+ * for each requested model ID.
+ *
+ * @param int[] $modelIds  Model IDs to compute stats for
+ * @return array<int, array{requestable_count: int, undeployable: array{undeployable_count: int, status_names: string[]}, certs: string[]}>
+ */
+function prefetch_catalogue_model_stats(array $modelIds): array
+{
+    static $cache = null;
+    static $cacheKey = null;
+
+    $ids = array_unique(array_filter(array_map('intval', $modelIds)));
+    sort($ids);
+    $key = implode(',', $ids);
+
+    if ($cache !== null && $cacheKey === $key) {
+        return $cache;
+    }
+
+    // Fetch all hardware in bulk (paginated)
+    $all = [];
+    $limit = 500;
+    $offset = 0;
+
+    do {
+        $data = snipeit_request('GET', 'hardware', [
+            'limit'  => $limit,
+            'offset' => $offset,
+        ]);
+        $rows = isset($data['rows']) && is_array($data['rows']) ? $data['rows'] : [];
+        if (empty($rows)) {
+            break;
+        }
+        $all = array_merge($all, $rows);
+        $offset += $limit;
+        if (count($rows) < $limit) {
+            break;
+        }
+    } while (true);
+
+    // Build lookup set for O(1) membership check
+    $idSet = array_flip($ids);
+
+    // Initialize results for all requested model IDs
+    $results = [];
+    foreach ($ids as $id) {
+        $results[$id] = [
+            'requestable_count' => 0,
+            'undeployable' => [
+                'undeployable_count' => 0,
+                'status_names' => [],
+            ],
+            'certs' => [],
+        ];
+    }
+
+    // Single pass through all assets
+    $statusSets = []; // model_id => [name => true]
+    $certSets   = []; // model_id => [cert => true]
+
+    foreach ($all as $asset) {
+        $mid = (int)($asset['model']['id'] ?? 0);
+        if (!isset($idSet[$mid])) {
+            continue;
+        }
+        if (empty($asset['requestable'])) {
+            continue;
+        }
+
+        $results[$mid]['requestable_count']++;
+
+        // Undeployable check
+        if (!is_asset_deployable($asset)) {
+            $results[$mid]['undeployable']['undeployable_count']++;
+            $statusName = $asset['status_label']['name'] ?? 'Unknown';
+            $statusSets[$mid][$statusName] = true;
+        }
+
+        // Cert requirements from custom fields
+        $customFields = $asset['custom_fields'] ?? [];
+        if (!is_array($customFields)) {
+            continue;
+        }
+        foreach ($customFields as $fieldKey => $cf) {
+            if (!is_array($cf)) {
+                continue;
+            }
+            $candidates = array_filter([$cf['field'] ?? '', (string)$fieldKey]);
+            $value = strtolower(trim((string)($cf['value'] ?? '')));
+            if (!in_array($value, ['yes', '1', 'true'], true)) {
+                continue;
+            }
+            foreach ($candidates as $fieldName) {
+                if (preg_match('/^Cert\s*-\s*(.+)$/i', $fieldName, $m)) {
+                    $certSets[$mid][trim($m[1])] = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Flatten sets into arrays
+    foreach ($ids as $id) {
+        if (!empty($statusSets[$id])) {
+            $results[$id]['undeployable']['status_names'] = array_keys($statusSets[$id]);
+        }
+        if (!empty($certSets[$id])) {
+            $results[$id]['certs'] = array_keys($certSets[$id]);
+        }
+    }
+
+    $cache = $results;
+    $cacheKey = $key;
+    return $results;
+}
