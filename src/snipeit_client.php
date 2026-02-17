@@ -1192,33 +1192,10 @@ function get_assets_checked_out_to_user(int $userId): array
         throw new InvalidArgumentException('Invalid user ID.');
     }
 
-    $all    = [];
-    $limit  = 200;
-    $offset = 0;
+    $data = snipeit_request('GET', 'users/' . $userId . '/assets');
+    $rows = isset($data['rows']) && is_array($data['rows']) ? $data['rows'] : [];
 
-    do {
-        $params = [
-            'assigned_to'   => $userId,
-            'limit'         => $limit,
-            'offset'        => $offset,
-        ];
-
-        $data = snipeit_request('GET', 'hardware', $params);
-        $rows = isset($data['rows']) && is_array($data['rows']) ? $data['rows'] : [];
-
-        if (empty($rows)) {
-            break;
-        }
-
-        $all    = array_merge($all, $rows);
-        $offset += $limit;
-
-        if (count($rows) < $limit) {
-            break;
-        }
-    } while (true);
-
-    return $all;
+    return $rows;
 }
 
 /**
