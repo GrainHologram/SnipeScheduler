@@ -1217,6 +1217,10 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
         <?php endif; ?>
 
         <?php if (!empty($models)): ?>
+            <?php
+                $displayedModelIds = array_map(fn($m) => (int)($m['id'] ?? 0), $models);
+                $modelStats = prefetch_catalogue_model_stats($displayedModelIds);
+            ?>
             <div class="row g-3">
                 <?php foreach ($models as $model): ?>
                     <?php
@@ -1230,7 +1234,8 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     $maxQty      = 0;
                     $isRequestable = false;
                     try {
-                        $assetCount = count_requestable_assets_by_model($modelId);
+                        $bulkStats = $modelStats[$modelId] ?? null;
+                        $assetCount = $bulkStats ? $bulkStats['requestable_count'] : 0;
 
                         if ($windowActive) {
                             $stmt = $pdo->prepare("
@@ -1408,7 +1413,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     $certRequirements = [];
                     $missingCerts = [];
                     try {
-                        $certRequirements = get_model_certification_requirements($modelId);
+                        $certRequirements = $bulkStats ? $bulkStats['certs'] : [];
                         if (!empty($certRequirements) && $catalogueSnipeUserId > 0) {
                             $missingCerts = check_user_certifications($catalogueSnipeUserId, $certRequirements);
                         }
@@ -1459,7 +1464,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                         </div>
                                     <?php endif; ?>
                                     <?php
-                                        $undeployInfo = count_undeployable_assets_by_model($modelId);
+                                        $undeployInfo = $bulkStats ? $bulkStats['undeployable'] : ['undeployable_count' => 0, 'status_names' => []];
                                         if ($undeployInfo['undeployable_count'] > 0):
                                             $uCount = $undeployInfo['undeployable_count'];
                                             $uStatuses = implode(', ', $undeployInfo['status_names']);
