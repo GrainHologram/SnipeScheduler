@@ -574,7 +574,8 @@ function count_undeployable_assets_by_model(int $modelId): array
             continue;
         }
         // Skip assets that are assigned/checked-out — those aren't "broken"
-        if (!empty($a['assigned_to'] ?? ($a['assigned_to_fullname'] ?? ''))) {
+        $assignedTo = $a['assigned_to'] ?? ($a['assigned_to_fullname'] ?? '');
+        if (!empty($assignedTo)) {
             continue;
         }
         if (!is_asset_deployable($a)) {
