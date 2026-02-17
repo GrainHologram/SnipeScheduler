@@ -606,6 +606,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $assetsToCheckout[] = [
                         'asset_id'   => $assetIdSel,
                         'asset_tag'  => $choicesById[$assetIdSel]['asset_tag'] ?? ('ID ' . $assetIdSel),
+                        'model_id'   => $mid,
                         'model_name' => $item['name'] ?? '',
                     ];
                 }
@@ -729,7 +730,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ':aid'   => (int)$a['asset_id'],
                                 ':atag'  => $a['asset_tag'] ?? '',
                                 ':aname' => $a['asset_tag'] ?? '',
-                                ':mid'   => 0,
+                                ':mid'   => (int)($a['model_id'] ?? 0),
                                 ':mname' => $a['model_name'] ?? '',
                             ]);
                         }
