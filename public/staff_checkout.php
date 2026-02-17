@@ -291,6 +291,9 @@ if ($selectedReservationId) {
                         if (strpos($status, 'checked out') !== false) {
                             continue;
                         }
+                        if (!is_asset_deployable($a)) {
+                            continue;
+                        }
                         $filtered[] = $a;
                     }
                     $modelAssets[$mid] = $filtered;
@@ -475,6 +478,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 if (!$isRequestable) {
                     throw new Exception('This asset is not requestable in Snipe-IT.');
+                }
+                if (!is_asset_deployable($asset)) {
+                    $statusName = $asset['status_label']['name'] ?? 'undeployable';
+                    throw new Exception('This asset is currently flagged as "' . $statusName . '" and cannot be checked out.');
                 }
 
                 // Enforce that the asset's model is in the selected reservation and within quantity.
