@@ -1458,6 +1458,16 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                             <?= label_safe($notes) ?>
                                         </div>
                                     <?php endif; ?>
+                                    <?php
+                                        $undeployInfo = count_undeployable_assets_by_model($modelId);
+                                        if ($undeployInfo['undeployable_count'] > 0):
+                                            $uCount = $undeployInfo['undeployable_count'];
+                                            $uStatuses = implode(', ', $undeployInfo['status_names']);
+                                    ?>
+                                        <div class="mt-2">
+                                            <span class="badge bg-danger" title="<?= h($uStatuses) ?>"><?= $uCount ?> unit<?= $uCount !== 1 ? 's' : '' ?> under repair</span>
+                                        </div>
+                                    <?php endif; ?>
                                     <?php if (!empty($certRequirements)): ?>
                                         <div class="mt-2">
                                             <?php foreach ($certRequirements as $certName): ?>

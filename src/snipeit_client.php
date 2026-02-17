@@ -531,6 +531,62 @@ function count_requestable_assets_by_model(int $modelId): int
 }
 
 /**
+ * Check whether a Snipe-IT asset is deployable.
+ *
+ * @param array $asset  Asset record from the Snipe-IT API
+ * @return bool
+ */
+function is_asset_deployable(array $asset): bool
+{
+    $sl = $asset['status_label'] ?? [];
+    if (!is_array($sl)) {
+        return true; // no status info available — assume deployable
+    }
+    $meta = $sl['status_meta'] ?? ($sl['status_type'] ?? '');
+    return $meta === 'deployable' || $meta === '';
+}
+
+/**
+ * Count undeployable (broken/missing/etc.) requestable assets for a model.
+ *
+ * @param int $modelId
+ * @return array{undeployable_count: int, status_names: string[]}
+ * @throws Exception
+ */
+function count_undeployable_assets_by_model(int $modelId): array
+{
+    static $cache = [];
+    if ($modelId <= 0) {
+        throw new InvalidArgumentException('Model ID must be positive.');
+    }
+    if (isset($cache[$modelId])) {
+        return $cache[$modelId];
+    }
+
+    $assets = list_assets_by_model($modelId, 500);
+    $count  = 0;
+    $names  = [];
+
+    foreach ($assets as $a) {
+        if (empty($a['requestable'])) {
+            continue;
+        }
+        if (!is_asset_deployable($a)) {
+            $count++;
+            $statusName = $a['status_label']['name'] ?? 'Unknown';
+            $names[$statusName] = true;
+        }
+    }
+
+    $result = [
+        'undeployable_count' => $count,
+        'status_names'       => array_keys($names),
+    ];
+    $cache[$modelId] = $result;
+    return $result;
+}
+
+/**
  * Count how many assets for a model are currently checked out/assigned.
  *
  * @param int $modelId

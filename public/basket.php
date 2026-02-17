@@ -210,6 +210,26 @@ if (!empty($basket) && $snipeUserId > 0) {
 
 $hasCheckoutErrors = !empty($checkoutErrors);
 
+// Non-blocking warnings for undeployable assets
+$checkoutWarnings = [];
+if (!empty($basket)) {
+    foreach ($basket as $wModelId => $wQty) {
+        $wModelId = (int)$wModelId;
+        if ($wModelId <= 0) continue;
+        try {
+            $uInfo = count_undeployable_assets_by_model($wModelId);
+            if ($uInfo['undeployable_count'] > 0) {
+                $wModelData = get_model($wModelId);
+                $wModelName = $wModelData['name'] ?? ('Model #' . $wModelId);
+                $statuses = implode('/', $uInfo['status_names']);
+                $checkoutWarnings[] = 'Some units of "' . $wModelName . '" are currently flagged as ' . $statuses . '. Your reservation may be affected.';
+            }
+        } catch (Throwable $e) {
+            // skip on error
+        }
+    }
+}
+
 ?>
 <!DOCTYPE html>
 <html>
@@ -388,6 +408,16 @@ $hasCheckoutErrors = !empty($checkoutErrors);
                     <ul class="mb-0 mt-1">
                         <?php foreach ($checkoutErrors as $err): ?>
                             <li><?= h($err) ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!empty($checkoutWarnings)): ?>
+                <div class="alert alert-warning">
+                    <ul class="mb-0">
+                        <?php foreach ($checkoutWarnings as $warn): ?>
+                            <li><?= h($warn) ?></li>
                         <?php endforeach; ?>
                     </ul>
                 </div>
