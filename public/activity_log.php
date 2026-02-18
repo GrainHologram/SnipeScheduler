@@ -253,6 +253,9 @@ try {
             <li class="nav-item">
                 <a class="nav-link" href="settings.php">Settings</a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link" href="opening_hours.php">Opening Hours</a>
+            </li>
         </ul>
 
         <div class="card">

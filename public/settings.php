@@ -684,6 +684,9 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
             <li class="nav-item">
                 <a class="nav-link active" href="settings.php">Settings</a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link" href="opening_hours.php">Opening Hours</a>
+            </li>
         </ul>
 
         <form method="post" action="<?= h($active) ?>" class="row g-3 settings-form" id="settings-form">
