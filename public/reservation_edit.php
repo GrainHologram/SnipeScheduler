@@ -85,6 +85,7 @@ function datetime_local_value(?string $isoDatetime): string
 }
 
 $errors = [];
+$availWarnings = [];
 $addModelId = 0;
 $addQtyRaw = '';
 $addModelLabel = '';
@@ -270,6 +271,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Availability check — warn but allow override
+    $availWarnings = [];
+    $overrideAvailability = !empty($_POST['override_availability']);
     if (empty($errors)) {
         foreach ($updatedItems as $mid => $qty) {
             if ($qty <= 0) {
@@ -277,6 +281,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $modelName = $modelNameMap[$mid] ?? ('Model #' . $mid);
 
+            // Pending/confirmed reservations (excluding this one)
             $sql = '
                 SELECT COALESCE(SUM(ri.quantity), 0) AS booked_qty
                 FROM reservation_items ri
@@ -295,13 +300,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':end'      => $end,
             ]);
             $row = $stmt->fetch();
-            $existingBooked = $row ? (int)$row['booked_qty'] : 0;
+            $reservedQty = $row ? (int)$row['booked_qty'] : 0;
 
+            // Active checkout items overlapping the window
+            $coStmt = $pdo->prepare("
+                SELECT COUNT(*) AS co_qty
+                FROM checkout_items ci
+                JOIN checkouts c ON c.id = ci.checkout_id
+                WHERE ci.model_id = :model_id
+                  AND ci.checked_in_at IS NULL
+                  AND c.status IN ('open','partial')
+                  AND c.start_datetime < :end
+                  AND c.end_datetime > :start
+            ");
+            $coStmt->execute([
+                ':model_id' => $mid,
+                ':start'    => $start,
+                ':end'      => $end,
+            ]);
+            $checkedOutQty = (int)(($coStmt->fetch())['co_qty'] ?? 0);
+
+            $existingBooked = $reservedQty + $checkedOutQty;
             $totalRequestable = count_requestable_assets_by_model($mid);
 
             if ($totalRequestable > 0 && $existingBooked + $qty > $totalRequestable) {
-                $errors[] = 'Not enough units available for "' . $modelName . '" in that time period.';
+                $available = max(0, $totalRequestable - $existingBooked);
+                $availWarnings[] = '"' . $modelName . '": requested ' . $qty
+                    . ', available ' . $available
+                    . ' (' . $reservedQty . ' reserved, ' . $checkedOutQty . ' checked out).';
             }
+        }
+
+        // Block save if there are availability warnings and no override
+        if (!empty($availWarnings) && !$overrideAvailability) {
+            // Don't add to $errors — handled separately so override is possible
         }
     }
 
@@ -316,7 +348,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Reservation must include at least one item.';
     }
 
-    if (empty($errors)) {
+    if (empty($errors) && (empty($availWarnings) || $overrideAvailability)) {
         $pdo->beginTransaction();
 
         try {
@@ -637,6 +669,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div class="form-text">Add one or more models before saving.</div>
                     </div>
                 </div>
+
+                <?php if (!empty($availWarnings)): ?>
+                    <div class="alert alert-warning mt-3">
+                        <strong>Availability conflict:</strong>
+                        <ul class="mb-2 mt-1">
+                            <?php foreach ($availWarnings as $aw): ?>
+                                <li><?= h($aw) ?></li>
+                            <?php endforeach; ?>
+                        </ul>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox"
+                                   name="override_availability" value="1"
+                                   id="overrideAvail">
+                            <label class="form-check-label" for="overrideAvail">
+                                Save anyway (override availability check)
+                            </label>
+                        </div>
+                    </div>
+                <?php endif; ?>
 
                 <div class="d-flex justify-content-end gap-2 mt-3">
                     <a href="<?= h($actionUrl) ?>" class="btn btn-outline-secondary">Cancel</a>
