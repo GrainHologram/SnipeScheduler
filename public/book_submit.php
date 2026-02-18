@@ -68,10 +68,16 @@ if ($row && $row['c'] > 0) {
     die('Sorry, this item is already booked for that time.');
 }
 
-// Build user info from Snipe-IT user record
+// Build user info
 $userName  = trim($user['first_name'] . ' ' . $user['last_name']);
 $userEmail = $user['email'];
-$userId    = $user['id']; // store their Snipe-IT ID as "user_id" too if you like
+$userId    = $user['id']; // local users.id
+
+// Resolve the Snipe-IT user ID
+$snipeUserId = (int)($user['snipeit_user_id'] ?? 0);
+if ($snipeUserId <= 0) {
+    $snipeUserId = resolve_snipeit_user_id($user['email'] ?? '');
+}
 
 // Insert booking
 $insert = $pdo->prepare("
@@ -89,7 +95,7 @@ $insert->execute([
     ':user_name'        => $userName,
     ':user_email'       => $userEmail,
     ':user_id'          => $userId,
-    ':snipeit_user_id'  => $user['id'],
+    ':snipeit_user_id'  => $snipeUserId,
     ':asset_id'         => $assetId,
     ':asset_name_cache' => 'Pending checkout',
     ':start_datetime'   => $start,

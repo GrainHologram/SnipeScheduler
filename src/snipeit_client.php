@@ -684,6 +684,26 @@ function find_single_user_by_email_or_name(string $query): array
 }
 
 /**
+ * Resolve a Snipe-IT user ID from an email address.
+ *
+ * Returns the Snipe-IT user ID (int > 0) on success, or 0 if the
+ * user cannot be found or Snipe-IT is unreachable.
+ */
+function resolve_snipeit_user_id(string $email): int
+{
+    $email = trim($email);
+    if ($email === '') {
+        return 0;
+    }
+    try {
+        $matched = find_single_user_by_email_or_name($email);
+        return (int)($matched['id'] ?? 0);
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
+
+/**
  * Find a Snipe-IT user by email or name, returning candidates on ambiguity.
  *
  * @param string $query

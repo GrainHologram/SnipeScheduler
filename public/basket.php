@@ -176,7 +176,10 @@ if (!empty($basket)) {
 $checkoutErrors = [];
 $userOverride = $_SESSION['booking_user_override'] ?? null;
 $bookingUser  = $userOverride ?: $currentUser;
-$snipeUserId  = (int)($bookingUser['id'] ?? 0);
+$snipeUserId = (int)($bookingUser['snipeit_user_id'] ?? 0);
+if ($snipeUserId <= 0) {
+    $snipeUserId = resolve_snipeit_user_id($bookingUser['email'] ?? '');
+}
 
 if (!empty($basket) && $snipeUserId > 0) {
     // Access group gate

@@ -275,6 +275,9 @@ if ($provider === 'google') {
         'is_staff'     => $isStaff,
     ];
 
+    require_once SRC_PATH . '/snipeit_client.php';
+    $_SESSION['user']['snipeit_user_id'] = resolve_snipeit_user_id($email);
+
     activity_log_event('user_login', 'User logged in', [
         'metadata' => [
             'provider' => 'google',
@@ -477,6 +480,9 @@ if ($provider === 'microsoft') {
         'is_admin'     => $isAdmin,
         'is_staff'     => $isStaff,
     ];
+
+    require_once SRC_PATH . '/snipeit_client.php';
+    $_SESSION['user']['snipeit_user_id'] = resolve_snipeit_user_id($email);
 
     activity_log_event('user_login', 'User logged in', [
         'metadata' => [
@@ -685,6 +691,9 @@ $_SESSION['user'] = [
     'is_admin'     => $isAdmin,
     'is_staff'     => $isStaff,
 ];
+
+require_once SRC_PATH . '/snipeit_client.php';
+$_SESSION['user']['snipeit_user_id'] = resolve_snipeit_user_id($mail);
 
 activity_log_event('user_login', 'User logged in', [
     'metadata' => [

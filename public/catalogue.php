@@ -97,23 +97,25 @@ if (($_GET['ajax'] ?? '') === 'overdue_check') {
             $activeUserName
         );
 
-        $snipeUserId = 0;
-        $lookupQueries = array_values(array_filter(array_unique([
-            $activeUserEmail,
-            $activeUserUsername,
-            $activeUserDisplay,
-            $activeUserName,
-        ]), 'strlen'));
+        $snipeUserId = (int)($activeUser['snipeit_user_id'] ?? 0);
+        if ($snipeUserId <= 0) {
+            $lookupQueries = array_values(array_filter(array_unique([
+                $activeUserEmail,
+                $activeUserUsername,
+                $activeUserDisplay,
+                $activeUserName,
+            ]), 'strlen'));
 
-        foreach ($lookupQueries as $query) {
-            try {
-                $matched = find_single_user_by_email_or_name($query);
-                $snipeUserId = (int)($matched['id'] ?? 0);
-                if ($snipeUserId > 0) {
-                    break;
+            foreach ($lookupQueries as $query) {
+                try {
+                    $matched = find_single_user_by_email_or_name($query);
+                    $snipeUserId = (int)($matched['id'] ?? 0);
+                    if ($snipeUserId > 0) {
+                        break;
+                    }
+                } catch (Throwable $e) {
+                    // Try next identifier.
                 }
-            } catch (Throwable $e) {
-                // Try next identifier.
             }
         }
 
@@ -483,10 +485,11 @@ if ($isStaff && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') 
         unset($_SESSION['booking_user_override']);
     } else {
         $_SESSION['booking_user_override'] = [
-            'email'      => $selEmail,
-            'first_name' => $selName,
-            'last_name'  => '',
-            'id'         => 0,
+            'email'           => $selEmail,
+            'first_name'      => $selName,
+            'last_name'       => '',
+            'id'              => 0,
+            'snipeit_user_id' => resolve_snipeit_user_id($selEmail),
         ];
     }
     header('Location: catalogue.php');
@@ -768,23 +771,25 @@ if (!$skipOverdueCheck && is_array($cached) && isset($cached['ts'], $cached['dat
 }
 if (!$skipOverdueCheck && !$catalogueBlocked && empty($overdueAssets)) {
     try {
-        $snipeUserId = 0;
-        $lookupQueries = array_values(array_filter(array_unique([
-            $activeUserEmail,
-            $activeUserUsername,
-            $activeUserDisplay,
-            $activeUserName,
-        ]), 'strlen'));
+        $snipeUserId = (int)($activeUser['snipeit_user_id'] ?? 0);
+        if ($snipeUserId <= 0) {
+            $lookupQueries = array_values(array_filter(array_unique([
+                $activeUserEmail,
+                $activeUserUsername,
+                $activeUserDisplay,
+                $activeUserName,
+            ]), 'strlen'));
 
-        foreach ($lookupQueries as $query) {
-            try {
-                $matched = find_single_user_by_email_or_name($query);
-                $snipeUserId = (int)($matched['id'] ?? 0);
-                if ($snipeUserId > 0) {
-                    break;
+            foreach ($lookupQueries as $query) {
+                try {
+                    $matched = find_single_user_by_email_or_name($query);
+                    $snipeUserId = (int)($matched['id'] ?? 0);
+                    if ($snipeUserId > 0) {
+                        break;
+                    }
+                } catch (Throwable $e) {
+                    // Try next identifier.
                 }
-            } catch (Throwable $e) {
-                // Try next identifier.
             }
         }
 
@@ -799,21 +804,24 @@ if (!$skipOverdueCheck && !$catalogueBlocked && empty($overdueAssets)) {
 // If we didn't resolve the Snipe-IT user ID above (e.g. overdue check was skipped),
 // try to resolve it now for certification/checkout-rules checks.
 if ($catalogueSnipeUserId <= 0) {
-    $lookupQueries = array_values(array_filter(array_unique([
-        $activeUserEmail,
-        $activeUserUsername,
-        $activeUserDisplay,
-        $activeUserName,
-    ]), 'strlen'));
-    foreach ($lookupQueries as $query) {
-        try {
-            $matched = find_single_user_by_email_or_name($query);
-            $catalogueSnipeUserId = (int)($matched['id'] ?? 0);
-            if ($catalogueSnipeUserId > 0) {
-                break;
+    $catalogueSnipeUserId = (int)($activeUser['snipeit_user_id'] ?? 0);
+    if ($catalogueSnipeUserId <= 0) {
+        $lookupQueries = array_values(array_filter(array_unique([
+            $activeUserEmail,
+            $activeUserUsername,
+            $activeUserDisplay,
+            $activeUserName,
+        ]), 'strlen'));
+        foreach ($lookupQueries as $query) {
+            try {
+                $matched = find_single_user_by_email_or_name($query);
+                $catalogueSnipeUserId = (int)($matched['id'] ?? 0);
+                if ($catalogueSnipeUserId > 0) {
+                    break;
+                }
+            } catch (Throwable $e) {
+                // Try next identifier.
             }
-        } catch (Throwable $e) {
-            // Try next identifier.
         }
     }
 }

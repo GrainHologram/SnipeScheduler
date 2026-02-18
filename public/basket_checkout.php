@@ -47,14 +47,19 @@ if ($end <= $start) {
     basket_error('End time must be after start time.');
 }
 
-// Build user info from Snipe-IT user record
+// Build user info
 $userName  = trim($user['first_name'] . ' ' . $user['last_name']);
 $userEmail = $user['email'];
-$userId    = $user['id']; // Snipe-IT user id
+$userId    = $user['id']; // local users.id
+
+// Resolve the Snipe-IT user ID for checkout rule checks
+$snipeUserId = (int)($user['snipeit_user_id'] ?? 0);
+if ($snipeUserId <= 0) {
+    $snipeUserId = resolve_snipeit_user_id($user['email'] ?? '');
+}
 
 // Checkout rules enforcement
 $clCfg = checkout_limits_config();
-$snipeUserId = (int)$userId;
 
 // Access group gate
 if ($snipeUserId > 0 && !check_user_has_access_group($snipeUserId)) {
@@ -199,7 +204,7 @@ try {
         ':user_name'        => $userName,
         ':user_email'       => $userEmail,
         ':user_id'          => $userId,
-        ':snipeit_user_id'  => $user['id'],
+        ':snipeit_user_id'  => $snipeUserId,
         ':asset_name_cache' => 'Pending checkout',
         ':start_datetime'   => $start,
         ':end_datetime'     => $end,
