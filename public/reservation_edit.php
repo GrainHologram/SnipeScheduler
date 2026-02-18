@@ -325,9 +325,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($totalRequestable > 0 && $existingBooked + $qty > $totalRequestable) {
                 $available = max(0, $totalRequestable - $existingBooked);
-                $availWarnings[] = '"' . $modelName . '": requested ' . $qty
+                $summary = '"' . $modelName . '": requested ' . $qty
                     . ', available ' . $available
                     . ' (' . $reservedQty . ' reserved, ' . $checkedOutQty . ' checked out).';
+
+                // Fetch one-line summaries of conflicting reservations
+                $conflicts = [];
+                if ($reservedQty > 0) {
+                    $crStmt = $pdo->prepare("
+                        SELECT r.id, r.user_name, r.status,
+                               r.start_datetime, r.end_datetime,
+                               COALESCE(SUM(ri.quantity), 0) AS qty
+                          FROM reservations r
+                          JOIN reservation_items ri ON ri.reservation_id = r.id
+                         WHERE ri.model_id = :model_id
+                           AND ri.deleted_at IS NULL
+                           AND r.status IN ('pending','confirmed')
+                           AND r.id <> :res_id
+                           AND r.start_datetime < :end
+                           AND r.end_datetime > :start
+                         GROUP BY r.id
+                         ORDER BY r.start_datetime
+                    ");
+                    $crStmt->execute([
+                        ':model_id' => $mid,
+                        ':res_id'   => $id,
+                        ':start'    => $start,
+                        ':end'      => $end,
+                    ]);
+                    foreach ($crStmt->fetchAll(PDO::FETCH_ASSOC) as $cr) {
+                        $conflicts[] = 'Reservation #' . $cr['id']
+                            . ' (' . ($cr['user_name'] ?: 'unknown') . ')'
+                            . ' — ' . (int)$cr['qty'] . ' unit(s), '
+                            . app_format_datetime($cr['start_datetime'])
+                            . ' to ' . app_format_datetime($cr['end_datetime']);
+                    }
+                }
+                if ($checkedOutQty > 0) {
+                    $ccStmt = $pdo->prepare("
+                        SELECT c.id, c.user_name,
+                               c.start_datetime, c.end_datetime,
+                               COUNT(*) AS qty
+                          FROM checkout_items ci
+                          JOIN checkouts c ON c.id = ci.checkout_id
+                         WHERE ci.model_id = :model_id
+                           AND ci.checked_in_at IS NULL
+                           AND c.status IN ('open','partial')
+                           AND c.start_datetime < :end
+                           AND c.end_datetime > :start
+                         GROUP BY c.id
+                         ORDER BY c.start_datetime
+                    ");
+                    $ccStmt->execute([
+                        ':model_id' => $mid,
+                        ':start'    => $start,
+                        ':end'      => $end,
+                    ]);
+                    foreach ($ccStmt->fetchAll(PDO::FETCH_ASSOC) as $cc) {
+                        $conflicts[] = 'Checkout #' . $cc['id']
+                            . ' (' . ($cc['user_name'] ?: 'unknown') . ')'
+                            . ' — ' . (int)$cc['qty'] . ' unit(s), '
+                            . app_format_datetime($cc['start_datetime'])
+                            . ' to ' . app_format_datetime($cc['end_datetime']);
+                    }
+                }
+
+                $availWarnings[] = [
+                    'summary'   => $summary,
+                    'conflicts' => $conflicts,
+                ];
             }
         }
 
@@ -673,12 +739,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <?php if (!empty($availWarnings)): ?>
                     <div class="alert alert-warning mt-3">
                         <strong>Availability conflict:</strong>
-                        <ul class="mb-2 mt-1">
-                            <?php foreach ($availWarnings as $aw): ?>
-                                <li><?= h($aw) ?></li>
-                            <?php endforeach; ?>
-                        </ul>
-                        <div class="form-check">
+                        <?php foreach ($availWarnings as $aw): ?>
+                            <div class="mt-2">
+                                <strong><?= h($aw['summary']) ?></strong>
+                                <?php if (!empty($aw['conflicts'])): ?>
+                                    <ul class="mb-0 mt-1 small">
+                                        <?php foreach ($aw['conflicts'] as $c): ?>
+                                            <li><?= h($c) ?></li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                        <div class="form-check mt-2">
                             <input class="form-check-input" type="checkbox"
                                    name="override_availability" value="1"
                                    id="overrideAvail">
