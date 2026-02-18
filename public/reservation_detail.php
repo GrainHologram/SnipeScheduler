@@ -144,8 +144,10 @@ $active  = 'staff_reservations.php'; // Treat detail view as part of booking his
         <?php endif; ?>
 
         <?php
-            // Show linked checkouts if reservation is fulfilled
-            $linkedCheckouts = get_checkouts_for_reservation($pdo, $id);
+            // Show linked checkouts and related family checkouts
+            $checkoutFamily = get_checkout_family_for_reservation($pdo, $id);
+            $linkedCheckouts = $checkoutFamily['direct'];
+            $relatedCheckouts = $checkoutFamily['related'];
             if (!empty($linkedCheckouts)):
         ?>
         <h5>Checkouts</h5>
@@ -180,6 +182,54 @@ $active  = 'staff_reservations.php'; // Treat detail view as part of booking his
                                             <td><?= h($ci['model_name'] ?? '') ?></td>
                                             <td><?= h(display_datetime($ci['checked_out_at'] ?? '')) ?></td>
                                             <td><?= $ci['checked_in_at'] ? h(display_datetime($ci['checked_in_at'])) : '<span class="badge bg-warning text-dark">Out</span>' ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php endforeach; ?>
+        <?php endif; ?>
+
+        <?php if (!empty($relatedCheckouts)): ?>
+        <h5>Related checkouts</h5>
+        <p class="text-muted small">Checkouts linked via the same parent/child chain but belonging to other bookings.</p>
+        <?php foreach ($relatedCheckouts as $rco): ?>
+            <div class="card mb-3 border-secondary">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong>Checkout #<?= (int)$rco['id'] ?></strong>
+                        <?= layout_checkout_status_badge($rco['status'] ?? '') ?>
+                    </div>
+                    <div class="small text-muted mb-2">
+                        <?= h(display_datetime($rco['start_datetime'] ?? '')) ?> &rarr; <?= h(display_datetime($rco['end_datetime'] ?? '')) ?>
+                        <?php if (!empty($rco['reservation_id'])): ?>
+                            &middot; <a href="reservation_detail.php?id=<?= (int)$rco['reservation_id'] ?>">Booking #<?= (int)$rco['reservation_id'] ?></a>
+                        <?php endif; ?>
+                    </div>
+                    <?php $rcoItems = get_checkout_items($pdo, (int)$rco['id']); ?>
+                    <?php if (!empty($rcoItems)): ?>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Asset Tag</th>
+                                        <th>Name</th>
+                                        <th>Model</th>
+                                        <th>Checked Out</th>
+                                        <th>Returned</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($rcoItems as $rci): ?>
+                                        <tr class="<?= $rci['checked_in_at'] ? 'table-success' : '' ?>">
+                                            <td><?= h($rci['asset_tag'] ?? '') ?></td>
+                                            <td><?= h($rci['asset_name'] ?? '') ?></td>
+                                            <td><?= h($rci['model_name'] ?? '') ?></td>
+                                            <td><?= h(display_datetime($rci['checked_out_at'] ?? '')) ?></td>
+                                            <td><?= $rci['checked_in_at'] ? h(display_datetime($rci['checked_in_at'])) : '<span class="badge bg-warning text-dark">Out</span>' ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>

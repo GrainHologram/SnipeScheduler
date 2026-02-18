@@ -132,6 +132,75 @@ function get_checkouts_for_reservation(PDO $pdo, int $reservationId): array
 }
 
 /**
+ * Get all checkouts related to a reservation via parent/child chain.
+ *
+ * Walks the checkout family: direct checkouts for this reservation,
+ * then follows parent_checkout_id and child checkouts to find related
+ * checkouts that belong to other reservations.
+ *
+ * @return array ['direct' => [...], 'related' => [...]]
+ */
+function get_checkout_family_for_reservation(PDO $pdo, int $reservationId): array
+{
+    $direct = get_checkouts_for_reservation($pdo, $reservationId);
+
+    if (empty($direct)) {
+        return ['direct' => [], 'related' => []];
+    }
+
+    // Collect all checkout IDs we've seen
+    $seenIds = [];
+    foreach ($direct as $co) {
+        $seenIds[(int)$co['id']] = true;
+    }
+
+    $related = [];
+
+    // For each direct checkout, walk to parent and siblings/children
+    foreach ($direct as $co) {
+        $parentId = !empty($co['parent_checkout_id']) ? (int)$co['parent_checkout_id'] : null;
+
+        // Walk up to root parent
+        $rootId = (int)$co['id'];
+        if ($parentId) {
+            $rootId = $parentId;
+            // Check if root parent itself has a parent (shouldn't normally, but be safe)
+            $pStmt = $pdo->prepare("SELECT id, parent_checkout_id FROM checkouts WHERE id = :id");
+            $pStmt->execute([':id' => $parentId]);
+            $parentRow = $pStmt->fetch(PDO::FETCH_ASSOC);
+            if ($parentRow && !empty($parentRow['parent_checkout_id'])) {
+                $rootId = (int)$parentRow['parent_checkout_id'];
+            }
+        }
+
+        // Fetch root if not already seen
+        if (!isset($seenIds[$rootId])) {
+            $rStmt = $pdo->prepare("SELECT * FROM checkouts WHERE id = :id");
+            $rStmt->execute([':id' => $rootId]);
+            $rootRow = $rStmt->fetch(PDO::FETCH_ASSOC);
+            if ($rootRow) {
+                $related[] = $rootRow;
+                $seenIds[$rootId] = true;
+            }
+        }
+
+        // Fetch all children of the root
+        $cStmt = $pdo->prepare("SELECT * FROM checkouts WHERE parent_checkout_id = :pid ORDER BY created_at");
+        $cStmt->execute([':pid' => $rootId]);
+        $children = $cStmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($children as $child) {
+            $childId = (int)$child['id'];
+            if (!isset($seenIds[$childId])) {
+                $related[] = $child;
+                $seenIds[$childId] = true;
+            }
+        }
+    }
+
+    return ['direct' => $direct, 'related' => $related];
+}
+
+/**
  * Update a checkout's status based on its items' checked_in_at state.
  *
  * @return string  The new status ('open', 'partial', or 'closed')

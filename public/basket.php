@@ -186,11 +186,6 @@ if (!empty($basket) && $snipeUserId > 0) {
 
     $clCfg = checkout_limits_config();
 
-    // Single active checkout
-    if ($clCfg['enabled'] && $clCfg['single_active_checkout'] && check_user_has_active_checkout($snipeUserId)) {
-        $checkoutErrors[] = 'You already have assets checked out. Please return them before making a new reservation. (Single active checkout is enforced.)';
-    }
-
     // Duration limit (requires valid preview dates)
     if ($clCfg['enabled'] && $previewStart && $previewEnd) {
         try {
@@ -225,8 +220,31 @@ if (!empty($basket) && $snipeUserId > 0) {
 
 $hasCheckoutErrors = !empty($checkoutErrors);
 
-// Non-blocking warnings for undeployable assets
+// Non-blocking warnings
 $checkoutWarnings = [];
+
+// Active checkout warning — query by email since session user ID is the local
+// auto-increment, not the Snipe-IT user ID stored in checkouts.snipeit_user_id.
+$bookingEmail = trim($bookingUser['email'] ?? '');
+if (!empty($basket) && $bookingEmail !== '') {
+    $acStmt = $pdo->prepare("
+        SELECT * FROM checkouts
+         WHERE user_email = :email
+           AND parent_checkout_id IS NULL
+           AND status IN ('open','partial')
+         ORDER BY created_at DESC
+         LIMIT 1
+    ");
+    $acStmt->execute([':email' => $bookingEmail]);
+    $activeCheckout = $acStmt->fetch(PDO::FETCH_ASSOC);
+    if ($activeCheckout) {
+        $returnDate = app_format_datetime($activeCheckout['end_datetime']);
+        $checkoutWarnings[] = 'You have an active checkout (return expected ' . $returnDate . '). '
+            . 'New items will be appended to your existing checkout. '
+            . 'If the dates differ, consider adjusting the return date.';
+    }
+}
+
 if (!empty($basket)) {
     foreach ($basket as $wModelId => $wQty) {
         $wModelId = (int)$wModelId;
