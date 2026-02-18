@@ -86,6 +86,7 @@ function datetime_local_value(?string $isoDatetime): string
 
 $errors = [];
 $availWarnings = [];
+$ohWarnings = [];
 $addModelId = 0;
 $addQtyRaw = '';
 $addModelLabel = '';
@@ -271,6 +272,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Opening hours check — staff get a warning, regular users get a hard error
+    $ohWarnings = [];
+    $overrideOpeningHours = !empty($_POST['override_opening_hours']);
+    if (empty($errors)) {
+        require_once SRC_PATH . '/opening_hours.php';
+        $ohCheckResult = oh_validate_reservation_window(
+            new DateTime($start, new DateTimeZone('UTC')),
+            new DateTime($end, new DateTimeZone('UTC'))
+        );
+        if (!empty($ohCheckResult)) {
+            if ($isStaff) {
+                $ohWarnings = $ohCheckResult;
+            } else {
+                foreach ($ohCheckResult as $ohe) {
+                    $errors[] = $ohe;
+                }
+            }
+        }
+    }
+
     // Availability check — warn but allow override
     $availWarnings = [];
     $overrideAvailability = !empty($_POST['override_availability']);
@@ -414,7 +435,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Reservation must include at least one item.';
     }
 
-    if (empty($errors) && (empty($availWarnings) || $overrideAvailability)) {
+    if (empty($errors) && (empty($availWarnings) || $overrideAvailability) && (empty($ohWarnings) || $overrideOpeningHours)) {
         $pdo->beginTransaction();
 
         try {
@@ -735,6 +756,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div class="form-text">Add one or more models before saving.</div>
                     </div>
                 </div>
+
+                <?php if (!empty($ohWarnings)): ?>
+                    <div class="alert alert-warning mt-3">
+                        <strong>Outside opening hours:</strong>
+                        <ul class="mb-0 mt-1">
+                            <?php foreach ($ohWarnings as $ohw): ?>
+                                <li><?= h($ohw) ?></li>
+                            <?php endforeach; ?>
+                        </ul>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox"
+                                   name="override_opening_hours" value="1"
+                                   id="overrideOH">
+                            <label class="form-check-label" for="overrideOH">
+                                Save anyway (override opening hours check)
+                            </label>
+                        </div>
+                    </div>
+                <?php endif; ?>
 
                 <?php if (!empty($availWarnings)): ?>
                     <div class="alert alert-warning mt-3">
