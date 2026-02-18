@@ -85,6 +85,7 @@ function datetime_local_value(?string $isoDatetime): string
 }
 
 $errors = [];
+$availWarnings = [];
 $addModelId = 0;
 $addQtyRaw = '';
 $addModelLabel = '';
@@ -270,6 +271,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Availability check — warn but allow override
+    $availWarnings = [];
+    $overrideAvailability = !empty($_POST['override_availability']);
     if (empty($errors)) {
         foreach ($updatedItems as $mid => $qty) {
             if ($qty <= 0) {
@@ -277,6 +281,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $modelName = $modelNameMap[$mid] ?? ('Model #' . $mid);
 
+            // Pending/confirmed reservations (excluding this one)
             $sql = '
                 SELECT COALESCE(SUM(ri.quantity), 0) AS booked_qty
                 FROM reservation_items ri
@@ -295,13 +300,106 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':end'      => $end,
             ]);
             $row = $stmt->fetch();
-            $existingBooked = $row ? (int)$row['booked_qty'] : 0;
+            $reservedQty = $row ? (int)$row['booked_qty'] : 0;
 
+            // Active checkout items overlapping the window
+            $coStmt = $pdo->prepare("
+                SELECT COUNT(*) AS co_qty
+                FROM checkout_items ci
+                JOIN checkouts c ON c.id = ci.checkout_id
+                WHERE ci.model_id = :model_id
+                  AND ci.checked_in_at IS NULL
+                  AND c.status IN ('open','partial')
+                  AND c.start_datetime < :end
+                  AND c.end_datetime > :start
+            ");
+            $coStmt->execute([
+                ':model_id' => $mid,
+                ':start'    => $start,
+                ':end'      => $end,
+            ]);
+            $checkedOutQty = (int)(($coStmt->fetch())['co_qty'] ?? 0);
+
+            $existingBooked = $reservedQty + $checkedOutQty;
             $totalRequestable = count_requestable_assets_by_model($mid);
 
             if ($totalRequestable > 0 && $existingBooked + $qty > $totalRequestable) {
-                $errors[] = 'Not enough units available for "' . $modelName . '" in that time period.';
+                $available = max(0, $totalRequestable - $existingBooked);
+                $summary = '"' . $modelName . '": requested ' . $qty
+                    . ', available ' . $available
+                    . ' (' . $reservedQty . ' reserved, ' . $checkedOutQty . ' checked out).';
+
+                // Fetch one-line summaries of conflicting reservations
+                $conflicts = [];
+                if ($reservedQty > 0) {
+                    $crStmt = $pdo->prepare("
+                        SELECT r.id, r.user_name, r.status,
+                               r.start_datetime, r.end_datetime,
+                               COALESCE(SUM(ri.quantity), 0) AS qty
+                          FROM reservations r
+                          JOIN reservation_items ri ON ri.reservation_id = r.id
+                         WHERE ri.model_id = :model_id
+                           AND ri.deleted_at IS NULL
+                           AND r.status IN ('pending','confirmed')
+                           AND r.id <> :res_id
+                           AND r.start_datetime < :end
+                           AND r.end_datetime > :start
+                         GROUP BY r.id
+                         ORDER BY r.start_datetime
+                    ");
+                    $crStmt->execute([
+                        ':model_id' => $mid,
+                        ':res_id'   => $id,
+                        ':start'    => $start,
+                        ':end'      => $end,
+                    ]);
+                    foreach ($crStmt->fetchAll(PDO::FETCH_ASSOC) as $cr) {
+                        $conflicts[] = 'Reservation #' . $cr['id']
+                            . ' (' . ($cr['user_name'] ?: 'unknown') . ')'
+                            . ' — ' . (int)$cr['qty'] . ' unit(s), '
+                            . app_format_datetime($cr['start_datetime'])
+                            . ' to ' . app_format_datetime($cr['end_datetime']);
+                    }
+                }
+                if ($checkedOutQty > 0) {
+                    $ccStmt = $pdo->prepare("
+                        SELECT c.id, c.user_name,
+                               c.start_datetime, c.end_datetime,
+                               COUNT(*) AS qty
+                          FROM checkout_items ci
+                          JOIN checkouts c ON c.id = ci.checkout_id
+                         WHERE ci.model_id = :model_id
+                           AND ci.checked_in_at IS NULL
+                           AND c.status IN ('open','partial')
+                           AND c.start_datetime < :end
+                           AND c.end_datetime > :start
+                         GROUP BY c.id
+                         ORDER BY c.start_datetime
+                    ");
+                    $ccStmt->execute([
+                        ':model_id' => $mid,
+                        ':start'    => $start,
+                        ':end'      => $end,
+                    ]);
+                    foreach ($ccStmt->fetchAll(PDO::FETCH_ASSOC) as $cc) {
+                        $conflicts[] = 'Checkout #' . $cc['id']
+                            . ' (' . ($cc['user_name'] ?: 'unknown') . ')'
+                            . ' — ' . (int)$cc['qty'] . ' unit(s), '
+                            . app_format_datetime($cc['start_datetime'])
+                            . ' to ' . app_format_datetime($cc['end_datetime']);
+                    }
+                }
+
+                $availWarnings[] = [
+                    'summary'   => $summary,
+                    'conflicts' => $conflicts,
+                ];
             }
+        }
+
+        // Block save if there are availability warnings and no override
+        if (!empty($availWarnings) && !$overrideAvailability) {
+            // Don't add to $errors — handled separately so override is possible
         }
     }
 
@@ -316,7 +414,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Reservation must include at least one item.';
     }
 
-    if (empty($errors)) {
+    if (empty($errors) && (empty($availWarnings) || $overrideAvailability)) {
         $pdo->beginTransaction();
 
         try {
@@ -637,6 +735,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div class="form-text">Add one or more models before saving.</div>
                     </div>
                 </div>
+
+                <?php if (!empty($availWarnings)): ?>
+                    <div class="alert alert-warning mt-3">
+                        <strong>Availability conflict:</strong>
+                        <?php foreach ($availWarnings as $aw): ?>
+                            <div class="mt-2">
+                                <strong><?= h($aw['summary']) ?></strong>
+                                <?php if (!empty($aw['conflicts'])): ?>
+                                    <ul class="mb-0 mt-1 small">
+                                        <?php foreach ($aw['conflicts'] as $c): ?>
+                                            <li><?= h($c) ?></li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox"
+                                   name="override_availability" value="1"
+                                   id="overrideAvail">
+                            <label class="form-check-label" for="overrideAvail">
+                                Save anyway (override availability check)
+                            </label>
+                        </div>
+                    </div>
+                <?php endif; ?>
 
                 <div class="d-flex justify-content-end gap-2 mt-3">
                     <a href="<?= h($actionUrl) ?>" class="btn btn-outline-secondary">Cancel</a>
