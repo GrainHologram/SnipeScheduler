@@ -218,6 +218,18 @@ if (!empty($basket) && $snipeUserId > 0) {
     }
 }
 
+// Opening hours enforcement (end users only)
+if (!empty($basket) && $previewStart && $previewEnd) {
+    require_once SRC_PATH . '/opening_hours.php';
+    $ohErrors = oh_validate_reservation_window(
+        new DateTime($previewStart, new DateTimeZone('UTC')),
+        new DateTime($previewEnd, new DateTimeZone('UTC'))
+    );
+    foreach ($ohErrors as $ohe) {
+        $checkoutErrors[] = $ohe;
+    }
+}
+
 $hasCheckoutErrors = !empty($checkoutErrors);
 
 // Non-blocking warnings

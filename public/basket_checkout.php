@@ -88,6 +88,13 @@ if ($snipeUserId > 0) {
     }
 }
 
+// Opening hours enforcement (end users only)
+require_once SRC_PATH . '/opening_hours.php';
+$ohErrors = oh_validate_reservation_window($startDt, $endDt);
+if (!empty($ohErrors)) {
+    basket_error($ohErrors[0]);
+}
+
 $pdo->beginTransaction();
 
 try {
