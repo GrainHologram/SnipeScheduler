@@ -72,6 +72,10 @@ if ($clCfg['enabled'] && $snipeUserId > 0) {
     if ($durationErr !== null) {
         basket_error($durationErr);
     }
+    $advanceErr = validate_advance_reservation($snipeUserId, $startDt);
+    if ($advanceErr !== null) {
+        basket_error($advanceErr);
+    }
 }
 
 // Certification enforcement per model in basket

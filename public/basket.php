@@ -198,6 +198,10 @@ if (!empty($basket) && $snipeUserId > 0) {
             if ($durationErr !== null) {
                 $checkoutErrors[] = $durationErr;
             }
+            $advanceErr = validate_advance_reservation($snipeUserId, $valStartDt);
+            if ($advanceErr !== null) {
+                $checkoutErrors[] = $advanceErr;
+            }
         } catch (Throwable $e) {
             // Skip duration check if dates can't be parsed
         }

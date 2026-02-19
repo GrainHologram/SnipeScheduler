@@ -26,6 +26,7 @@ function checkout_limits_config(): array
             'max_checkout_hours' => (int)($limits['default']['max_checkout_hours'] ?? 0),
             'max_renewal_hours'  => (int)($limits['default']['max_renewal_hours'] ?? 0),
             'max_total_hours'    => (int)($limits['default']['max_total_hours'] ?? 0),
+            'max_advance_days'   => (int)($limits['default']['max_advance_days'] ?? 0),
         ],
         'group_overrides'        => $limits['group_overrides'] ?? [],
         'single_active_checkout' => !empty($limits['single_active_checkout']),
@@ -45,7 +46,7 @@ function get_effective_checkout_limits(int $snipeitUserId): array
     $defaults = $cfg['default'];
 
     if (!$cfg['enabled']) {
-        return ['max_checkout_hours' => 0, 'max_renewal_hours' => 0, 'max_total_hours' => 0];
+        return ['max_checkout_hours' => 0, 'max_renewal_hours' => 0, 'max_total_hours' => 0, 'max_advance_days' => 0];
     }
 
     $overrides = $cfg['group_overrides'];
@@ -67,7 +68,7 @@ function get_effective_checkout_limits(int $snipeitUserId): array
         }
         $hasOverride = true;
         $ov = $overrides[$gid];
-        foreach (['max_checkout_hours', 'max_renewal_hours', 'max_total_hours'] as $key) {
+        foreach (['max_checkout_hours', 'max_renewal_hours', 'max_total_hours', 'max_advance_days'] as $key) {
             $ovVal = (int)($ov[$key] ?? 0);
             // 0 = unlimited → always wins as "most permissive"
             if ($ovVal === 0) {
@@ -113,6 +114,39 @@ function validate_checkout_duration(int $snipeitUserId, DateTime $start, DateTim
         $days = round($maxHours / 24, 1);
         return "Checkout duration exceeds the maximum allowed ({$maxHours} hours / {$days} days). "
              . "Please select a shorter period.";
+    }
+
+    return null;
+}
+
+/**
+ * Validate that a reservation start date is within the max advance days limit.
+ *
+ * @param int      $snipeitUserId
+ * @param DateTime $start
+ * @return string|null  null if valid, error string if exceeded
+ */
+function validate_advance_reservation(int $snipeitUserId, DateTime $start): ?string
+{
+    $cfg = checkout_limits_config();
+    if (!$cfg['enabled']) {
+        return null;
+    }
+
+    $limits = get_effective_checkout_limits($snipeitUserId);
+    $maxDays = $limits['max_advance_days'];
+
+    if ($maxDays <= 0) {
+        return null; // unlimited
+    }
+
+    $now = new DateTime('now', new DateTimeZone('UTC'));
+    $diffSeconds = $start->getTimestamp() - $now->getTimestamp();
+    $diffDays = $diffSeconds / 86400;
+
+    if ($diffDays > $maxDays) {
+        return "Reservation start date is too far in the future. You can book up to {$maxDays} day(s) in advance. "
+             . "Please select a closer start date.";
     }
 
     return null;
