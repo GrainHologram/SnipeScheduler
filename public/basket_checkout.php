@@ -239,6 +239,7 @@ try {
 
     $pdo->commit();
     $_SESSION['basket'] = []; // clear basket
+    unset($_SESSION['basket_kit_groups'], $_SESSION['basket_kit_names']);
 
     activity_log_event('reservation_submitted', 'Reservation submitted', [
         'subject_type' => 'reservation',
