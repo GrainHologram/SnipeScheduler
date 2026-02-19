@@ -79,6 +79,18 @@ if (($_GET['ajax'] ?? '') === 'user_search') {
     exit;
 }
 
+// GET ?res=ID — pre-select a reservation (e.g. from dashboard "Process" link)
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && !empty($_GET['res'])) {
+    $preselect = (int)$_GET['res'];
+    if ($preselect > 0) {
+        $_SESSION['selected_reservation_id'] = $preselect;
+        $_SESSION['selected_reservation_fresh'] = 1;
+        $_SESSION['reservation_selected_assets'] = [];
+    }
+    header('Location: ' . $selfUrl);
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $allowedKeys = array_keys($baseQuery);
     $extraKeys = array_diff(array_keys($_GET), $allowedKeys);

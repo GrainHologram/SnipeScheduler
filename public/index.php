@@ -249,7 +249,7 @@ if ($isStaff) {
                                             <td><?= h($summary ?: '—') ?></td>
                                             <td><?= layout_status_badge($pickup['status']) ?></td>
                                             <td>
-                                                <a href="reservations.php?tab=today" class="btn btn-sm btn-outline-primary">
+                                                <a href="reservations.php?tab=today&res=<?= (int)$pickup['id'] ?>" class="btn btn-sm btn-outline-primary">
                                                     Process
                                                 </a>
                                             </td>
