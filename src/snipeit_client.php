@@ -1320,30 +1320,29 @@ function get_fieldset_fields(int $fieldsetId): array
 }
 
 /**
- * Get certification requirements for a model by scanning its requestable
- * assets' custom fields for "Cert - {group}" fields set to "Yes".
+ * Get authorization requirements for a model by scanning its requestable
+ * assets' custom field values for "Certification Needed" and "Access Level".
  *
- * Only certifications that are actually enabled (value "Yes") on at least
- * one requestable asset are returned.
- *
- * Returns an array of certification names, e.g. ['Photography', 'Drone Pilot'].
+ * Returns ['certs' => [...], 'access_levels' => [...]].
+ * Values are full group names (e.g. 'Cert - Grip Truck', 'Access - Advanced').
  * Static-cached per request.
  *
  * @param int $modelId
- * @return array
+ * @return array{certs: string[], access_levels: string[]}
  */
-function get_model_certification_requirements(int $modelId): array
+function get_model_auth_requirements(int $modelId): array
 {
     static $cache = [];
     if (isset($cache[$modelId])) {
         return $cache[$modelId];
     }
 
-    $cache[$modelId] = [];
+    $cache[$modelId] = ['certs' => [], 'access_levels' => []];
 
     try {
         $assets = list_assets_by_model($modelId, 500);
-        $found = [];
+        $certs = [];
+        $accessLevels = [];
 
         foreach ($assets as $asset) {
             if (empty($asset['requestable'])) {
@@ -1357,30 +1356,43 @@ function get_model_certification_requirements(int $modelId): array
                 if (!is_array($cf)) {
                     continue;
                 }
-                // Try both the inner 'field' property and the array key
-                // (Snipe-IT may use display name as key with DB column as 'field', or vice versa)
-                $candidates = array_filter([$cf['field'] ?? '', (string)$fieldKey]);
-                $value = strtolower(trim((string)($cf['value'] ?? '')));
-                // Accept any truthy value: "Yes", "1", "true"
-                $isTruthy = in_array($value, ['yes', '1', 'true'], true);
-                if (!$isTruthy) {
+                $fieldName = (string)$fieldKey;
+                $value = trim((string)($cf['value'] ?? ''));
+                if ($value === '') {
                     continue;
                 }
-                foreach ($candidates as $fieldName) {
-                    if (preg_match('/^Cert\s*-\s*(.+)$/i', $fieldName, $m)) {
-                        $found[trim($m[1])] = true;
-                        break;
-                    }
+
+                if (stripos($fieldName, 'Access Level') !== false) {
+                    $accessLevels[$value] = true;
+                } elseif (stripos($fieldName, 'Certification Needed') !== false) {
+                    $certs[$value] = true;
                 }
             }
         }
 
-        $cache[$modelId] = array_keys($found);
+        $cache[$modelId] = [
+            'certs' => array_keys($certs),
+            'access_levels' => array_keys($accessLevels),
+        ];
     } catch (Throwable $e) {
-        // Silently fail — no cert requirements if API fails
+        // Silently fail — no auth requirements if API fails
     }
 
     return $cache[$modelId];
+}
+
+/**
+ * Backward-compatible alias for get_model_auth_requirements().
+ * Returns only the cert names (without 'Cert - ' prefix) for legacy callers.
+ *
+ * @param int $modelId
+ * @return array
+ * @deprecated Use get_model_auth_requirements() instead
+ */
+function get_model_certification_requirements(int $modelId): array
+{
+    $reqs = get_model_auth_requirements($modelId);
+    return $reqs['certs'];
 }
 
 /**
@@ -1541,12 +1553,14 @@ function prefetch_catalogue_model_stats(array $modelIds): array
                 'status_names' => [],
             ],
             'certs' => [],
+            'access_levels' => [],
         ];
     }
 
     // Single pass through all assets
     $statusSets = []; // model_id => [name => true]
-    $certSets   = []; // model_id => [cert => true]
+    $certSets   = []; // model_id => [cert_value => true]
+    $accessSets = []; // model_id => [access_value => true]
 
     foreach ($all as $asset) {
         $mid = (int)($asset['model']['id'] ?? 0);
@@ -1566,24 +1580,23 @@ function prefetch_catalogue_model_stats(array $modelIds): array
             $statusSets[$mid][$statusName] = true;
         }
 
-        // Cert requirements from custom fields
+        // Authorization requirements from custom field values
         $customFields = $asset['custom_fields'] ?? [];
-        if (!is_array($customFields)) {
-            continue;
-        }
-        foreach ($customFields as $fieldKey => $cf) {
-            if (!is_array($cf)) {
-                continue;
-            }
-            $candidates = array_filter([$cf['field'] ?? '', (string)$fieldKey]);
-            $value = strtolower(trim((string)($cf['value'] ?? '')));
-            if (!in_array($value, ['yes', '1', 'true'], true)) {
-                continue;
-            }
-            foreach ($candidates as $fieldName) {
-                if (preg_match('/^Cert\s*-\s*(.+)$/i', $fieldName, $m)) {
-                    $certSets[$mid][trim($m[1])] = true;
-                    break;
+        if (is_array($customFields)) {
+            foreach ($customFields as $fieldKey => $cf) {
+                if (!is_array($cf)) {
+                    continue;
+                }
+                $fieldName = (string)$fieldKey;
+                $value = trim((string)($cf['value'] ?? ''));
+                if ($value === '') {
+                    continue;
+                }
+
+                if (stripos($fieldName, 'Access Level') !== false) {
+                    $accessSets[$mid][$value] = true;
+                } elseif (stripos($fieldName, 'Certification Needed') !== false) {
+                    $certSets[$mid][$value] = true;
                 }
             }
         }
@@ -1596,6 +1609,9 @@ function prefetch_catalogue_model_stats(array $modelIds): array
         }
         if (!empty($certSets[$id])) {
             $results[$id]['certs'] = array_keys($certSets[$id]);
+        }
+        if (!empty($accessSets[$id])) {
+            $results[$id]['access_levels'] = array_keys($accessSets[$id]);
         }
     }
 

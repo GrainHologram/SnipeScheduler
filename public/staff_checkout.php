@@ -835,14 +835,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                         }
 
-                        // Certification enforcement per model
+                        // Authorization enforcement per model
                         foreach ($selectedItems as $item) {
                             $mid = (int)$item['model_id'];
-                            $certReqs = get_model_certification_requirements($mid);
-                            if (!empty($certReqs)) {
-                                $missing = check_user_certifications($userId, $certReqs);
-                                if (!empty($missing)) {
-                                    throw new Exception("User lacks required certification(s) for model {$item['name']}: " . implode(', ', $missing));
+                            $authReqs = get_model_auth_requirements($mid);
+                            if (!empty($authReqs['certs']) || !empty($authReqs['access_levels'])) {
+                                $authMissing = check_model_authorization($userId, $authReqs);
+                                if (!empty($authMissing)) {
+                                    if (!empty($authMissing['certs'])) {
+                                        throw new Exception("User lacks required certification(s) for model {$item['name']}: " . implode(', ', $authMissing['certs']));
+                                    } else {
+                                        throw new Exception("User lacks required access level for model {$item['name']}: " . implode(', ', $authMissing['access_levels']));
+                                    }
                                 }
                             }
                         }

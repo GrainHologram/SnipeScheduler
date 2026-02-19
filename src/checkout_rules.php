@@ -289,15 +289,21 @@ function get_max_renewal_end(int $snipeitUserId, string $currentExpected, string
 }
 
 /**
- * Check if a user has the required certifications for a set of requirements.
+ * Check model authorization: certifications and access level requirements.
+ *
+ * Priority: if certs exist, check certs only. If no certs but access levels
+ * exist, check access levels (with Faculty override).
  *
  * @param int   $snipeitUserId
- * @param array $certRequirements  e.g. ['Photography', 'Drone Pilot']
- * @return array  Array of missing cert names. Empty = all satisfied.
+ * @param array $authReqs  ['certs' => [...], 'access_levels' => [...]]
+ * @return array  ['certs' => [...missing...], 'access_levels' => [...missing...]] or empty
  */
-function check_user_certifications(int $snipeitUserId, array $certRequirements): array
+function check_model_authorization(int $snipeitUserId, array $authReqs): array
 {
-    if (empty($certRequirements) || $snipeitUserId <= 0) {
+    $certs = $authReqs['certs'] ?? [];
+    $accessLevels = $authReqs['access_levels'] ?? [];
+
+    if ((empty($certs) && empty($accessLevels)) || $snipeitUserId <= 0) {
         return [];
     }
 
@@ -306,15 +312,50 @@ function check_user_certifications(int $snipeitUserId, array $certRequirements):
         return strtolower(trim($g['name']));
     }, $groups);
 
-    $missing = [];
-    foreach ($certRequirements as $cert) {
-        $certLower = strtolower(trim($cert));
-        if (!in_array($certLower, $groupNames, true)) {
-            $missing[] = $cert;
+    // Cert takes priority: if cert requirements exist, check only certs
+    if (!empty($certs)) {
+        $missing = [];
+        foreach ($certs as $cert) {
+            if (!in_array(strtolower(trim($cert)), $groupNames, true)) {
+                $missing[] = $cert;
+            }
+        }
+        return !empty($missing) ? ['certs' => $missing] : [];
+    }
+
+    // No certs — fall back to access level check
+    // User passes if they belong to ANY required access level group OR 'Access - Faculty'
+    $hasFaculty = in_array('access - faculty', $groupNames, true);
+    if ($hasFaculty) {
+        return [];
+    }
+
+    $hasAny = false;
+    foreach ($accessLevels as $level) {
+        if (in_array(strtolower(trim($level)), $groupNames, true)) {
+            $hasAny = true;
+            break;
         }
     }
 
-    return $missing;
+    return $hasAny ? [] : ['access_levels' => $accessLevels];
+}
+
+/**
+ * Backward-compatible wrapper around check_model_authorization().
+ *
+ * @param int   $snipeitUserId
+ * @param array $certRequirements  e.g. ['Cert - Grip Truck']
+ * @return array  Array of missing cert names. Empty = all satisfied.
+ * @deprecated Use check_model_authorization() instead
+ */
+function check_user_certifications(int $snipeitUserId, array $certRequirements): array
+{
+    $result = check_model_authorization($snipeitUserId, [
+        'certs' => $certRequirements,
+        'access_levels' => [],
+    ]);
+    return $result['certs'] ?? [];
 }
 
 /**

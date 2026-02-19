@@ -1456,18 +1456,20 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         $notes = $notes['text'] ?? '';
                     }
 
-                    // Certification requirements
-                    $certRequirements = [];
-                    $missingCerts = [];
+                    // Authorization requirements (certs + access levels)
+                    $authReqs = [
+                        'certs' => $bulkStats ? ($bulkStats['certs'] ?? []) : [],
+                        'access_levels' => $bulkStats ? ($bulkStats['access_levels'] ?? []) : [],
+                    ];
+                    $authMissing = [];
                     try {
-                        $certRequirements = $bulkStats ? $bulkStats['certs'] : [];
-                        if (!empty($certRequirements) && $catalogueSnipeUserId > 0) {
-                            $missingCerts = check_user_certifications($catalogueSnipeUserId, $certRequirements);
+                        if ((!empty($authReqs['certs']) || !empty($authReqs['access_levels'])) && $catalogueSnipeUserId > 0) {
+                            $authMissing = check_model_authorization($catalogueSnipeUserId, $authReqs);
                         }
                     } catch (Throwable $e) {
                         // Silently fail — don't block catalogue
                     }
-                    $certBlocked = !empty($missingCerts);
+                    $authBlocked = !empty($authMissing['certs']) || !empty($authMissing['access_levels']);
 
                     $proxiedImage = '';
                     if ($imagePath !== '') {
@@ -1520,10 +1522,17 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                             <span class="badge bg-danger" title="<?= h($uStatuses) ?>"><?= $uCount ?> unit<?= $uCount !== 1 ? 's' : '' ?> unavailable (<?= h($uStatuses) ?>)</span>
                                         </div>
                                     <?php endif; ?>
-                                    <?php if (!empty($certRequirements)): ?>
-                                        <div class="mt-2">
-                                            <?php foreach ($certRequirements as $certName): ?>
-                                                <span class="badge bg-warning text-dark">Certification: <?= h($certName) ?></span>
+                                    <?php if (!empty($authReqs['certs'])): ?>
+                                        <div class="mt-1">
+                                            <?php foreach ($authReqs['certs'] as $certName): ?>
+                                                <span class="badge bg-warning text-dark"><?= h($certName) ?></span>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php endif; ?>
+                                    <?php if (!empty($authReqs['access_levels'])): ?>
+                                        <div class="mt-1">
+                                            <?php foreach ($authReqs['access_levels'] as $level): ?>
+                                                <span class="badge bg-info text-dark"><?= h($level) ?></span>
                                             <?php endforeach; ?>
                                         </div>
                                     <?php endif; ?>
@@ -1599,9 +1608,13 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                                 disabled>
                                             Add to basket
                                         </button>
-                                    <?php elseif ($certBlocked): ?>
+                                    <?php elseif ($authBlocked): ?>
                                         <div class="alert alert-warning small mb-0">
-                                            Requires certification: <?= h(implode(', ', $missingCerts)) ?>
+                                            <?php if (!empty($authMissing['certs'])): ?>
+                                                Requires certification: <?= h(implode(', ', $authMissing['certs'])) ?>
+                                            <?php else: ?>
+                                                Requires access level: <?= h(implode(', ', $authMissing['access_levels'] ?? [])) ?>
+                                            <?php endif; ?>
                                         </div>
                                         <button type="button"
                                                 class="btn btn-sm btn-secondary w-100 mt-2"
@@ -1753,6 +1766,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     $modelLines = [];
                     $modelDetails = []; // per-model data for partial kit UI
                     $kitCerts = [];
+                    $kitAccessLevels = [];
                     $kitAvailability = PHP_INT_MAX; // min across all models
                     $bottleneckModel = '';
                     $hasAvailability = true;
@@ -1768,10 +1782,15 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         $stats = $kitModelStats[$mid] ?? null;
                         $requestableCount = $stats ? $stats['requestable_count'] : 0;
 
-                        // Cert requirements (union across all models)
+                        // Authorization requirements (union across all models)
                         if ($stats && !empty($stats['certs'])) {
                             foreach ($stats['certs'] as $cert) {
                                 $kitCerts[$cert] = true;
+                            }
+                        }
+                        if ($stats && !empty($stats['access_levels'])) {
+                            foreach ($stats['access_levels'] as $level) {
+                                $kitAccessLevels[$level] = true;
                             }
                         }
 
@@ -1858,17 +1877,20 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         $kitAvailability = 0;
                     }
 
-                    // Check cert requirements for current user
-                    $kitCertNames = array_keys($kitCerts);
-                    $kitMissingCerts = [];
-                    if (!empty($kitCertNames) && $catalogueSnipeUserId > 0) {
+                    // Check authorization requirements for current user
+                    $kitAuthReqs = [
+                        'certs' => array_keys($kitCerts),
+                        'access_levels' => array_keys($kitAccessLevels),
+                    ];
+                    $kitAuthMissing = [];
+                    if ((!empty($kitAuthReqs['certs']) || !empty($kitAuthReqs['access_levels'])) && $catalogueSnipeUserId > 0) {
                         try {
-                            $kitMissingCerts = check_user_certifications($catalogueSnipeUserId, $kitCertNames);
+                            $kitAuthMissing = check_model_authorization($catalogueSnipeUserId, $kitAuthReqs);
                         } catch (Throwable $e) {
                             // Non-fatal
                         }
                     }
-                    $kitCertBlocked = !empty($kitMissingCerts);
+                    $kitAuthBlocked = !empty($kitAuthMissing['certs']) || !empty($kitAuthMissing['access_levels']);
 
                     $kitCards[] = [
                         'id'              => $kitId,
@@ -1878,9 +1900,10 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         'availability'    => $kitAvailability,
                         'any_available'   => $anyModelAvailable,
                         'bottleneck'      => $bottleneckModel,
-                        'certs'           => $kitCertNames,
-                        'cert_blocked'    => $kitCertBlocked,
-                        'missing_certs'   => $kitMissingCerts,
+                        'certs'           => $kitAuthReqs['certs'],
+                        'access_levels'   => $kitAuthReqs['access_levels'],
+                        'auth_blocked'    => $kitAuthBlocked,
+                        'auth_missing'    => $kitAuthMissing,
                     ];
                 }
             }
@@ -1964,7 +1987,14 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                 <?php if (!empty($kitCard['certs'])): ?>
                                     <div class="mb-2">
                                         <?php foreach ($kitCard['certs'] as $certName): ?>
-                                            <span class="badge bg-warning text-dark">Certification: <?= h($certName) ?></span>
+                                            <span class="badge bg-warning text-dark"><?= h($certName) ?></span>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php endif; ?>
+                                <?php if (!empty($kitCard['access_levels'])): ?>
+                                    <div class="mb-2">
+                                        <?php foreach ($kitCard['access_levels'] as $level): ?>
+                                            <span class="badge bg-info text-dark"><?= h($level) ?></span>
                                         <?php endforeach; ?>
                                     </div>
                                 <?php endif; ?>
@@ -1983,9 +2013,13 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                             You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.
                                         </div>
                                         <button type="button" class="btn btn-sm btn-secondary w-100 mt-2" disabled>Add kit to basket</button>
-                                    <?php elseif ($kitCard['cert_blocked']): ?>
+                                    <?php elseif ($kitCard['auth_blocked']): ?>
                                         <div class="alert alert-warning small mb-0">
-                                            Requires certification: <?= h(implode(', ', $kitCard['missing_certs'])) ?>
+                                            <?php if (!empty($kitCard['auth_missing']['certs'])): ?>
+                                                Requires certification: <?= h(implode(', ', $kitCard['auth_missing']['certs'])) ?>
+                                            <?php else: ?>
+                                                Requires access level: <?= h(implode(', ', $kitCard['auth_missing']['access_levels'] ?? [])) ?>
+                                            <?php endif; ?>
                                         </div>
                                         <button type="button" class="btn btn-sm btn-secondary w-100 mt-2" disabled>Add kit to basket</button>
                                     <?php elseif ($kitCard['availability'] > 0): ?>
