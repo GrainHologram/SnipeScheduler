@@ -79,6 +79,35 @@ if (($_GET['ajax'] ?? '') === 'user_search') {
     exit;
 }
 
+// ---------------------------------------------------------------------
+// AJAX: asset search for scan autocomplete
+// ---------------------------------------------------------------------
+if (($_GET['ajax'] ?? '') === 'asset_search') {
+    header('Content-Type: application/json');
+    $q = trim($_GET['q'] ?? '');
+    if ($q === '' || strlen($q) < 2) {
+        echo json_encode(['results' => []]);
+        exit;
+    }
+
+    try {
+        $rows = search_assets($q, 20, true);
+        $results = [];
+        foreach ($rows as $row) {
+            $results[] = [
+                'asset_tag' => $row['asset_tag'] ?? '',
+                'name'      => $row['name'] ?? '',
+                'model'     => $row['model']['name'] ?? '',
+            ];
+        }
+        echo json_encode(['results' => $results]);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Asset search failed.']);
+    }
+    exit;
+}
+
 // GET ?res=ID — pre-select a reservation (e.g. from dashboard "Process" link)
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && !empty($_GET['res'])) {
     $preselect = (int)$_GET['res'];
@@ -100,6 +129,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         } else {
             unset($_SESSION['selected_reservation_id']);
             unset($_SESSION['reservation_selected_assets']);
+            unset($_SESSION['scan_injected_assets']);
+            unset($_SESSION['scan_auth_overrides']);
         }
     }
 }
@@ -246,6 +277,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'select_
     // Reset checkout basket when changing reservation
     $checkoutAssets = [];
     $_SESSION['reservation_selected_assets'] = [];
+    unset($_SESSION['scan_injected_assets']);
+    unset($_SESSION['scan_auth_overrides']);
     header('Location: ' . $selfUrl);
     exit;
 }
@@ -360,6 +393,30 @@ if ($selectedReservationId) {
                     }
                 } catch (Throwable $e) {
                     $modelAssets[$mid] = [];
+                }
+            }
+        }
+
+        // Merge scan-injected assets into model dropdown options
+        $scanInjected = $_SESSION['scan_injected_assets'][$selectedReservationId] ?? [];
+        if (!empty($scanInjected)) {
+            foreach ($scanInjected as $injAssetId => $injAsset) {
+                $injModelId = (int)($injAsset['model']['id'] ?? 0);
+                if ($injModelId <= 0) {
+                    continue;
+                }
+                if (!isset($modelAssets[$injModelId])) {
+                    $modelAssets[$injModelId] = [];
+                }
+                $found = false;
+                foreach ($modelAssets[$injModelId] as $existing) {
+                    if ((int)($existing['id'] ?? 0) === (int)$injAssetId) {
+                        $found = true;
+                        break;
+                    }
+                }
+                if (!$found) {
+                    $modelAssets[$injModelId][] = $injAsset;
                 }
             }
         }
@@ -667,6 +724,162 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $checkoutErrors[] = 'Rebook failed: ' . $e->getMessage();
             }
         }
+    } elseif ($mode === 'scan_asset') {
+        $tag = trim($_POST['scan_tag'] ?? '');
+        $resId = $selectedReservationId;
+
+        if (!$selectedReservation) {
+            $_SESSION['scan_flash'] = ['type' => 'error', 'msg' => 'Please select a reservation first.'];
+        } elseif ($tag === '') {
+            $_SESSION['scan_flash'] = ['type' => 'error', 'msg' => 'Please scan or enter an asset tag.'];
+        } else {
+            try {
+                $asset = find_asset_by_tag($tag);
+                $assetId   = (int)($asset['id'] ?? 0);
+                $assetTag  = $asset['asset_tag'] ?? '';
+                $assetName = $asset['name'] ?? '';
+                $modelId   = (int)($asset['model']['id'] ?? 0);
+                $modelName = $asset['model']['name'] ?? '';
+                $isRequestable = !empty($asset['requestable']);
+
+                if ($assetId <= 0 || $assetTag === '') {
+                    throw new Exception('Asset record missing id/asset_tag.');
+                }
+                if ($modelId <= 0) {
+                    throw new Exception('Asset record missing model information.');
+                }
+                if (!$isRequestable) {
+                    throw new Exception('This asset is not requestable in Snipe-IT.');
+                }
+                if (!is_asset_deployable($asset)) {
+                    $statusName = is_array($asset['status_label'] ?? null)
+                        ? ($asset['status_label']['name'] ?? 'undeployable')
+                        : 'undeployable';
+                    throw new Exception("Asset is currently \"{$statusName}\" and cannot be checked out.");
+                }
+
+                // Duplicate check — scan all preset slots
+                $presets = $_SESSION['reservation_selected_assets'][$resId] ?? [];
+                foreach ($presets as $_mid => $slots) {
+                    foreach ($slots as $aid) {
+                        if ((int)$aid === $assetId) {
+                            throw new Exception("Asset {$assetTag} is already selected.");
+                        }
+                    }
+                }
+
+                // Cert/access warning
+                $scanWarning = '';
+                $snipeitUserId = (int)($selectedReservation['snipeit_user_id'] ?? 0);
+                if ($snipeitUserId > 0) {
+                    $authReqs = get_model_auth_requirements($modelId);
+                    if (!empty($authReqs['certs']) || !empty($authReqs['access_levels'])) {
+                        $authMissing = check_model_authorization($snipeitUserId, $authReqs);
+                        if (!empty($authMissing)) {
+                            $missing = !empty($authMissing['certs'])
+                                ? implode(', ', $authMissing['certs'])
+                                : implode(', ', $authMissing['access_levels']);
+                            $scanWarning = "User lacks authorization for {$modelName}: {$missing}. Proceeding anyway.";
+                        }
+                    }
+                }
+
+                $allowedQty = $modelLimits[$modelId] ?? 0;
+
+                if ($allowedQty > 0) {
+                    // Model is in the reservation — find an empty slot or bump quantity
+                    $modelPresets = $presets[$modelId] ?? [];
+                    $emptySlotIdx = null;
+                    foreach ($modelPresets as $idx => $aid) {
+                        if ((int)$aid === 0) {
+                            $emptySlotIdx = $idx;
+                            break;
+                        }
+                    }
+
+                    if ($emptySlotIdx !== null) {
+                        $presets[$modelId][$emptySlotIdx] = $assetId;
+                    } elseif (count($modelPresets) < $allowedQty) {
+                        $presets[$modelId][] = $assetId;
+                    } else {
+                        // All slots full — bump quantity in DB and add new slot
+                        if ($selectedStart && $selectedEnd) {
+                            $bookedElsewhere = model_booked_elsewhere($pdo, $modelId, $selectedStart, $selectedEnd, $resId);
+                            if ($bookedElsewhere && $scanWarning === '') {
+                                $scanWarning = "Note: {$modelName} has other bookings in this time window.";
+                            }
+                        }
+                        $upd = $pdo->prepare("
+                            UPDATE reservation_items
+                               SET quantity = quantity + 1
+                             WHERE reservation_id = :rid
+                               AND model_id = :mid
+                               AND deleted_at IS NULL
+                        ");
+                        $upd->execute([':rid' => $resId, ':mid' => $modelId]);
+                        $presets[$modelId][] = $assetId;
+                    }
+                } else {
+                    // Model NOT in reservation — insert new reservation_items row
+                    if ($selectedStart && $selectedEnd) {
+                        $bookedElsewhere = model_booked_elsewhere($pdo, $modelId, $selectedStart, $selectedEnd, $resId);
+                        if ($bookedElsewhere && $scanWarning === '') {
+                            $scanWarning = "Note: {$modelName} has other bookings in this time window.";
+                        }
+                    }
+                    $ins = $pdo->prepare("
+                        INSERT INTO reservation_items
+                            (reservation_id, model_id, model_name_cache, quantity)
+                        VALUES (:rid, :mid, :mname, 1)
+                    ");
+                    $ins->execute([
+                        ':rid'   => $resId,
+                        ':mid'   => $modelId,
+                        ':mname' => $modelName,
+                    ]);
+                    $presets[$modelId] = [$assetId];
+                }
+
+                // Save updated presets
+                $_SESSION['reservation_selected_assets'][$resId] = $presets;
+
+                // Inject scanned asset so dropdown includes it even if list_assets_by_model doesn't
+                if (!isset($_SESSION['scan_injected_assets'])) {
+                    $_SESSION['scan_injected_assets'] = [];
+                }
+                if (!isset($_SESSION['scan_injected_assets'][$resId])) {
+                    $_SESSION['scan_injected_assets'][$resId] = [];
+                }
+                $_SESSION['scan_injected_assets'][$resId][$assetId] = $asset;
+
+                // Persist auth override so a badge stays visible in the checkout listing
+                if (!empty($authMissing)) {
+                    if (!isset($_SESSION['scan_auth_overrides'])) {
+                        $_SESSION['scan_auth_overrides'] = [];
+                    }
+                    if (!isset($_SESSION['scan_auth_overrides'][$resId])) {
+                        $_SESSION['scan_auth_overrides'][$resId] = [];
+                    }
+                    $overrideLabel = !empty($authMissing['certs'])
+                        ? 'Missing cert: ' . implode(', ', $authMissing['certs'])
+                        : 'Missing access: ' . implode(', ', $authMissing['access_levels']);
+                    $_SESSION['scan_auth_overrides'][$resId][$assetId] = $overrideLabel;
+                }
+
+                $label = $modelName !== '' ? "{$assetTag} ({$modelName})" : $assetTag;
+                if ($scanWarning !== '') {
+                    $_SESSION['scan_flash'] = ['type' => 'warning', 'msg' => "Assigned {$label}. {$scanWarning}"];
+                } else {
+                    $_SESSION['scan_flash'] = ['type' => 'success', 'msg' => "Assigned {$label}."];
+                }
+            } catch (Throwable $e) {
+                $_SESSION['scan_flash'] = ['type' => 'error', 'msg' => $e->getMessage()];
+            }
+        }
+
+        $_SESSION['selected_reservation_fresh'] = 1;
+        header('Location: ' . $selfUrl);
+        exit;
     } elseif ($mode === 'add_asset') {
         $tag = trim($_POST['asset_tag'] ?? '');
         if (!$selectedReservation) {
@@ -938,6 +1151,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if ($selectedReservationId) {
                             unset($_SESSION['reservation_selected_assets'][$selectedReservationId]);
                         }
+                        unset($_SESSION['scan_injected_assets']);
+                        unset($_SESSION['scan_auth_overrides']);
 
                         activity_log_event('checkout_created', 'Checkout created from reservation', [
                             'subject_type' => 'checkout',
@@ -1206,6 +1421,23 @@ $active  = basename($_SERVER['PHP_SELF']);
             </div>
         <?php endif; ?>
 
+        <!-- Scan flash message -->
+        <?php
+            $scanFlash = $_SESSION['scan_flash'] ?? null;
+            unset($_SESSION['scan_flash']);
+        ?>
+        <?php if ($scanFlash): ?>
+            <?php
+                $flashClass = 'alert-info';
+                if ($scanFlash['type'] === 'success') $flashClass = 'alert-success';
+                elseif ($scanFlash['type'] === 'warning') $flashClass = 'alert-warning';
+                elseif ($scanFlash['type'] === 'error') $flashClass = 'alert-danger';
+            ?>
+            <div class="alert <?= $flashClass ?>">
+                <?= h($scanFlash['msg']) ?>
+            </div>
+        <?php endif; ?>
+
         <!-- Feedback messages -->
         <?php if (!empty($checkoutMessages)): ?>
             <div class="alert alert-success">
@@ -1272,6 +1504,28 @@ $active  = basename($_SERVER['PHP_SELF']);
                     <p class="card-text">
                         Choose assets for each model in reservation #<?= (int)$selectedReservation['id'] ?>.
                     </p>
+
+                    <form method="post" action="<?= h($selfUrl) ?>" id="scan-form">
+                        <input type="hidden" name="mode" value="scan_asset">
+                        <div class="row g-2 align-items-end mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Scan asset barcode</label>
+                                <div class="position-relative asset-autocomplete-wrapper">
+                                    <input type="text" name="scan_tag" id="scan-tag-input"
+                                           class="form-control asset-autocomplete"
+                                           autocomplete="off"
+                                           placeholder="Scan or type asset tag..." autofocus>
+                                    <div class="list-group position-absolute w-100"
+                                         data-asset-suggestions
+                                         style="z-index: 1050; max-height: 220px; overflow-y: auto; display: none;"></div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 d-grid">
+                                <button type="submit" class="btn btn-outline-primary">Assign</button>
+                            </div>
+                        </div>
+                    </form>
+                    <hr>
 
                     <form method="post" action="<?= h($selfUrl) ?>">
                         <?php foreach ($baseQuery as $k => $v): ?>
@@ -1384,7 +1638,14 @@ $active  = basename($_SERVER['PHP_SELF']);
                                                     <div class="d-flex flex-column gap-2">
                                                         <?php for ($i = 0; $i < $qty; $i++): ?>
                                                             <div class="d-flex gap-2 align-items-center">
-                                                                <select class="form-select"
+                                                                <?php
+                                                                    $slotSelectedId = $presetSelections[$mid][$i] ?? 0;
+                                                                    $authOverrides = $_SESSION['scan_auth_overrides'][$selectedReservationId] ?? [];
+                                                                    $slotOverride = ($slotSelectedId > 0 && isset($authOverrides[$slotSelectedId]))
+                                                                        ? $authOverrides[$slotSelectedId]
+                                                                        : '';
+                                                                ?>
+                                                                <select class="form-select<?= $slotOverride !== '' ? ' border-warning' : '' ?>"
                                                                         name="selected_assets[<?= $mid ?>][]"
                                                                         data-model-select="<?= $mid ?>">
                                                                     <option value="">-- Select asset --</option>
@@ -1396,12 +1657,14 @@ $active  = basename($_SERVER['PHP_SELF']);
                                                                         $label = $aname !== ''
                                                                             ? trim($atag . ' – ' . $aname)
                                                                             : $atag;
-                                                                        $selectedId = $presetSelections[$mid][$i] ?? 0;
-                                                                        $selectedAttr = $aid > 0 && $selectedId === $aid ? 'selected' : '';
+                                                                        $selectedAttr = $aid > 0 && $slotSelectedId === $aid ? 'selected' : '';
                                                                         ?>
                                                                         <option value="<?= $aid ?>" <?= $selectedAttr ?>><?= h($label) ?></option>
                                                                     <?php endforeach; ?>
                                                                 </select>
+                                                                <?php if ($slotOverride !== ''): ?>
+                                                                    <span class="badge bg-warning text-dark" title="<?= h($slotOverride) ?>">Override</span>
+                                                                <?php endif; ?>
                                                                 <?php $removeOneDeletes = $selectedTotalQty <= 1; ?>
                                                                 <button type="submit"
                                                                         name="remove_slot"
@@ -1472,6 +1735,12 @@ $active  = basename($_SERVER['PHP_SELF']);
             window.scrollTo(0, y);
         }
         sessionStorage.removeItem(scrollKey);
+    }
+
+    // Auto-focus scan input after scroll restoration
+    const scanInput = document.getElementById('scan-tag-input');
+    if (scanInput) {
+        setTimeout(() => scanInput.focus(), 50);
     }
 
     document.addEventListener('click', (event) => {
@@ -1617,6 +1886,85 @@ $active  = basename($_SERVER['PHP_SELF']);
     }
 
     Object.keys(groups).forEach(syncGroup);
+})();
+
+// Asset autocomplete for scan input
+(function () {
+    const wrappers = document.querySelectorAll('.asset-autocomplete-wrapper');
+    wrappers.forEach((wrapper) => {
+        const input = wrapper.querySelector('.asset-autocomplete');
+        const list  = wrapper.querySelector('[data-asset-suggestions]');
+        if (!input || !list) return;
+
+        let timer = null;
+        let lastQuery = '';
+
+        input.addEventListener('input', () => {
+            const q = input.value.trim();
+            if (q.length < 2) {
+                hideSuggestions();
+                return;
+            }
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => fetchSuggestions(q), 200);
+        });
+
+        input.addEventListener('blur', () => {
+            setTimeout(hideSuggestions, 150);
+        });
+
+        function fetchSuggestions(q) {
+            lastQuery = q;
+            fetch('<?= h($ajaxBase) ?>ajax=asset_search&q=' + encodeURIComponent(q), {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+                .then((res) => res.ok ? res.json() : Promise.reject())
+                .then((data) => {
+                    if (lastQuery !== q) return;
+                    renderSuggestions(data.results || []);
+                })
+                .catch(() => {
+                    renderSuggestions([]);
+                });
+        }
+
+        function renderSuggestions(items) {
+            list.innerHTML = '';
+            if (!items || !items.length) {
+                hideSuggestions();
+                return;
+            }
+
+            items.forEach((item) => {
+                const tag = item.asset_tag || '';
+                const model = item.model || '';
+                const label = model !== '' ? `${tag} [${model}]` : tag;
+
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'list-group-item list-group-item-action';
+                btn.textContent = label;
+                btn.dataset.value = tag;
+
+                btn.addEventListener('click', () => {
+                    input.value = btn.dataset.value;
+                    hideSuggestions();
+                    // Auto-submit the scan form
+                    const form = input.closest('form');
+                    if (form) form.submit();
+                });
+
+                list.appendChild(btn);
+            });
+
+            list.style.display = 'block';
+        }
+
+        function hideSuggestions() {
+            list.style.display = 'none';
+            list.innerHTML = '';
+        }
+    });
 })();
 </script>
 <?php if (!$embedded): ?>
