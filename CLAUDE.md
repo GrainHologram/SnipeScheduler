@@ -21,7 +21,7 @@ SnipeScheduler is a PHP/MySQL web app that adds equipment reservation and checko
 - **`snipeit_client.php`** — All Snipe-IT API interaction. Core function `snipeit_request()` handles HTTP, caching, and error handling. Higher-level functions for models, assets, users, checkout/checkin, groups, certifications.
 - **`auth.php`** — Session-based auth guard. Include at top of protected pages. Exposes `$currentUser` and the `h()` HTML-escape helper.
 - **`layout.php`** — Shared UI: nav rendering, theme/color CSS variables, logo, footer. Provides `layout_status_badge()` for rendering reservation status badges.
-- **`checkout_rules.php`** — Policy enforcement: checkout duration limits, renewal limits, certification requirements, single-active-checkout rule. Limits are per-group with most-permissive-wins logic. Duration limits are enforced at reservation creation time (basket), not during staff checkout.
+- **`checkout_rules.php`** — Policy enforcement: checkout duration limits, renewal limits, model authorization (certifications + access levels), single-active-checkout rule. Limits are per-group with most-permissive-wins logic. Duration limits are enforced at reservation creation time (basket), not during staff checkout.
 - **`booking_helpers.php`** — Reservation item fetching and summary text building.
 - **`datetime_helpers.php`** — Timezone conversion, configurable date/time formatting. Three timezone contexts: PHP internally runs in UTC, `app_tz` for display, `snipe_tz` for Snipe-IT server dates.
 - **`activity_log.php`** — Audit logging to `activity_log` table.
@@ -88,7 +88,24 @@ Each checkout has a `reservation_id` (nullable for walk-up checkouts) and per-as
 - `$currentUser` session data drives role checks throughout the app.
 
 ### Access Group Requirement
-Users must belong to at least one Snipe-IT group matching the pattern `Access - *` (e.g., "Access - Lab Equipment", "Access - Studio") to make reservations. This is a global gate enforced in `catalogue.php`, `basket.php`, and `basket_checkout.php` via `check_user_has_access_group()` in `checkout_rules.php`. It is separate from per-model `Cert - *` certification requirements. No staff/admin exemption — all users must have an Access group.
+Users must belong to at least one Snipe-IT group matching the pattern `Access - *` (e.g., "Access - Lab Equipment", "Access - Studio") to make reservations. This is a global gate enforced in `catalogue.php`, `basket.php`, and `basket_checkout.php` via `check_user_has_access_group()` in `checkout_rules.php`. It is separate from per-model authorization requirements. No staff/admin exemption — all users must have an Access group.
+
+### Model Authorization (Certs & Access Levels)
+Per-model authorization is driven by two Snipe-IT custom fields on assets — **"Certification Needed"** (listbox) and **"Access Level"** (listbox). The system reads the **values** of these fields (e.g., `Cert - Grip Truck`, `Access - Advanced`) and checks if the user belongs to a matching Snipe-IT group.
+
+**Priority rules:**
+1. If any asset of a model has "Certification Needed" set → check certs only. User must belong to each required cert group (e.g., `Cert - Grip Truck`). Faculty does NOT override certs.
+2. If NO cert is required but "Access Level" is set → check access levels. User must belong to ANY matching access level group OR the `Access - Faculty` group (faculty = superuser for access levels).
+3. If neither field is set → no per-model restriction (global access gate still applies).
+
+**Key functions:**
+- `get_model_auth_requirements($modelId)` — returns `['certs' => [...], 'access_levels' => [...]]` by scanning asset custom field values. In `snipeit_client.php`.
+- `check_model_authorization($snipeitUserId, $authReqs)` — returns missing requirements or empty array. In `checkout_rules.php`.
+- `prefetch_catalogue_model_stats()` — bulk version that populates both `certs` and `access_levels` per model for the catalogue.
+
+**Enforced at:** `catalogue.php` (equipment + kits tabs), `basket.php`, `basket_checkout.php`, `staff_checkout.php`, `quick_checkout.php`.
+
+**Badge display:** Cert badges use `bg-warning text-dark` (yellow). Access level badges use `bg-info text-dark` (blue).
 
 ### Quick Checkin User Detection
 `public/quick_checkin.php` supports a "detected user" workflow for bulk check-ins. When staff scans the first asset, if that asset is checked out to a user, the page:
