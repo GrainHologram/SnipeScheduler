@@ -13,16 +13,17 @@ if (!$isStaff) {
     exit;
 }
 
-$allowedTabs = ['today', 'checked_out', 'history'];
+$allowedTabs = ['today', 'checked_out', 'history', 'checkout_history'];
 $tab         = $_GET['tab'] ?? 'today';
 if (!in_array($tab, $allowedTabs, true)) {
     $tab = 'today';
 }
 
 $tabMap = [
-    'today'       => __DIR__ . '/staff_checkout.php',
-    'checked_out' => __DIR__ . '/checked_out_assets.php',
-    'history'     => __DIR__ . '/staff_reservations.php',
+    'today'            => __DIR__ . '/staff_checkout.php',
+    'checked_out'      => __DIR__ . '/checked_out_assets.php',
+    'history'          => __DIR__ . '/staff_reservations.php',
+    'checkout_history' => __DIR__ . '/checkout_history.php',
 ];
 
 if (!defined('RESERVATIONS_EMBED')) {
@@ -118,6 +119,10 @@ if (!$tabFile || !is_file($tabFile)) {
             <li class="nav-item">
                 <a class="nav-link <?= $tab === 'history' ? 'active' : '' ?>"
                    href="reservations.php?tab=history">Reservation History</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link <?= $tab === 'checkout_history' ? 'active' : '' ?>"
+                   href="reservations.php?tab=checkout_history">Checkout History</a>
             </li>
         </ul>
 
