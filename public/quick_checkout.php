@@ -251,12 +251,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 continue;
                             }
                             $checkedModels[$mid] = true;
-                            $certReqs = get_model_certification_requirements($mid);
-                            if (!empty($certReqs)) {
-                                $missing = check_user_certifications($userId, $certReqs);
-                                if (!empty($missing)) {
+                            $authReqs = get_model_auth_requirements($mid);
+                            if (!empty($authReqs['certs']) || !empty($authReqs['access_levels'])) {
+                                $authMissing = check_model_authorization($userId, $authReqs);
+                                if (!empty($authMissing)) {
                                     $modelLabel = $asset['model'] ?? ('Model #' . $mid);
-                                    $errors[] = "User lacks required certification(s) for {$modelLabel}: " . implode(', ', $missing);
+                                    if (!empty($authMissing['certs'])) {
+                                        $errors[] = "User lacks required certification(s) for {$modelLabel}: " . implode(', ', $authMissing['certs']);
+                                    } else {
+                                        $errors[] = "User lacks required access level for {$modelLabel}: " . implode(', ', $authMissing['access_levels']);
+                                    }
                                 }
                             }
                         }

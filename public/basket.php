@@ -207,19 +207,23 @@ if (!empty($basket) && $snipeUserId > 0) {
         }
     }
 
-    // Certification enforcement per model in basket
+    // Authorization enforcement per model in basket
     foreach ($basket as $modelId => $qty) {
         $modelId = (int)$modelId;
         if ($modelId <= 0) {
             continue;
         }
-        $certReqs = get_model_certification_requirements($modelId);
-        if (!empty($certReqs)) {
-            $missing = check_user_certifications($snipeUserId, $certReqs);
-            if (!empty($missing)) {
+        $authReqs = get_model_auth_requirements($modelId);
+        if (!empty($authReqs['certs']) || !empty($authReqs['access_levels'])) {
+            $authMissing = check_model_authorization($snipeUserId, $authReqs);
+            if (!empty($authMissing)) {
                 $modelData = get_model($modelId);
                 $modelName = $modelData['name'] ?? ('Model #' . $modelId);
-                $checkoutErrors[] = 'You lack required certification(s) for "' . $modelName . '": ' . implode(', ', $missing);
+                if (!empty($authMissing['certs'])) {
+                    $checkoutErrors[] = 'You lack required certification(s) for "' . $modelName . '": ' . implode(', ', $authMissing['certs']);
+                } else {
+                    $checkoutErrors[] = 'You lack the required access level for "' . $modelName . '": ' . implode(', ', $authMissing['access_levels']);
+                }
             }
         }
     }
