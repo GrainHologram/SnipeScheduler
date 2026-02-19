@@ -492,6 +492,8 @@ if ($isStaff && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') 
             'snipeit_user_id' => resolve_snipeit_user_id($selEmail),
         ];
     }
+    // Bust cached user groups so auth badges and permissions refresh immediately
+    unset($_SESSION['snipeit_user_groups']);
     header('Location: catalogue.php');
     exit;
 }
@@ -1049,12 +1051,36 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
         </div>
 
         <?php if ($isStaff): ?>
+            <?php
+                // Fetch user groups for auth badge display
+                $userAuthGroups = $catalogueSnipeUserId > 0 ? get_user_groups($catalogueSnipeUserId) : [];
+                $userAccessLevels = [];
+                $userCerts = [];
+                foreach ($userAuthGroups as $g) {
+                    $gName = trim($g['name'] ?? '');
+                    if (preg_match('/^Access\s*-/i', $gName)) {
+                        $userAccessLevels[] = $gName;
+                    } elseif (preg_match('/^Cert\s*-/i', $gName)) {
+                        $userCerts[] = $gName;
+                    }
+                }
+            ?>
             <div class="alert alert-info d-flex flex-column flex-md-row align-items-md-center justify-content-md-between booking-for-alert">
                 <div class="mb-2 mb-md-0">
                     <strong>Booking for:</strong>
                     <?= h($activeUser['email'] ?? '') ?>
                     <?php if (!empty($activeUser['first_name'])): ?>
                         (<?= h(trim(($activeUser['first_name'] ?? '') . ' ' . ($activeUser['last_name'] ?? ''))) ?>)
+                    <?php endif; ?>
+                    <?php if (!empty($userAccessLevels) || !empty($userCerts)): ?>
+                        <span class="ms-2">
+                            <?php foreach ($userAccessLevels as $level): ?>
+                                <span class="badge bg-info text-dark"><?= h($level) ?></span>
+                            <?php endforeach; ?>
+                            <?php foreach ($userCerts as $cert): ?>
+                                <span class="badge bg-warning text-dark"><?= h($cert) ?></span>
+                            <?php endforeach; ?>
+                        </span>
                     <?php endif; ?>
                 </div>
                 <form method="post" id="booking_user_form" class="d-flex gap-2 mb-0 flex-wrap position-relative" style="z-index: 9998;">
