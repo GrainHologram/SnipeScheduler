@@ -150,12 +150,13 @@ return [
             'max_checkout_hours' => 0,   // 0 = unlimited
             'max_renewal_hours'  => 0,   // 0 = unlimited
             'max_total_hours'    => 0,   // 0 = unlimited (initial + all renewals)
+            'max_advance_days'   => 0,   // 0 = unlimited; max days into the future a reservation can start
         ],
         'group_overrides' => [
             // Keyed by Snipe-IT group ID (int). Most permissive wins for multi-group users.
             // Example:
-            // 5  => ['max_checkout_hours' => 168, 'max_renewal_hours' => 48, 'max_total_hours' => 336],
-            // 12 => ['max_checkout_hours' => 720, 'max_renewal_hours' => 168, 'max_total_hours' => 1440],
+            // 5  => ['max_checkout_hours' => 168, 'max_renewal_hours' => 48, 'max_total_hours' => 336, 'max_advance_days' => 14],
+            // 12 => ['max_checkout_hours' => 720, 'max_renewal_hours' => 168, 'max_total_hours' => 1440, 'max_advance_days' => 30],
         ],
         'single_active_checkout' => false,  // true = enforce one active checkout per user
     ],

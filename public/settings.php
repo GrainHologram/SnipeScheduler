@@ -415,12 +415,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'max_checkout_hours' => max(0, (int)$post('checkout_default_max_checkout', 0)),
         'max_renewal_hours'  => max(0, (int)$post('checkout_default_max_renewal', 0)),
         'max_total_hours'    => max(0, (int)$post('checkout_default_max_total', 0)),
+        'max_advance_days'   => max(0, (int)$post('checkout_default_max_advance', 0)),
     ];
     $groupOverrides = [];
     $overrideGroupIds   = $_POST['checkout_override_group_id'] ?? [];
     $overrideCheckout   = $_POST['checkout_override_max_checkout'] ?? [];
     $overrideRenewal    = $_POST['checkout_override_max_renewal'] ?? [];
     $overrideTotal      = $_POST['checkout_override_max_total'] ?? [];
+    $overrideAdvance    = $_POST['checkout_override_max_advance_days'] ?? [];
     if (is_array($overrideGroupIds)) {
         foreach ($overrideGroupIds as $idx => $gid) {
             $gid = (int)$gid;
@@ -431,6 +433,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'max_checkout_hours' => max(0, (int)($overrideCheckout[$idx] ?? 0)),
                 'max_renewal_hours'  => max(0, (int)($overrideRenewal[$idx] ?? 0)),
                 'max_total_hours'    => max(0, (int)($overrideTotal[$idx] ?? 0)),
+                'max_advance_days'   => max(0, (int)($overrideAdvance[$idx] ?? 0)),
             ];
         }
     }
@@ -1181,6 +1184,7 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                 $clDefMaxCheckout = (int)($clDefaults['max_checkout_hours'] ?? 0);
                 $clDefMaxRenewal  = (int)($clDefaults['max_renewal_hours'] ?? 0);
                 $clDefMaxTotal    = (int)($clDefaults['max_total_hours'] ?? 0);
+                $clDefMaxAdvance  = (int)($clDefaults['max_advance_days'] ?? 0);
                 $clOverrides = $cfg(['checkout_limits', 'group_overrides'], []);
                 if (!is_array($clOverrides)) { $clOverrides = []; }
                 $clSingleActive = (bool)$cfg(['checkout_limits', 'single_active_checkout'], false);
@@ -1202,20 +1206,25 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
 
                         <h6 class="fw-semibold mb-2">Defaults</h6>
                         <div class="row g-3 mb-3">
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="form-label">Max checkout hours</label>
                                 <input type="number" name="checkout_default_max_checkout" class="form-control" min="0" value="<?= $clDefMaxCheckout ?>">
                                 <div class="form-text">0 = unlimited. 168 = 7 days.</div>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="form-label">Max renewal hours</label>
                                 <input type="number" name="checkout_default_max_renewal" class="form-control" min="0" value="<?= $clDefMaxRenewal ?>">
                                 <div class="form-text">Maximum extension per renewal.</div>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="form-label">Max total hours</label>
                                 <input type="number" name="checkout_default_max_total" class="form-control" min="0" value="<?= $clDefMaxTotal ?>">
                                 <div class="form-text">Total including all renewals.</div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Max advance days</label>
+                                <input type="number" name="checkout_default_max_advance" class="form-control" min="0" value="<?= $clDefMaxAdvance ?>">
+                                <div class="form-text">How far ahead users can book. 0 = unlimited.</div>
                             </div>
                         </div>
 
@@ -1244,6 +1253,9 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                                     </div>
                                     <div class="col-md-2">
                                         <input type="number" name="checkout_override_max_total[]" class="form-control form-control-sm" min="0" value="<?= (int)($ov['max_total_hours'] ?? 0) ?>" placeholder="Total hrs">
+                                    </div>
+                                    <div class="col-md-1">
+                                        <input type="number" name="checkout_override_max_advance_days[]" class="form-control form-control-sm" min="0" value="<?= (int)($ov['max_advance_days'] ?? 0) ?>" placeholder="Adv days">
                                     </div>
                                     <div class="col-md-2">
                                         <button type="button" class="btn btn-sm btn-outline-danger checkout-override-remove">Remove</button>
@@ -1311,6 +1323,7 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                 + '<div class="col-md-2"><input type="number" name="checkout_override_max_checkout[]" class="form-control form-control-sm" min="0" value="0" placeholder="Checkout hrs"></div>'
                 + '<div class="col-md-2"><input type="number" name="checkout_override_max_renewal[]" class="form-control form-control-sm" min="0" value="0" placeholder="Renewal hrs"></div>'
                 + '<div class="col-md-2"><input type="number" name="checkout_override_max_total[]" class="form-control form-control-sm" min="0" value="0" placeholder="Total hrs"></div>'
+                + '<div class="col-md-1"><input type="number" name="checkout_override_max_advance_days[]" class="form-control form-control-sm" min="0" value="0" placeholder="Adv days"></div>'
                 + '<div class="col-md-2"><button type="button" class="btn btn-sm btn-outline-danger checkout-override-remove">Remove</button></div>';
             overrideContainer.appendChild(row);
         });
