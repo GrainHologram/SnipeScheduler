@@ -30,7 +30,9 @@ try {
         SELECT *
         FROM reservations
         WHERE user_id = :user_id
-        ORDER BY start_datetime DESC
+        ORDER BY
+            CASE WHEN status IN ('pending','confirmed') THEN 0 ELSE 1 END,
+            start_datetime DESC
     ";
     $stmt = $pdo->prepare($sql);
     $stmt->execute([':user_id' => $currentUserId]);
