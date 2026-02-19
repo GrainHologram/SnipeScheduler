@@ -61,6 +61,26 @@ if ($ajaxMode === 'asset_search') {
     exit;
 }
 
+// GET ?user=ID — pre-load a user's checked-out assets (e.g. from dashboard)
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && !empty($_GET['user'])) {
+    $preUserId = (int)$_GET['user'];
+    if ($preUserId > 0) {
+        try {
+            $userData = snipeit_request('GET', 'users/' . $preUserId);
+            $_SESSION['quick_checkin_detected_user'] = [
+                'id'    => $preUserId,
+                'name'  => $userData['name'] ?? '',
+                'email' => $userData['email'] ?? '',
+            ];
+            $_SESSION['quick_checkin_user_assets'] = get_assets_checked_out_to_user($preUserId);
+        } catch (Throwable $e) {
+            // Silently ignore — page will still work without pre-load
+        }
+    }
+    header('Location: quick_checkin.php');
+    exit;
+}
+
 if (!isset($_SESSION['quick_checkin_assets'])) {
     $_SESSION['quick_checkin_assets'] = [];
 }
