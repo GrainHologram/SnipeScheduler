@@ -38,10 +38,11 @@ if (!isset($_SESSION['basket_kit_names']) || !is_array($_SESSION['basket_kit_nam
     $_SESSION['basket_kit_names'] = [];
 }
 
+$isPartial = !empty($_POST['partial']);
+$quantities = isset($_POST['quantities']) && is_array($_POST['quantities']) ? $_POST['quantities'] : [];
+
 if ($kitId > 0) {
     // --- Kit add: expand kit models into individual basket entries ---
-    $kitQuantity = max(1, min(20, $kitQuantity));
-
     try {
         $kitData = get_kit($kitId);
         $kitModels = get_kit_models($kitId);
@@ -58,28 +59,50 @@ if ($kitId > 0) {
     $kitName = $kitData['name'] ?? 'Kit';
     $kitGroupEntries = [];
 
-    foreach ($kitModels as $km) {
-        $mid = (int)($km['id'] ?? 0);
-        if ($mid <= 0) continue;
+    if ($isPartial && !empty($quantities)) {
+        // Partial kit: use per-model quantities from form
+        foreach ($quantities as $mid => $qty) {
+            $mid = (int)$mid;
+            $qty = max(0, min(100, (int)$qty));
+            if ($mid <= 0 || $qty <= 0) continue;
 
-        $modelQty = max(1, (int)($km['quantity'] ?? 1));
-        $addQty = $modelQty * $kitQuantity;
+            $currentQty = isset($_SESSION['basket'][$mid]) ? (int)$_SESSION['basket'][$mid] : 0;
+            $_SESSION['basket'][$mid] = $currentQty + $qty;
 
-        $currentQty = isset($_SESSION['basket'][$mid]) ? (int)$_SESSION['basket'][$mid] : 0;
-        $_SESSION['basket'][$mid] = $currentQty + $addQty;
+            $kitGroupEntries[] = [
+                'model_id' => $mid,
+                'quantity' => $qty,
+            ];
+        }
+    } else {
+        // Full kit: multiply each model quantity by kit_quantity
+        $kitQuantity = max(1, min(20, $kitQuantity));
 
-        $kitGroupEntries[] = [
-            'model_id' => $mid,
-            'quantity' => $addQty,
-        ];
+        foreach ($kitModels as $km) {
+            $mid = (int)($km['id'] ?? 0);
+            if ($mid <= 0) continue;
+
+            $modelQty = max(1, (int)($km['quantity'] ?? 1));
+            $addQty = $modelQty * $kitQuantity;
+
+            $currentQty = isset($_SESSION['basket'][$mid]) ? (int)$_SESSION['basket'][$mid] : 0;
+            $_SESSION['basket'][$mid] = $currentQty + $addQty;
+
+            $kitGroupEntries[] = [
+                'model_id' => $mid,
+                'quantity' => $addQty,
+            ];
+        }
     }
 
-    // Store kit group metadata
-    if (!isset($_SESSION['basket_kit_groups'][$kitId])) {
-        $_SESSION['basket_kit_groups'][$kitId] = [];
+    // Store kit group metadata (only if something was actually added)
+    if (!empty($kitGroupEntries)) {
+        if (!isset($_SESSION['basket_kit_groups'][$kitId])) {
+            $_SESSION['basket_kit_groups'][$kitId] = [];
+        }
+        $_SESSION['basket_kit_groups'][$kitId][] = $kitGroupEntries;
+        $_SESSION['basket_kit_names'][$kitId] = $kitName;
     }
-    $_SESSION['basket_kit_groups'][$kitId][] = $kitGroupEntries;
-    $_SESSION['basket_kit_names'][$kitId] = $kitName;
 
 } elseif ($modelId > 0 && $qtyRequested > 0) {
     // --- Individual model add (existing behavior) ---

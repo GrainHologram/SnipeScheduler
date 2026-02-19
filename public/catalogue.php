@@ -1751,10 +1751,12 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     if (empty($kitModels)) continue;
 
                     $modelLines = [];
+                    $modelDetails = []; // per-model data for partial kit UI
                     $kitCerts = [];
                     $kitAvailability = PHP_INT_MAX; // min across all models
                     $bottleneckModel = '';
                     $hasAvailability = true;
+                    $anyModelAvailable = false;
 
                     foreach ($kitModels as $km) {
                         $mid = (int)($km['id'] ?? 0);
@@ -1773,71 +1775,83 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                             }
                         }
 
+                        $freeUnits = 0;
+
                         // Compute free units for this model
                         if ($requestableCount <= 0) {
                             $kitAvailability = 0;
                             $hasAvailability = false;
-                            continue;
+                        } else {
+                            try {
+                                if ($windowActive) {
+                                    $stmt = $pdo->prepare("
+                                        SELECT COALESCE(SUM(ri.quantity), 0) AS pending_qty
+                                        FROM reservation_items ri
+                                        JOIN reservations r ON r.id = ri.reservation_id
+                                        WHERE ri.model_id = :mid
+                                          AND ri.deleted_at IS NULL
+                                          AND r.status IN ('pending','confirmed')
+                                          AND r.start_datetime < :end
+                                          AND r.end_datetime > :start
+                                    ");
+                                    $stmt->execute([':mid' => $mid, ':start' => $windowStartIso, ':end' => $windowEndIso]);
+                                    $pendingQty = (int)(($stmt->fetch(PDO::FETCH_ASSOC))['pending_qty'] ?? 0);
+
+                                    $coStmt = $pdo->prepare("
+                                        SELECT COUNT(*) AS co_qty
+                                        FROM checkout_items ci
+                                        JOIN checkouts c ON c.id = ci.checkout_id
+                                        WHERE ci.model_id = :mid
+                                          AND ci.checked_in_at IS NULL
+                                          AND c.status IN ('open','partial')
+                                          AND c.start_datetime < :end
+                                          AND c.end_datetime > :start
+                                    ");
+                                    $coStmt->execute([':mid' => $mid, ':start' => $windowStartIso, ':end' => $windowEndIso]);
+                                    $checkedOutQty = (int)(($coStmt->fetch(PDO::FETCH_ASSOC))['co_qty'] ?? 0);
+
+                                    $booked = $pendingQty + $checkedOutQty;
+                                } else {
+                                    $stmt = $pdo->prepare("
+                                        SELECT COALESCE(SUM(ri.quantity), 0) AS pending_qty
+                                        FROM reservation_items ri
+                                        JOIN reservations r ON r.id = ri.reservation_id
+                                        WHERE ri.model_id = :mid
+                                          AND ri.deleted_at IS NULL
+                                          AND r.status IN ('pending','confirmed')
+                                          AND r.start_datetime <= :now
+                                          AND r.end_datetime   > :now
+                                    ");
+                                    $stmt->execute([':mid' => $mid, ':now' => $nowIso]);
+                                    $pendingQty = (int)(($stmt->fetch(PDO::FETCH_ASSOC))['pending_qty'] ?? 0);
+
+                                    $activeCheckedOut = $checkedOutCounts[$mid] ?? count_checked_out_assets_by_model($mid);
+                                    $booked = $pendingQty + $activeCheckedOut;
+                                }
+
+                                $freeUnits = max(0, $requestableCount - $booked);
+                                $kitsFromModel = (int)floor($freeUnits / $kitQty);
+
+                                if ($kitsFromModel < $kitAvailability) {
+                                    $kitAvailability = $kitsFromModel;
+                                    $bottleneckModel = $modelName;
+                                }
+                            } catch (Throwable $e) {
+                                $kitAvailability = 0;
+                                $hasAvailability = false;
+                            }
                         }
 
-                        try {
-                            if ($windowActive) {
-                                $stmt = $pdo->prepare("
-                                    SELECT COALESCE(SUM(ri.quantity), 0) AS pending_qty
-                                    FROM reservation_items ri
-                                    JOIN reservations r ON r.id = ri.reservation_id
-                                    WHERE ri.model_id = :mid
-                                      AND ri.deleted_at IS NULL
-                                      AND r.status IN ('pending','confirmed')
-                                      AND r.start_datetime < :end
-                                      AND r.end_datetime > :start
-                                ");
-                                $stmt->execute([':mid' => $mid, ':start' => $windowStartIso, ':end' => $windowEndIso]);
-                                $pendingQty = (int)(($stmt->fetch(PDO::FETCH_ASSOC))['pending_qty'] ?? 0);
-
-                                $coStmt = $pdo->prepare("
-                                    SELECT COUNT(*) AS co_qty
-                                    FROM checkout_items ci
-                                    JOIN checkouts c ON c.id = ci.checkout_id
-                                    WHERE ci.model_id = :mid
-                                      AND ci.checked_in_at IS NULL
-                                      AND c.status IN ('open','partial')
-                                      AND c.start_datetime < :end
-                                      AND c.end_datetime > :start
-                                ");
-                                $coStmt->execute([':mid' => $mid, ':start' => $windowStartIso, ':end' => $windowEndIso]);
-                                $checkedOutQty = (int)(($coStmt->fetch(PDO::FETCH_ASSOC))['co_qty'] ?? 0);
-
-                                $booked = $pendingQty + $checkedOutQty;
-                            } else {
-                                $stmt = $pdo->prepare("
-                                    SELECT COALESCE(SUM(ri.quantity), 0) AS pending_qty
-                                    FROM reservation_items ri
-                                    JOIN reservations r ON r.id = ri.reservation_id
-                                    WHERE ri.model_id = :mid
-                                      AND ri.deleted_at IS NULL
-                                      AND r.status IN ('pending','confirmed')
-                                      AND r.start_datetime <= :now
-                                      AND r.end_datetime   > :now
-                                ");
-                                $stmt->execute([':mid' => $mid, ':now' => $nowIso]);
-                                $pendingQty = (int)(($stmt->fetch(PDO::FETCH_ASSOC))['pending_qty'] ?? 0);
-
-                                $activeCheckedOut = $checkedOutCounts[$mid] ?? count_checked_out_assets_by_model($mid);
-                                $booked = $pendingQty + $activeCheckedOut;
-                            }
-
-                            $freeUnits = max(0, $requestableCount - $booked);
-                            $kitsFromModel = (int)floor($freeUnits / $kitQty);
-
-                            if ($kitsFromModel < $kitAvailability) {
-                                $kitAvailability = $kitsFromModel;
-                                $bottleneckModel = $modelName;
-                            }
-                        } catch (Throwable $e) {
-                            $kitAvailability = 0;
-                            $hasAvailability = false;
+                        if ($freeUnits > 0) {
+                            $anyModelAvailable = true;
                         }
+
+                        $modelDetails[] = [
+                            'id'       => $mid,
+                            'name'     => $modelName,
+                            'kit_qty'  => $kitQty,
+                            'free'     => $freeUnits,
+                        ];
                     }
 
                     if ($kitAvailability === PHP_INT_MAX) {
@@ -1860,7 +1874,9 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         'id'              => $kitId,
                         'name'            => $kitName,
                         'model_lines'     => $modelLines,
+                        'model_details'   => $modelDetails,
                         'availability'    => $kitAvailability,
+                        'any_available'   => $anyModelAvailable,
                         'bottleneck'      => $bottleneckModel,
                         'certs'           => $kitCertNames,
                         'cert_blocked'    => $kitCertBlocked,
@@ -1985,6 +2001,29 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                             </div>
                                         </div>
                                         <button type="submit" class="btn btn-sm btn-success w-100">Add kit to basket</button>
+                                    <?php elseif ($kitCard['any_available']): ?>
+                                        <div class="alert alert-secondary small mb-2">
+                                            <?= $windowActive ? 'Not enough stock for a full kit in selected dates.' : 'Not enough stock for a full kit right now.' ?>
+                                            Add individual items below.
+                                        </div>
+                                        <input type="hidden" name="partial" value="1">
+                                        <div class="kit-model-rows mb-2">
+                                            <?php foreach ($kitCard['model_details'] as $md): ?>
+                                                <div class="d-flex align-items-center gap-2 mb-1 small">
+                                                    <span class="flex-grow-1 text-truncate" title="<?= h($md['name']) ?>"><?= h($md['name']) ?></span>
+                                                    <span class="text-muted text-nowrap"><?= (int)$md['free'] ?> avail</span>
+                                                    <input type="number"
+                                                           name="quantities[<?= (int)$md['id'] ?>]"
+                                                           class="form-control form-control-sm"
+                                                           style="width: 64px;"
+                                                           value="<?= min((int)$md['kit_qty'], (int)$md['free']) ?>"
+                                                           min="0"
+                                                           max="<?= (int)$md['free'] ?>"
+                                                           <?= (int)$md['free'] <= 0 ? 'disabled' : '' ?>>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                        <button type="submit" class="btn btn-sm btn-outline-success w-100">Add selected to basket</button>
                                     <?php else: ?>
                                         <div class="alert alert-secondary small mb-0">
                                             <?= $windowActive ? 'No kits available for selected dates.' : 'No kits available right now.' ?>
