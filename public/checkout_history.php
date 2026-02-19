@@ -60,10 +60,11 @@ try {
 
     if ($q !== null) {
         $joinItems = true;
-        $where[] = '(c.user_name LIKE :q OR ci.asset_tag LIKE :q2 OR ci.asset_name LIKE :q3)';
+        $where[] = '(c.user_name LIKE :q OR c.user_email LIKE :q4 OR ci.asset_tag LIKE :q2 OR ci.asset_name LIKE :q3)';
         $params[':q']  = '%' . $q . '%';
         $params[':q2'] = '%' . $q . '%';
         $params[':q3'] = '%' . $q . '%';
+        $params[':q4'] = '%' . $q . '%';
     }
 
     if ($dateFrom !== null) {

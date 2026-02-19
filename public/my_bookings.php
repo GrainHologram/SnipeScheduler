@@ -251,7 +251,7 @@ if (!empty($_GET['deleted'])) {
                                     <?php if ($linkedCheckout): ?>
                                         <br><strong>Checkout:</strong>
                                         <?php if ($isStaff): ?>
-                                            <a href="checkout_history.php?q=<?= urlencode($res['user_name'] ?? '') ?>">
+                                            <a href="checkout_history.php?q=<?= urlencode($res['user_email'] ?? '') ?>">
                                                 #<?= (int)$linkedCheckout['id'] ?> (<?= h($linkedCheckout['status']) ?>)
                                             </a>
                                         <?php else: ?>
@@ -355,7 +355,7 @@ if (!empty($_GET['deleted'])) {
                                         <?php if ($linkedCheckout): ?>
                                             <br><strong>Checkout:</strong>
                                             <?php if ($isStaff): ?>
-                                                <a href="checkout_history.php?q=<?= urlencode($res['user_name'] ?? '') ?>">
+                                                <a href="checkout_history.php?q=<?= urlencode($res['user_email'] ?? '') ?>">
                                                     #<?= (int)$linkedCheckout['id'] ?> (<?= h($linkedCheckout['status']) ?>)
                                                 </a>
                                             <?php else: ?>
