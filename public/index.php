@@ -75,30 +75,38 @@ if ($isStaff) {
     // Active checkouts count
     $activeCount = (int) $pdo->query("SELECT COUNT(*) FROM checkouts WHERE status IN ('open','partial')")->fetchColumn();
 
-    // Due today
+    // Due today — grouped by checkout
     $stmt = $pdo->prepare("
-        SELECT ci.asset_tag, ci.asset_name, ci.model_name,
-               c.end_datetime, c.user_name, c.user_email, c.id AS checkout_id
-          FROM checkout_items ci
-          JOIN checkouts c ON c.id = ci.checkout_id
+        SELECT c.id AS checkout_id, c.name AS checkout_name, c.user_name, c.user_email,
+               c.end_datetime, c.snipeit_user_id,
+               r.name AS reservation_name, r.asset_name_cache,
+               COUNT(ci.id) AS item_count
+          FROM checkouts c
+          JOIN checkout_items ci ON ci.checkout_id = c.id
+          LEFT JOIN reservations r ON r.id = c.reservation_id
          WHERE c.status IN ('open','partial')
            AND ci.checked_in_at IS NULL
            AND c.end_datetime >= :todayStart AND c.end_datetime <= :todayEnd
+         GROUP BY c.id
          ORDER BY c.end_datetime ASC
     ");
     $stmt->execute([':todayStart' => $todayUtcStart, ':todayEnd' => $todayUtcEnd]);
     $dueToday  = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $dueCount  = count($dueToday);
 
-    // Overdue
+    // Overdue — grouped by checkout
     $stmt = $pdo->prepare("
-        SELECT ci.asset_tag, ci.asset_name, ci.model_name,
-               c.end_datetime, c.user_name, c.user_email, c.id AS checkout_id
-          FROM checkout_items ci
-          JOIN checkouts c ON c.id = ci.checkout_id
+        SELECT c.id AS checkout_id, c.name AS checkout_name, c.user_name, c.user_email,
+               c.end_datetime, c.snipeit_user_id,
+               r.name AS reservation_name, r.asset_name_cache,
+               COUNT(ci.id) AS item_count
+          FROM checkouts c
+          JOIN checkout_items ci ON ci.checkout_id = c.id
+          LEFT JOIN reservations r ON r.id = c.reservation_id
          WHERE c.status IN ('open','partial')
            AND ci.checked_in_at IS NULL
            AND c.end_datetime < :nowUtc
+         GROUP BY c.id
          ORDER BY c.end_datetime ASC
     ");
     $stmt->execute([':nowUtc' => $nowUtc]);
@@ -271,20 +279,33 @@ if ($isStaff) {
                             <table class="table table-sm mb-0">
                                 <thead>
                                     <tr>
-                                        <th>Asset</th>
+                                        <th>Checkout</th>
                                         <th>User</th>
                                         <th>Due</th>
+                                        <th></th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php foreach ($dueToday as $item): ?>
+                                    <?php foreach ($dueToday as $item):
+                                        $coName = $item['checkout_name'] ?: ($item['reservation_name'] ?: ($item['asset_name_cache'] ?: null));
+                                        $coLabel = $coName ?: ($item['item_count'] . ' item' . ($item['item_count'] != 1 ? 's' : ''));
+                                    ?>
                                         <tr>
                                             <td>
-                                                <span class="text-muted small"><?= h($item['asset_tag']) ?></span>
-                                                <?= h($item['asset_name']) ?>
+                                                <?= h($coLabel) ?>
+                                                <?php if ($coName && $item['item_count'] > 0): ?>
+                                                    <span class="text-muted small">(<?= (int)$item['item_count'] ?> item<?= $item['item_count'] != 1 ? 's' : '' ?>)</span>
+                                                <?php endif; ?>
                                             </td>
                                             <td><?= h($item['user_name']) ?></td>
                                             <td><?= h(app_format_datetime($item['end_datetime'])) ?></td>
+                                            <td>
+                                                <?php if (!empty($item['snipeit_user_id'])): ?>
+                                                    <a href="quick_checkin.php?user=<?= (int)$item['snipeit_user_id'] ?>" class="btn btn-sm btn-outline-primary">
+                                                        Checkin
+                                                    </a>
+                                                <?php endif; ?>
+                                            </td>
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>
@@ -324,17 +345,27 @@ if ($isStaff) {
                         <div class="card-body text-muted">No overdue items.</div>
                     <?php else: ?>
                         <div class="list-group list-group-flush">
-                            <?php foreach ($overdueItems as $item): ?>
+                            <?php foreach ($overdueItems as $item):
+                                $coName = $item['checkout_name'] ?: ($item['reservation_name'] ?: ($item['asset_name_cache'] ?: null));
+                                $coLabel = $coName ?: ($item['item_count'] . ' item' . ($item['item_count'] != 1 ? 's' : ''));
+                            ?>
                                 <div class="list-group-item">
-                                    <div class="d-flex justify-content-between">
+                                    <div class="d-flex justify-content-between align-items-start">
                                         <div>
-                                            <span class="text-muted small"><?= h($item['asset_tag']) ?></span>
-                                            <?= h($item['asset_name']) ?>
+                                            <?= h($coLabel) ?>
+                                            <?php if ($coName && $item['item_count'] > 0): ?>
+                                                <span class="text-muted small">(<?= (int)$item['item_count'] ?> item<?= $item['item_count'] != 1 ? 's' : '' ?>)</span>
+                                            <?php endif; ?>
+                                            <div class="small text-muted">
+                                                <?= h($item['user_name']) ?> &mdash;
+                                                due <?= h(app_format_datetime($item['end_datetime'])) ?>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="small text-muted">
-                                        <?= h($item['user_name']) ?> &mdash;
-                                        due <?= h(app_format_datetime($item['end_datetime'])) ?>
+                                        <?php if (!empty($item['snipeit_user_id'])): ?>
+                                            <a href="quick_checkin.php?user=<?= (int)$item['snipeit_user_id'] ?>" class="btn btn-sm btn-outline-danger">
+                                                Checkin
+                                            </a>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                             <?php endforeach; ?>
