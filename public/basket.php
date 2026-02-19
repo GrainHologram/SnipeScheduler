@@ -260,12 +260,7 @@ if (!empty($basket) && $bookingEmail !== '') {
     ");
     $acStmt->execute([':email' => $bookingEmail]);
     $activeCheckout = $acStmt->fetch(PDO::FETCH_ASSOC);
-    if ($activeCheckout) {
-        $returnDate = app_format_datetime($activeCheckout['end_datetime']);
-        $checkoutWarnings[] = 'You have an active checkout (return expected ' . $returnDate . '). '
-            . 'New items will be appended to your existing checkout. '
-            . 'If the dates differ, consider adjusting the return date.';
-    }
+    $activeCheckoutReturnDate = $activeCheckout ? app_format_datetime($activeCheckout['end_datetime']) : '';
 }
 
 if (!empty($basket)) {
@@ -546,6 +541,17 @@ if (!empty($basket)) {
                         <?php foreach ($checkoutErrors as $err): ?>
                             <li><?= h($err) ?></li>
                         <?php endforeach; ?>
+                    </ul>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!empty($activeCheckout)): ?>
+                <div class="alert alert-warning">
+                    <strong>You have an active checkout</strong> (return expected <?= h($activeCheckoutReturnDate) ?>).
+                    <p class="mb-2 mt-2">New items will be added to your existing checkout and will use the existing return date. Your selected dates will be ignored.</p>
+                    <ul class="mb-0">
+                        <li><strong>To continue:</strong> click <em>Confirm booking</em> below. Items will be appended to your current checkout.</li>
+                        <li><strong>To create a separate reservation:</strong> go back to the <a href="catalogue.php">catalogue</a> and choose dates that don't overlap with your current checkout.</li>
                     </ul>
                 </div>
             <?php endif; ?>
