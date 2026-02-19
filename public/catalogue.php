@@ -837,6 +837,7 @@ if ($catalogueSnipeUserId > 0) {
 // ---------------------------------------------------------------------
 // Filters
 // ---------------------------------------------------------------------
+$tab          = ($_GET['tab'] ?? 'equipment') === 'kits' ? 'kits' : 'equipment';
 $searchRaw    = trim($_GET['q'] ?? '');
 $categoryRaw  = trim($_GET['category'] ?? '');
 $sortRaw      = trim($_GET['sort'] ?? '');
@@ -1100,18 +1101,41 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
         <?php endif; ?>
 
         <div id="catalogue-content" class="<?= $catalogueBlocked ? 'd-none' : '' ?>">
+            <?php
+                // Build query string that preserves filters across tabs
+                $tabQueryParams = array_filter([
+                    'q'              => $searchRaw,
+                    'category'       => $categoryRaw,
+                    'sort'           => $sortRaw,
+                    'start_datetime' => $windowStartRaw,
+                    'end_datetime'   => $windowEndRaw,
+                    'prefetch'       => '1',
+                ], 'strlen');
+            ?>
+            <ul class="nav nav-tabs mb-3">
+                <li class="nav-item">
+                    <a class="nav-link <?= $tab === 'equipment' ? 'active' : '' ?>"
+                       href="catalogue.php?<?= http_build_query(array_merge($tabQueryParams, ['tab' => 'equipment'])) ?>">Equipment</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link <?= $tab === 'kits' ? 'active' : '' ?>"
+                       href="catalogue.php?<?= http_build_query(array_merge($tabQueryParams, ['tab' => 'kits'])) ?>">Kits</a>
+                </li>
+            </ul>
+
             <?php if ($categoryErr): ?>
                 <div class="alert alert-warning">
                     Could not load categories from Snipe-IT: <?= htmlspecialchars($categoryErr) ?>
                 </div>
             <?php endif; ?>
 
-            <?php if ($modelErr): ?>
+            <?php if ($modelErr && $tab === 'equipment'): ?>
                 <div class="alert alert-danger">
                     Error talking to Snipe-IT (models): <?= htmlspecialchars($modelErr) ?>
                 </div>
             <?php endif; ?>
 
+        <?php if ($tab === 'equipment'): ?>
         <!-- Filters -->
 
         <form class="filter-panel mb-4" method="get" action="catalogue.php" id="catalogue-filter-form">
@@ -1120,6 +1144,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 <div class="filter-panel__title">SEARCH</div>
             </div>
 
+            <input type="hidden" name="tab" value="equipment">
             <input type="hidden" name="start_datetime" value="<?= h($windowStartRaw) ?>">
             <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
             <input type="hidden" name="prefetch" value="1">
@@ -1183,6 +1208,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 <span class="filter-panel__dot"></span>
                 <div class="filter-panel__title">RESERVATION WINDOW</div>
             </div>
+            <input type="hidden" name="tab" value="equipment">
             <input type="hidden" name="q" value="<?= h($searchRaw) ?>">
             <input type="hidden" name="category" value="<?= h($categoryRaw) ?>">
             <input type="hidden" name="sort" value="<?= h($sortRaw) ?>">
@@ -1646,6 +1672,372 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 </nav>
             <?php endif; ?>
         <?php endif; ?>
+
+        <?php endif; // end equipment tab ?>
+
+        <?php if ($tab === 'kits'): ?>
+        <!-- Kits tab -->
+        <?php
+            $kitsError = '';
+            $kits = [];
+            $kitCards = [];
+            try {
+                $kits = get_kits();
+            } catch (Throwable $e) {
+                $kitsError = $e->getMessage();
+            }
+
+            if (!empty($kits)) {
+                // For each kit, fetch its models and compute availability
+                $allKitModelIds = [];
+                $kitModelsMap = []; // kitId => array of model entries
+
+                foreach ($kits as $kit) {
+                    $kitId = (int)($kit['id'] ?? 0);
+                    if ($kitId <= 0) continue;
+                    try {
+                        $kitModels = get_kit_models($kitId);
+                        $kitModelsMap[$kitId] = $kitModels;
+                        foreach ($kitModels as $km) {
+                            // Kit models API returns flat objects: id, name, quantity (no nested 'model' key)
+                            $mid = (int)($km['id'] ?? 0);
+                            if ($mid > 0) {
+                                $allKitModelIds[] = $mid;
+                            }
+                        }
+                    } catch (Throwable $e) {
+                        $kitModelsMap[$kitId] = [];
+                    }
+                }
+
+                // Bulk-fetch stats for all models referenced by kits
+                $allKitModelIds = array_unique($allKitModelIds);
+                $kitModelStats = [];
+                if (!empty($allKitModelIds)) {
+                    try {
+                        $kitModelStats = prefetch_catalogue_model_stats($allKitModelIds);
+                    } catch (Throwable $e) {
+                        // Non-fatal
+                    }
+
+                    // Load checked-out counts for "now" mode
+                    if (!$windowActive) {
+                        try {
+                            $stmt = $pdo->query("
+                                SELECT model_id, COUNT(*) AS cnt
+                                  FROM checked_out_asset_cache
+                                 GROUP BY model_id
+                            ");
+                            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                            foreach ($rows as $row) {
+                                $mid = (int)($row['model_id'] ?? 0);
+                                if ($mid > 0 && !isset($checkedOutCounts[$mid])) {
+                                    $checkedOutCounts[$mid] = (int)($row['cnt'] ?? 0);
+                                }
+                            }
+                        } catch (Throwable $e) {
+                            // Non-fatal
+                        }
+                    }
+                }
+
+                // Build kit card data
+                foreach ($kits as $kit) {
+                    $kitId = (int)($kit['id'] ?? 0);
+                    if ($kitId <= 0) continue;
+                    $kitName = $kit['name'] ?? 'Kit';
+                    $kitModels = $kitModelsMap[$kitId] ?? [];
+
+                    if (empty($kitModels)) continue;
+
+                    $modelLines = [];
+                    $modelDetails = []; // per-model data for partial kit UI
+                    $kitCerts = [];
+                    $kitAvailability = PHP_INT_MAX; // min across all models
+                    $bottleneckModel = '';
+                    $hasAvailability = true;
+                    $anyModelAvailable = false;
+
+                    foreach ($kitModels as $km) {
+                        $mid = (int)($km['id'] ?? 0);
+                        $modelName = $km['name'] ?? 'Unknown model';
+                        $kitQty = max(1, (int)($km['quantity'] ?? 1));
+                        $modelLines[] = $kitQty . 'x ' . $modelName;
+
+                        // Stats
+                        $stats = $kitModelStats[$mid] ?? null;
+                        $requestableCount = $stats ? $stats['requestable_count'] : 0;
+
+                        // Cert requirements (union across all models)
+                        if ($stats && !empty($stats['certs'])) {
+                            foreach ($stats['certs'] as $cert) {
+                                $kitCerts[$cert] = true;
+                            }
+                        }
+
+                        $freeUnits = 0;
+
+                        // Compute free units for this model
+                        if ($requestableCount <= 0) {
+                            $kitAvailability = 0;
+                            $hasAvailability = false;
+                        } else {
+                            try {
+                                if ($windowActive) {
+                                    $stmt = $pdo->prepare("
+                                        SELECT COALESCE(SUM(ri.quantity), 0) AS pending_qty
+                                        FROM reservation_items ri
+                                        JOIN reservations r ON r.id = ri.reservation_id
+                                        WHERE ri.model_id = :mid
+                                          AND ri.deleted_at IS NULL
+                                          AND r.status IN ('pending','confirmed')
+                                          AND r.start_datetime < :end
+                                          AND r.end_datetime > :start
+                                    ");
+                                    $stmt->execute([':mid' => $mid, ':start' => $windowStartIso, ':end' => $windowEndIso]);
+                                    $pendingQty = (int)(($stmt->fetch(PDO::FETCH_ASSOC))['pending_qty'] ?? 0);
+
+                                    $coStmt = $pdo->prepare("
+                                        SELECT COUNT(*) AS co_qty
+                                        FROM checkout_items ci
+                                        JOIN checkouts c ON c.id = ci.checkout_id
+                                        WHERE ci.model_id = :mid
+                                          AND ci.checked_in_at IS NULL
+                                          AND c.status IN ('open','partial')
+                                          AND c.start_datetime < :end
+                                          AND c.end_datetime > :start
+                                    ");
+                                    $coStmt->execute([':mid' => $mid, ':start' => $windowStartIso, ':end' => $windowEndIso]);
+                                    $checkedOutQty = (int)(($coStmt->fetch(PDO::FETCH_ASSOC))['co_qty'] ?? 0);
+
+                                    $booked = $pendingQty + $checkedOutQty;
+                                } else {
+                                    $stmt = $pdo->prepare("
+                                        SELECT COALESCE(SUM(ri.quantity), 0) AS pending_qty
+                                        FROM reservation_items ri
+                                        JOIN reservations r ON r.id = ri.reservation_id
+                                        WHERE ri.model_id = :mid
+                                          AND ri.deleted_at IS NULL
+                                          AND r.status IN ('pending','confirmed')
+                                          AND r.start_datetime <= :now
+                                          AND r.end_datetime   > :now
+                                    ");
+                                    $stmt->execute([':mid' => $mid, ':now' => $nowIso]);
+                                    $pendingQty = (int)(($stmt->fetch(PDO::FETCH_ASSOC))['pending_qty'] ?? 0);
+
+                                    $activeCheckedOut = $checkedOutCounts[$mid] ?? count_checked_out_assets_by_model($mid);
+                                    $booked = $pendingQty + $activeCheckedOut;
+                                }
+
+                                $freeUnits = max(0, $requestableCount - $booked);
+                                $kitsFromModel = (int)floor($freeUnits / $kitQty);
+
+                                if ($kitsFromModel < $kitAvailability) {
+                                    $kitAvailability = $kitsFromModel;
+                                    $bottleneckModel = $modelName;
+                                }
+                            } catch (Throwable $e) {
+                                $kitAvailability = 0;
+                                $hasAvailability = false;
+                            }
+                        }
+
+                        if ($freeUnits > 0) {
+                            $anyModelAvailable = true;
+                        }
+
+                        $modelDetails[] = [
+                            'id'       => $mid,
+                            'name'     => $modelName,
+                            'kit_qty'  => $kitQty,
+                            'free'     => $freeUnits,
+                        ];
+                    }
+
+                    if ($kitAvailability === PHP_INT_MAX) {
+                        $kitAvailability = 0;
+                    }
+
+                    // Check cert requirements for current user
+                    $kitCertNames = array_keys($kitCerts);
+                    $kitMissingCerts = [];
+                    if (!empty($kitCertNames) && $catalogueSnipeUserId > 0) {
+                        try {
+                            $kitMissingCerts = check_user_certifications($catalogueSnipeUserId, $kitCertNames);
+                        } catch (Throwable $e) {
+                            // Non-fatal
+                        }
+                    }
+                    $kitCertBlocked = !empty($kitMissingCerts);
+
+                    $kitCards[] = [
+                        'id'              => $kitId,
+                        'name'            => $kitName,
+                        'model_lines'     => $modelLines,
+                        'model_details'   => $modelDetails,
+                        'availability'    => $kitAvailability,
+                        'any_available'   => $anyModelAvailable,
+                        'bottleneck'      => $bottleneckModel,
+                        'certs'           => $kitCertNames,
+                        'cert_blocked'    => $kitCertBlocked,
+                        'missing_certs'   => $kitMissingCerts,
+                    ];
+                }
+            }
+        ?>
+        <?php if ($kitsError): ?>
+            <div class="alert alert-danger">
+                Error loading kits from Snipe-IT: <?= h($kitsError) ?>
+            </div>
+        <?php elseif (empty($kitCards)): ?>
+            <div class="alert alert-info">
+                No kits available. Equipment kits are configured in Snipe-IT.
+            </div>
+        <?php else: ?>
+            <?php if ($windowActive): ?>
+                <div class="alert alert-info">
+                    Showing kit availability for:
+                    <strong>
+                        <?= h(app_format_datetime_local($windowStartIso, null, new DateTimeZone('UTC'))) ?>
+                        &ndash;
+                        <?= h(app_format_datetime_local($windowEndIso, null, new DateTimeZone('UTC'))) ?>
+                    </strong>
+                </div>
+            <?php endif; ?>
+
+            <form class="filter-panel filter-panel--compact mb-4" method="get" action="catalogue.php" id="kits-window-form">
+                <div class="filter-panel__header d-flex align-items-center gap-3">
+                    <span class="filter-panel__dot"></span>
+                    <div class="filter-panel__title">RESERVATION WINDOW</div>
+                </div>
+                <input type="hidden" name="tab" value="kits">
+                <input type="hidden" name="q" value="<?= h($searchRaw) ?>">
+                <input type="hidden" name="category" value="<?= h($categoryRaw) ?>">
+                <input type="hidden" name="sort" value="<?= h($sortRaw) ?>">
+                <input type="hidden" name="prefetch" value="1">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Start date &amp; time</label>
+                        <input type="datetime-local"
+                               name="start_datetime"
+                               id="kits_start_datetime"
+                               class="form-control form-control-lg"
+                               value="<?= h($windowStartRaw) ?>">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">End date &amp; time</label>
+                        <input type="datetime-local"
+                               name="end_datetime"
+                               id="kits_end_datetime"
+                               class="form-control form-control-lg"
+                               value="<?= h($windowEndRaw) ?>">
+                    </div>
+                    <div class="col-md-4 d-grid d-md-flex gap-2">
+                        <button class="btn btn-primary btn-lg w-100 flex-md-fill mt-3 mt-md-0 reservation-window-btn" type="button" id="kits-today-btn">
+                            Today
+                        </button>
+                        <button class="btn btn-primary btn-lg w-100 flex-md-fill mt-3 mt-md-0 reservation-window-btn" type="submit">
+                            Update availability
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <div class="row g-3">
+                <?php foreach ($kitCards as $kitCard): ?>
+                    <div class="col-md-4">
+                        <div class="card h-100 model-card">
+                            <div class="card-body d-flex flex-column">
+                                <h5 class="card-title"><?= h($kitCard['name']) ?></h5>
+                                <div class="small text-muted mb-2">
+                                    <?php foreach ($kitCard['model_lines'] as $line): ?>
+                                        <div><?= h($line) ?></div>
+                                    <?php endforeach; ?>
+                                </div>
+                                <p class="card-text small mb-2">
+                                    <strong><?= $windowActive ? 'Kits available for selected dates:' : 'Kits available now:' ?></strong>
+                                    <?= (int)$kitCard['availability'] ?>
+                                    <?php if ($kitCard['availability'] <= 0 && $kitCard['bottleneck']): ?>
+                                        <span class="text-danger">(limited by <?= h($kitCard['bottleneck']) ?>)</span>
+                                    <?php endif; ?>
+                                </p>
+                                <?php if (!empty($kitCard['certs'])): ?>
+                                    <div class="mb-2">
+                                        <?php foreach ($kitCard['certs'] as $certName): ?>
+                                            <span class="badge bg-warning text-dark">Certification: <?= h($certName) ?></span>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php endif; ?>
+
+                                <form method="post"
+                                      action="basket_add.php"
+                                      class="mt-auto add-to-basket-form">
+                                    <input type="hidden" name="kit_id" value="<?= (int)$kitCard['id'] ?>">
+                                    <?php if ($windowActive): ?>
+                                        <input type="hidden" name="start_datetime" value="<?= h($windowStartRaw) ?>">
+                                        <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
+                                    <?php endif; ?>
+
+                                    <?php if ($accessBlocked): ?>
+                                        <div class="alert alert-warning small mb-0">
+                                            You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-secondary w-100 mt-2" disabled>Add kit to basket</button>
+                                    <?php elseif ($kitCard['cert_blocked']): ?>
+                                        <div class="alert alert-warning small mb-0">
+                                            Requires certification: <?= h(implode(', ', $kitCard['missing_certs'])) ?>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-secondary w-100 mt-2" disabled>Add kit to basket</button>
+                                    <?php elseif ($kitCard['availability'] > 0): ?>
+                                        <div class="row g-2 align-items-center mb-2">
+                                            <div class="col-6">
+                                                <label class="form-label mb-0 small">Kit quantity</label>
+                                                <input type="number"
+                                                       name="kit_quantity"
+                                                       class="form-control form-control-sm"
+                                                       value="1"
+                                                       min="1"
+                                                       max="<?= (int)$kitCard['availability'] ?>">
+                                            </div>
+                                        </div>
+                                        <button type="submit" class="btn btn-sm btn-success w-100">Add kit to basket</button>
+                                    <?php elseif ($kitCard['any_available']): ?>
+                                        <div class="alert alert-secondary small mb-2">
+                                            <?= $windowActive ? 'Not enough stock for a full kit in selected dates.' : 'Not enough stock for a full kit right now.' ?>
+                                            Add individual items below.
+                                        </div>
+                                        <input type="hidden" name="partial" value="1">
+                                        <div class="kit-model-rows mb-2">
+                                            <?php foreach ($kitCard['model_details'] as $md): ?>
+                                                <div class="d-flex align-items-center gap-2 mb-1 small">
+                                                    <span class="flex-grow-1 text-truncate" title="<?= h($md['name']) ?>"><?= h($md['name']) ?></span>
+                                                    <span class="text-muted text-nowrap"><?= (int)$md['free'] ?> avail</span>
+                                                    <input type="number"
+                                                           name="quantities[<?= (int)$md['id'] ?>]"
+                                                           class="form-control form-control-sm"
+                                                           style="width: 64px;"
+                                                           value="<?= min((int)$md['kit_qty'], (int)$md['free']) ?>"
+                                                           min="0"
+                                                           max="<?= (int)$md['free'] ?>"
+                                                           <?= (int)$md['free'] <= 0 ? 'disabled' : '' ?>>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                        <button type="submit" class="btn btn-sm btn-outline-success w-100">Add selected to basket</button>
+                                    <?php else: ?>
+                                        <div class="alert alert-secondary small mb-0">
+                                            <?= $windowActive ? 'No kits available for selected dates.' : 'No kits available right now.' ?>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-secondary w-100 mt-2" disabled>Add kit to basket</button>
+                                    <?php endif; ?>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+        <?php endif; // end kits tab ?>
         </div>
     </div>
 </div>
@@ -1827,6 +2219,65 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     if (todayBtn) {
         todayBtn.addEventListener('click', setTodayWindow);
+    }
+
+    // Kits tab window controls
+    const kitsWindowForm = document.getElementById('kits-window-form');
+    const kitsStartInput = document.getElementById('kits_start_datetime');
+    const kitsEndInput = document.getElementById('kits_end_datetime');
+    const kitsTodayBtn = document.getElementById('kits-today-btn');
+
+    function maybeSubmitKitsWindow() {
+        if (!kitsWindowForm || !kitsStartInput || !kitsEndInput) return;
+        const startVal = kitsStartInput.value.trim();
+        const endVal = kitsEndInput.value.trim();
+        if (startVal === '' || endVal === '') return;
+        const startMs = Date.parse(startVal);
+        const endMs = Date.parse(endVal);
+        if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs <= startMs) return;
+        showLoadingOverlay();
+        kitsWindowForm.submit();
+    }
+
+    function normalizeKitsWindowEnd() {
+        if (!kitsStartInput || !kitsEndInput) return;
+        const startVal = kitsStartInput.value.trim();
+        const endVal = kitsEndInput.value.trim();
+        if (startVal === '' || endVal === '') return;
+        const startMs = Date.parse(startVal);
+        const endMs = Date.parse(endVal);
+        if (Number.isNaN(startMs) || Number.isNaN(endMs)) return;
+        if (endMs <= startMs) {
+            const startDate = new Date(startMs);
+            const nextDay = new Date(startDate);
+            nextDay.setDate(startDate.getDate() + 1);
+            nextDay.setHours(9, 0, 0, 0);
+            kitsEndInput.value = toLocalDatetimeValue(nextDay);
+        }
+    }
+
+    function setKitsTodayWindow() {
+        if (!kitsStartInput || !kitsEndInput) return;
+        const now = new Date();
+        const tomorrow = new Date(now);
+        tomorrow.setDate(now.getDate() + 1);
+        tomorrow.setHours(9, 0, 0, 0);
+        kitsStartInput.value = toLocalDatetimeValue(now);
+        kitsEndInput.value = toLocalDatetimeValue(tomorrow);
+        showLoadingOverlay();
+        maybeSubmitKitsWindow();
+    }
+
+    if (kitsStartInput && kitsEndInput) {
+        kitsStartInput.addEventListener('change', normalizeKitsWindowEnd);
+        kitsEndInput.addEventListener('change', normalizeKitsWindowEnd);
+        kitsStartInput.addEventListener('change', maybeSubmitKitsWindow);
+        kitsEndInput.addEventListener('change', maybeSubmitKitsWindow);
+        kitsStartInput.addEventListener('blur', maybeSubmitKitsWindow);
+        kitsEndInput.addEventListener('blur', maybeSubmitKitsWindow);
+    }
+    if (kitsTodayBtn) {
+        kitsTodayBtn.addEventListener('click', setKitsTodayWindow);
     }
 
     const overdueEnabled = document.body.dataset.catalogueOverdue === '1';

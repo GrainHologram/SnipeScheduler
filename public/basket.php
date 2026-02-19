@@ -370,6 +370,31 @@ if (!empty($basket)) {
                 </div>
             <?php endif; ?>
 
+            <?php
+                // Build kit membership lookup: model_id => [kit_id, ...]
+                $kitGroups = $_SESSION['basket_kit_groups'] ?? [];
+                $kitNames  = $_SESSION['basket_kit_names'] ?? [];
+                $modelKitMap = []; // model_id => kit_id (first kit that contains it)
+                $kitModelIds = []; // kit_id => [model_id, ...]
+                foreach ($kitGroups as $kid => $batches) {
+                    foreach ($batches as $batch) {
+                        foreach ($batch as $entry) {
+                            $mid = (int)($entry['model_id'] ?? 0);
+                            if ($mid > 0) {
+                                $modelKitMap[$mid] = (int)$kid;
+                                $kitModelIds[(int)$kid][] = $mid;
+                            }
+                        }
+                    }
+                }
+                // Deduplicate model lists per kit
+                foreach ($kitModelIds as $kid => $mids) {
+                    $kitModelIds[$kid] = array_unique($mids);
+                }
+
+                // Group models: first render kit-grouped items, then standalone
+                $renderedModelIds = [];
+            ?>
             <div class="table-responsive mb-4">
                 <table class="table table-striped table-bookings align-middle">
                     <thead>
@@ -383,15 +408,31 @@ if (!empty($basket)) {
                         </tr>
                     </thead>
                     <tbody>
-                    <?php foreach ($models as $entry): ?>
-                        <?php
+                    <?php
+                        // Render kit groups first
+                        foreach ($kitModelIds as $kid => $mids):
+                            $kName = $kitNames[$kid] ?? ('Kit #' . $kid);
+                    ?>
+                        <tr class="table-info">
+                            <td colspan="5">
+                                <strong><?= h($kName) ?></strong>
+                                <span class="text-muted small">(kit)</span>
+                            </td>
+                            <td>
+                                <a href="basket_remove.php?kit_id=<?= $kid ?>"
+                                   class="btn btn-sm btn-outline-danger">
+                                    Remove kit
+                                </a>
+                            </td>
+                        </tr>
+                        <?php foreach ($models as $entry):
+                            $mid = (int)$entry['id'];
+                            if (!in_array($mid, $mids)) continue;
+                            $renderedModelIds[$mid] = true;
                             $model = $entry['data'];
-                            $mid   = (int)$entry['id'];
                             $qty   = (int)$entry['qty'];
-
                             $availText = 'Not calculated yet';
                             $warnClass = '';
-
                             if ($previewStart && $previewEnd && isset($availability[$mid])) {
                                 $a = $availability[$mid];
                                 if ($a['total'] > 0 && $a['free'] !== null) {
@@ -407,6 +448,46 @@ if (!empty($basket)) {
                                 }
                             }
                         ?>
+                        <tr>
+                            <td class="ps-4"><?= h($model['name'] ?? 'Model') ?></td>
+                            <td><?= h($model['manufacturer']['name'] ?? '') ?></td>
+                            <td><?= h($model['category']['name'] ?? '') ?></td>
+                            <td><?= $qty ?></td>
+                            <td class="<?= $warnClass ?>"><?= htmlspecialchars($availText) ?></td>
+                            <td>
+                                <a href="basket_remove.php?model_id=<?= (int)$model['id'] ?>"
+                                   class="btn btn-sm btn-outline-danger btn-sm">
+                                    Remove
+                                </a>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    <?php endforeach; ?>
+
+                    <?php
+                        // Render standalone (non-kit) items
+                        foreach ($models as $entry):
+                            $mid = (int)$entry['id'];
+                            if (isset($renderedModelIds[$mid])) continue;
+                            $model = $entry['data'];
+                            $qty   = (int)$entry['qty'];
+                            $availText = 'Not calculated yet';
+                            $warnClass = '';
+                            if ($previewStart && $previewEnd && isset($availability[$mid])) {
+                                $a = $availability[$mid];
+                                if ($a['total'] > 0 && $a['free'] !== null) {
+                                    $availText = $a['free'] . ' of ' . $a['total'] . ' units free';
+                                    if ($qty > $a['free']) {
+                                        $warnClass = 'text-danger fw-semibold';
+                                        $availText .= ' – not enough for requested quantity';
+                                    }
+                                } elseif ($a['total'] > 0) {
+                                    $availText = $a['total'] . ' units total (unable to compute free units)';
+                                } else {
+                                    $availText = 'Availability unknown (no total count from Snipe-IT)';
+                                }
+                            }
+                    ?>
                         <tr>
                             <td><?= h($model['name'] ?? 'Model') ?></td>
                             <td><?= h($model['manufacturer']['name'] ?? '') ?></td>

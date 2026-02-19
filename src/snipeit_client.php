@@ -371,6 +371,79 @@ function get_model_hardware_count(int $modelId): int
 }
 
 /**
+ * Fetch all predefined kits from Snipe-IT.
+ *
+ * Uses 24h outer cache since kit definitions change infrequently.
+ *
+ * @return array  Flat array of kit objects
+ * @throws Exception
+ */
+function get_kits(): array
+{
+    $cacheKey = 'kits_list';
+    $cached = snipeit_cache_get($cacheKey, 86400);
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    $data = snipeit_request('GET', 'kits', ['limit' => 500]);
+    $rows = isset($data['rows']) && is_array($data['rows']) ? $data['rows'] : [];
+
+    snipeit_cache_set($cacheKey, $rows);
+    return $rows;
+}
+
+/**
+ * Fetch a single kit by ID from Snipe-IT.
+ *
+ * @param int $kitId
+ * @return array
+ * @throws Exception
+ */
+function get_kit(int $kitId): array
+{
+    if ($kitId <= 0) {
+        throw new InvalidArgumentException('Invalid kit ID');
+    }
+
+    $cacheKey = 'kit_' . $kitId;
+    $cached = snipeit_cache_get($cacheKey, 86400);
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    $data = snipeit_request('GET', 'kits/' . $kitId);
+    snipeit_cache_set($cacheKey, $data);
+    return $data;
+}
+
+/**
+ * Fetch the models (with quantities) that belong to a kit.
+ *
+ * @param int $kitId
+ * @return array  Array of {model: {...}, quantity: int} entries
+ * @throws Exception
+ */
+function get_kit_models(int $kitId): array
+{
+    if ($kitId <= 0) {
+        throw new InvalidArgumentException('Invalid kit ID');
+    }
+
+    $cacheKey = 'kit_' . $kitId . '_models';
+    $cached = snipeit_cache_get($cacheKey, 86400);
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    $data = snipeit_request('GET', 'kits/' . $kitId . '/models');
+    $rows = isset($data['rows']) && is_array($data['rows']) ? $data['rows'] : [];
+
+    snipeit_cache_set($cacheKey, $rows);
+    return $rows;
+}
+
+/**
  * Find a single asset by asset_tag.
  *
  * This uses the /hardware endpoint with a search, then looks for an
