@@ -130,6 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             unset($_SESSION['selected_reservation_id']);
             unset($_SESSION['reservation_selected_assets']);
             unset($_SESSION['scan_injected_assets']);
+            unset($_SESSION['scan_auth_overrides']);
         }
     }
 }
@@ -277,6 +278,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'select_
     $checkoutAssets = [];
     $_SESSION['reservation_selected_assets'] = [];
     unset($_SESSION['scan_injected_assets']);
+    unset($_SESSION['scan_auth_overrides']);
     header('Location: ' . $selfUrl);
     exit;
 }
@@ -850,6 +852,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $_SESSION['scan_injected_assets'][$resId][$assetId] = $asset;
 
+                // Persist auth override so a badge stays visible in the checkout listing
+                if (!empty($authMissing)) {
+                    if (!isset($_SESSION['scan_auth_overrides'])) {
+                        $_SESSION['scan_auth_overrides'] = [];
+                    }
+                    if (!isset($_SESSION['scan_auth_overrides'][$resId])) {
+                        $_SESSION['scan_auth_overrides'][$resId] = [];
+                    }
+                    $overrideLabel = !empty($authMissing['certs'])
+                        ? 'Missing cert: ' . implode(', ', $authMissing['certs'])
+                        : 'Missing access: ' . implode(', ', $authMissing['access_levels']);
+                    $_SESSION['scan_auth_overrides'][$resId][$assetId] = $overrideLabel;
+                }
+
                 $label = $modelName !== '' ? "{$assetTag} ({$modelName})" : $assetTag;
                 if ($scanWarning !== '') {
                     $_SESSION['scan_flash'] = ['type' => 'warning', 'msg' => "Assigned {$label}. {$scanWarning}"];
@@ -1136,6 +1152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             unset($_SESSION['reservation_selected_assets'][$selectedReservationId]);
                         }
                         unset($_SESSION['scan_injected_assets']);
+                        unset($_SESSION['scan_auth_overrides']);
 
                         activity_log_event('checkout_created', 'Checkout created from reservation', [
                             'subject_type' => 'checkout',
@@ -1621,7 +1638,14 @@ $active  = basename($_SERVER['PHP_SELF']);
                                                     <div class="d-flex flex-column gap-2">
                                                         <?php for ($i = 0; $i < $qty; $i++): ?>
                                                             <div class="d-flex gap-2 align-items-center">
-                                                                <select class="form-select"
+                                                                <?php
+                                                                    $slotSelectedId = $presetSelections[$mid][$i] ?? 0;
+                                                                    $authOverrides = $_SESSION['scan_auth_overrides'][$selectedReservationId] ?? [];
+                                                                    $slotOverride = ($slotSelectedId > 0 && isset($authOverrides[$slotSelectedId]))
+                                                                        ? $authOverrides[$slotSelectedId]
+                                                                        : '';
+                                                                ?>
+                                                                <select class="form-select<?= $slotOverride !== '' ? ' border-warning' : '' ?>"
                                                                         name="selected_assets[<?= $mid ?>][]"
                                                                         data-model-select="<?= $mid ?>">
                                                                     <option value="">-- Select asset --</option>
@@ -1633,12 +1657,14 @@ $active  = basename($_SERVER['PHP_SELF']);
                                                                         $label = $aname !== ''
                                                                             ? trim($atag . ' – ' . $aname)
                                                                             : $atag;
-                                                                        $selectedId = $presetSelections[$mid][$i] ?? 0;
-                                                                        $selectedAttr = $aid > 0 && $selectedId === $aid ? 'selected' : '';
+                                                                        $selectedAttr = $aid > 0 && $slotSelectedId === $aid ? 'selected' : '';
                                                                         ?>
                                                                         <option value="<?= $aid ?>" <?= $selectedAttr ?>><?= h($label) ?></option>
                                                                     <?php endforeach; ?>
                                                                 </select>
+                                                                <?php if ($slotOverride !== ''): ?>
+                                                                    <span class="badge bg-warning text-dark" title="<?= h($slotOverride) ?>">Override</span>
+                                                                <?php endif; ?>
                                                                 <?php $removeOneDeletes = $selectedTotalQty <= 1; ?>
                                                                 <button type="submit"
                                                                         name="remove_slot"
