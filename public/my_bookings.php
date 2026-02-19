@@ -53,6 +53,26 @@ foreach ($reservations as $r) {
     }
 }
 
+// Batch-fetch checkout IDs linked to these reservations
+$reservationCheckouts = [];
+$resIds = array_column($reservations, 'id');
+if (!empty($resIds)) {
+    $placeholders = implode(',', array_fill(0, count($resIds), '?'));
+    $coStmt = $pdo->prepare("
+        SELECT id, reservation_id, status
+          FROM checkouts
+         WHERE reservation_id IN ($placeholders)
+         ORDER BY created_at DESC
+    ");
+    $coStmt->execute(array_values($resIds));
+    foreach ($coStmt->fetchAll(PDO::FETCH_ASSOC) as $co) {
+        $rid = (int)$co['reservation_id'];
+        if (!isset($reservationCheckouts[$rid])) {
+            $reservationCheckouts[$rid] = $co;
+        }
+    }
+}
+
 $checkedOutItems = [];
 $checkedOutError = '';
 if ($tab === 'checked_out') {
@@ -226,6 +246,20 @@ if (!empty($_GET['deleted'])) {
                                         <strong>Checked-out assets:</strong>
                                         <?= h($res['asset_name_cache']) ?>
                                     <?php endif; ?>
+
+                                    <?php $linkedCheckout = $reservationCheckouts[$resId] ?? null; ?>
+                                    <?php if ($linkedCheckout): ?>
+                                        <br><strong>Checkout:</strong>
+                                        <?php if ($isStaff): ?>
+                                            <a href="checkout_history.php?q=<?= urlencode($res['user_name'] ?? '') ?>">
+                                                #<?= (int)$linkedCheckout['id'] ?> (<?= h($linkedCheckout['status']) ?>)
+                                            </a>
+                                        <?php else: ?>
+                                            <a href="my_bookings.php?tab=checked_out">
+                                                #<?= (int)$linkedCheckout['id'] ?> (<?= h($linkedCheckout['status']) ?>)
+                                            </a>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
                                 </p>
 
                                 <?php if (!empty($items)): ?>
@@ -315,6 +349,20 @@ if (!empty($_GET['deleted'])) {
                                         <?php if (!empty($res['asset_name_cache'])): ?>
                                             <strong>Checked-out assets:</strong>
                                             <?= h($res['asset_name_cache']) ?>
+                                        <?php endif; ?>
+
+                                        <?php $linkedCheckout = $reservationCheckouts[$resId] ?? null; ?>
+                                        <?php if ($linkedCheckout): ?>
+                                            <br><strong>Checkout:</strong>
+                                            <?php if ($isStaff): ?>
+                                                <a href="checkout_history.php?q=<?= urlencode($res['user_name'] ?? '') ?>">
+                                                    #<?= (int)$linkedCheckout['id'] ?> (<?= h($linkedCheckout['status']) ?>)
+                                                </a>
+                                            <?php else: ?>
+                                                <a href="my_bookings.php?tab=checked_out">
+                                                    #<?= (int)$linkedCheckout['id'] ?> (<?= h($linkedCheckout['status']) ?>)
+                                                </a>
+                                            <?php endif; ?>
                                         <?php endif; ?>
                                     </p>
 
