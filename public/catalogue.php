@@ -1687,6 +1687,10 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 $kitsError = $e->getMessage();
             }
 
+            if (!empty($kits) && $debugOn) {
+                echo '<!-- DEBUG kits raw: ' . h(json_encode($kits[0] ?? [])) . ' -->';
+            }
+
             if (!empty($kits)) {
                 // For each kit, fetch its models and compute availability
                 $allKitModelIds = [];
@@ -1697,6 +1701,9 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     if ($kitId <= 0) continue;
                     try {
                         $kitModels = get_kit_models($kitId);
+                        if ($debugOn) {
+                            echo '<!-- DEBUG kit ' . $kitId . ' models raw: ' . h(json_encode($kitModels)) . ' -->';
+                        }
                         $kitModelsMap[$kitId] = $kitModels;
                         foreach ($kitModels as $km) {
                             $mid = (int)($km['model']['id'] ?? 0);
