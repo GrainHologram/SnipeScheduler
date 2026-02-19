@@ -59,7 +59,7 @@ if ($kitId > 0) {
     $kitGroupEntries = [];
 
     foreach ($kitModels as $km) {
-        $mid = (int)($km['model']['id'] ?? 0);
+        $mid = (int)($km['id'] ?? 0);
         if ($mid <= 0) continue;
 
         $modelQty = max(1, (int)($km['quantity'] ?? 1));

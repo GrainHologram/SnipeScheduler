@@ -1687,10 +1687,6 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 $kitsError = $e->getMessage();
             }
 
-            if (!empty($kits) && $debugOn) {
-                echo '<!-- DEBUG kits raw: ' . h(json_encode($kits[0] ?? [])) . ' -->';
-            }
-
             if (!empty($kits)) {
                 // For each kit, fetch its models and compute availability
                 $allKitModelIds = [];
@@ -1701,12 +1697,10 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     if ($kitId <= 0) continue;
                     try {
                         $kitModels = get_kit_models($kitId);
-                        if ($debugOn) {
-                            echo '<!-- DEBUG kit ' . $kitId . ' models raw: ' . h(json_encode($kitModels)) . ' -->';
-                        }
                         $kitModelsMap[$kitId] = $kitModels;
                         foreach ($kitModels as $km) {
-                            $mid = (int)($km['model']['id'] ?? 0);
+                            // Kit models API returns flat objects: id, name, quantity (no nested 'model' key)
+                            $mid = (int)($km['id'] ?? 0);
                             if ($mid > 0) {
                                 $allKitModelIds[] = $mid;
                             }
@@ -1763,8 +1757,8 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     $hasAvailability = true;
 
                     foreach ($kitModels as $km) {
-                        $mid = (int)($km['model']['id'] ?? 0);
-                        $modelName = $km['model']['name'] ?? 'Unknown model';
+                        $mid = (int)($km['id'] ?? 0);
+                        $modelName = $km['name'] ?? 'Unknown model';
                         $kitQty = max(1, (int)($km['quantity'] ?? 1));
                         $modelLines[] = $kitQty . 'x ' . $modelName;
 
