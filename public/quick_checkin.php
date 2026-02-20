@@ -709,6 +709,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </div>
 <script>
 (function () {
+    // Play a short beep on successful scan via Web Audio API
+    function playBeep() {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = 880;
+            gain.gain.value = 0.8;
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.15);
+        } catch (e) {}
+    }
+
+    // Beep once when scan input receives focus after a successful scan
+    if (document.querySelector('.alert-success')) {
+        const scanInput = document.querySelector('.asset-autocomplete');
+        if (scanInput) {
+            scanInput.addEventListener('focus', () => playBeep(), { once: true });
+        }
+    }
+
     const assetWrappers = document.querySelectorAll('.asset-autocomplete-wrapper');
     assetWrappers.forEach((wrapper) => {
         const input = wrapper.querySelector('.asset-autocomplete');
