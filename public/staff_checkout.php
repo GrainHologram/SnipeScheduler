@@ -1738,10 +1738,31 @@ $active  = basename($_SERVER['PHP_SELF']);
         sessionStorage.removeItem(scrollKey);
     }
 
+    // Play a short beep on successful scan via Web Audio API
+    function playBeep() {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = 880;
+            gain.gain.value = 0.8;
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.15);
+        } catch (e) {}
+    }
+
     // Auto-focus scan input after scroll restoration
     const scanInput = document.getElementById('scan-tag-input');
     if (scanInput) {
-        setTimeout(() => scanInput.focus(), 50);
+        setTimeout(() => {
+            scanInput.focus();
+            if (document.querySelector('.alert-success')) {
+                playBeep();
+            }
+        }, 50);
     }
 
     document.addEventListener('click', (event) => {
