@@ -19,6 +19,10 @@ require_once SRC_PATH . '/snipeit_client.php';
 require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/activity_log.php';
 
+// Bypass API cache — sync must always use fresh data from Snipe-IT
+// to avoid false returns caused by stale cached hardware listings.
+$cacheTtl = 0;
+
 function sync_log(string $msg): void
 {
     echo '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n";
