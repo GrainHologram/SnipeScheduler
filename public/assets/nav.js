@@ -72,5 +72,17 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.app-nav').forEach(enhanceNav);
+
+        // Sticky scan bar — toggle .stuck class when sentinel scrolls out of view
+        document.querySelectorAll('.sticky-scan-sentinel').forEach(function(sentinel) {
+            var bar = sentinel.nextElementSibling;
+            if (!bar || !bar.classList.contains('sticky-scan-bar')) return;
+            var observer = new IntersectionObserver(function(entries) {
+                entries.forEach(function(entry) {
+                    bar.classList.toggle('stuck', !entry.isIntersecting);
+                });
+            }, { threshold: 0 });
+            observer.observe(sentinel);
+        });
     });
 })();

@@ -1545,27 +1545,30 @@ $active  = basename($_SERVER['PHP_SELF']);
                         Choose assets for each model in reservation #<?= (int)$selectedReservation['id'] ?>.
                     </p>
 
-                    <form method="post" action="<?= h($selfUrl) ?>" id="scan-form">
-                        <input type="hidden" name="mode" value="scan_asset">
-                        <div class="row g-2 align-items-end mb-3">
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">Find or scan asset</label>
-                                <div class="position-relative asset-autocomplete-wrapper">
-                                    <input type="text" name="scan_tag" id="scan-tag-input"
-                                           class="form-control asset-autocomplete"
-                                           autocomplete="off"
-                                           placeholder="Scan barcode or search by name, model..." autofocus>
-                                    <div class="list-group position-absolute w-100"
-                                         data-asset-suggestions
-                                         style="z-index: 1050; max-height: 220px; overflow-y: auto; display: none;"></div>
+                    <div class="sticky-scan-sentinel"></div>
+                    <div class="sticky-scan-bar bg-white rounded-top p-3 mb-0">
+                        <form method="post" action="<?= h($selfUrl) ?>" id="scan-form">
+                            <input type="hidden" name="mode" value="scan_asset">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold mb-1">Find or scan asset</label>
+                                    <div class="position-relative asset-autocomplete-wrapper">
+                                        <input type="text" name="scan_tag" id="scan-tag-input"
+                                               class="form-control asset-autocomplete"
+                                               autocomplete="off"
+                                               placeholder="Scan barcode or search by name, model..." autofocus>
+                                        <div class="list-group position-absolute w-100"
+                                             data-asset-suggestions
+                                             style="z-index: 1050; max-height: 220px; overflow-y: auto; display: none;"></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 d-grid">
+                                    <button type="submit" class="btn btn-outline-primary">Assign</button>
                                 </div>
                             </div>
-                            <div class="col-md-3 d-grid">
-                                <button type="submit" class="btn btn-outline-primary">Assign</button>
-                            </div>
-                        </div>
-                    </form>
-                    <hr>
+                        </form>
+                    </div>
+                    <hr class="mt-0">
 
                     <form method="post" action="<?= h($selfUrl) ?>">
                         <?php foreach ($baseQuery as $k => $v): ?>
