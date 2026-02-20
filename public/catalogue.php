@@ -16,6 +16,7 @@ $msEnabled     = !empty($authCfg['microsoft_oauth_enabled']);
 
 $bookingOverride = $_SESSION['booking_user_override'] ?? null;
 $activeUser      = $bookingOverride ?: $currentUser;
+$staffNoUserSelected = $isStaff && !$bookingOverride;
 
 $ldapCfg  = $config['ldap'] ?? [];
 $appCfg   = $config['app'] ?? [];
@@ -832,7 +833,7 @@ if ($catalogueSnipeUserId <= 0) {
 // Access group gate: user must belong to at least one "Access - *" group
 // ---------------------------------------------------------------------
 $accessBlocked = false;
-if ($catalogueSnipeUserId > 0) {
+if ($catalogueSnipeUserId > 0 && !$staffNoUserSelected) {
     $accessBlocked = !check_user_has_access_group($catalogueSnipeUserId);
 }
 
@@ -1067,20 +1068,24 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             ?>
             <div class="alert alert-info d-flex flex-column flex-md-row align-items-md-center justify-content-md-between booking-for-alert">
                 <div class="mb-2 mb-md-0">
-                    <strong>Booking for:</strong>
-                    <?= h($activeUser['email'] ?? '') ?>
-                    <?php if (!empty($activeUser['first_name'])): ?>
-                        (<?= h(trim(($activeUser['first_name'] ?? '') . ' ' . ($activeUser['last_name'] ?? ''))) ?>)
-                    <?php endif; ?>
-                    <?php if (!empty($userAccessLevels) || !empty($userCerts)): ?>
-                        <span class="ms-2">
-                            <?php foreach ($userAccessLevels as $level): ?>
-                                <span class="badge bg-info text-dark"><?= h($level) ?></span>
-                            <?php endforeach; ?>
-                            <?php foreach ($userCerts as $cert): ?>
-                                <span class="badge bg-warning text-dark"><?= h($cert) ?></span>
-                            <?php endforeach; ?>
-                        </span>
+                    <?php if ($staffNoUserSelected): ?>
+                        <strong>No user selected</strong> — search to begin booking
+                    <?php else: ?>
+                        <strong>Booking for:</strong>
+                        <?= h($activeUser['email'] ?? '') ?>
+                        <?php if (!empty($activeUser['first_name'])): ?>
+                            (<?= h(trim(($activeUser['first_name'] ?? '') . ' ' . ($activeUser['last_name'] ?? ''))) ?>)
+                        <?php endif; ?>
+                        <?php if (!empty($userAccessLevels) || !empty($userCerts)): ?>
+                            <span class="ms-2">
+                                <?php foreach ($userAccessLevels as $level): ?>
+                                    <span class="badge bg-info text-dark"><?= h($level) ?></span>
+                                <?php endforeach; ?>
+                                <?php foreach ($userCerts as $cert): ?>
+                                    <span class="badge bg-warning text-dark"><?= h($cert) ?></span>
+                                <?php endforeach; ?>
+                            </span>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
                 <form method="post" id="booking_user_form" class="d-flex gap-2 mb-0 flex-wrap position-relative" style="z-index: 9998;">
@@ -1098,7 +1103,9 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                              style="z-index: 9999; max-height: 260px; overflow-y: auto; display: none; box-shadow: 0 12px 24px rgba(0,0,0,0.18);"></div>
                     </div>
                     <button class="btn btn-sm btn-primary" type="submit">Use</button>
-                    <button class="btn btn-sm btn-outline-secondary" type="submit" name="booking_user_revert" value="1">Revert to logged in user</button>
+                    <?php if ($bookingOverride): ?>
+                        <button class="btn btn-sm btn-outline-secondary" type="submit" name="booking_user_revert" value="1">Revert to logged in user</button>
+                    <?php endif; ?>
                 </form>
             </div>
         <?php endif; ?>
@@ -1489,7 +1496,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     ];
                     $authMissing = [];
                     try {
-                        if ((!empty($authReqs['certs']) || !empty($authReqs['access_levels'])) && $catalogueSnipeUserId > 0) {
+                        if ((!empty($authReqs['certs']) || !empty($authReqs['access_levels'])) && $catalogueSnipeUserId > 0 && !$staffNoUserSelected) {
                             $authMissing = check_model_authorization($catalogueSnipeUserId, $authReqs);
                         }
                     } catch (Throwable $e) {
@@ -1625,7 +1632,10 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                         <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
                                     <?php endif; ?>
 
-                                    <?php if ($accessBlocked): ?>
+                                    <?php if ($staffNoUserSelected): ?>
+                                        <div class="alert alert-info small mb-0">Select a user above before adding to basket.</div>
+                                        <button type="button" class="btn btn-sm btn-secondary w-100 mt-2" disabled>Add to basket</button>
+                                    <?php elseif ($accessBlocked): ?>
                                         <div class="alert alert-warning small mb-0">
                                             You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.
                                         </div>
@@ -1909,7 +1919,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         'access_levels' => array_keys($kitAccessLevels),
                     ];
                     $kitAuthMissing = [];
-                    if ((!empty($kitAuthReqs['certs']) || !empty($kitAuthReqs['access_levels'])) && $catalogueSnipeUserId > 0) {
+                    if ((!empty($kitAuthReqs['certs']) || !empty($kitAuthReqs['access_levels'])) && $catalogueSnipeUserId > 0 && !$staffNoUserSelected) {
                         try {
                             $kitAuthMissing = check_model_authorization($catalogueSnipeUserId, $kitAuthReqs);
                         } catch (Throwable $e) {
@@ -2034,7 +2044,10 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                         <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
                                     <?php endif; ?>
 
-                                    <?php if ($accessBlocked): ?>
+                                    <?php if ($staffNoUserSelected): ?>
+                                        <div class="alert alert-info small mb-0">Select a user above before adding to basket.</div>
+                                        <button type="button" class="btn btn-sm btn-secondary w-100 mt-2" disabled>Add kit to basket</button>
+                                    <?php elseif ($accessBlocked): ?>
                                         <div class="alert alert-warning small mb-0">
                                             You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.
                                         </div>

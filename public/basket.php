@@ -176,6 +176,10 @@ if (!empty($basket)) {
 $checkoutErrors = [];
 $userOverride = $_SESSION['booking_user_override'] ?? null;
 $bookingUser  = $userOverride ?: $currentUser;
+$staffNoUserSelected = $isStaff && !$userOverride;
+if ($staffNoUserSelected) {
+    $checkoutErrors[] = 'Please select a user in the catalogue before submitting a reservation.';
+}
 $snipeUserId = (int)($bookingUser['snipeit_user_id'] ?? 0);
 if ($snipeUserId <= 0) {
     $snipeUserId = resolve_snipeit_user_id($bookingUser['email'] ?? '');
