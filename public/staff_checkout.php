@@ -1812,7 +1812,7 @@ $active  = basename($_SERVER['PHP_SELF']);
 
         function fetchSuggestions(q) {
             lastQuery = q;
-            fetch('<?= h($ajaxBase) ?>ajax=user_search&q=' + encodeURIComponent(q), {
+            fetch(<?= json_encode($ajaxBase) ?> + 'ajax=user_search&q=' + encodeURIComponent(q), {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             })
                 .then((res) => res.ok ? res.json() : Promise.reject())
@@ -1939,7 +1939,7 @@ $active  = basename($_SERVER['PHP_SELF']);
 
         function fetchSuggestions(q) {
             lastQuery = q;
-            fetch('<?= h($ajaxBase) ?>ajax=asset_search&q=' + encodeURIComponent(q), {
+            fetch(<?= json_encode($ajaxBase) ?> + 'ajax=asset_search&q=' + encodeURIComponent(q), {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             })
                 .then((res) => res.ok ? res.json() : Promise.reject())
