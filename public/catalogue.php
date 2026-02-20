@@ -2447,11 +2447,11 @@ document.addEventListener('DOMContentLoaded', function () {
             btn.type = 'button';
             btn.className = 'list-group-item list-group-item-action';
             btn.textContent = label;
-            btn.addEventListener('click', function () {
-                bookingInput.value = label;
+            btn.addEventListener('mousedown', function (e) {
+                e.preventDefault();
                 bookingEmail.value = email;
                 bookingName.value  = name || email;
-                hideBookingSuggestions();
+                document.getElementById('booking_user_form').submit();
             });
             bookingList.appendChild(btn);
         });
