@@ -1538,37 +1538,37 @@ $active  = basename($_SERVER['PHP_SELF']);
 
         <!-- Reservation checkout (per booking) -->
         <?php if ($selectedReservation): ?>
+            <div class="sticky-scan-sentinel"></div>
+            <div class="card mb-3 sticky-scan-bar">
+                <div class="card-body py-2">
+                    <form method="post" action="<?= h($selfUrl) ?>" id="scan-form">
+                        <input type="hidden" name="mode" value="scan_asset">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold mb-1">Find or scan asset</label>
+                                <div class="position-relative asset-autocomplete-wrapper">
+                                    <input type="text" name="scan_tag" id="scan-tag-input"
+                                           class="form-control asset-autocomplete"
+                                           autocomplete="off"
+                                           placeholder="Scan barcode or search by name, model..." autofocus>
+                                    <div class="list-group position-absolute w-100"
+                                         data-asset-suggestions
+                                         style="z-index: 1050; max-height: 220px; overflow-y: auto; display: none;"></div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 d-grid">
+                                <button type="submit" class="btn btn-outline-primary">Assign</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
             <div class="card mb-4">
                 <div class="card-body">
                     <h5 class="card-title">Reservation checkout</h5>
                     <p class="card-text">
                         Choose assets for each model in reservation #<?= (int)$selectedReservation['id'] ?>.
                     </p>
-
-                    <div class="sticky-scan-sentinel"></div>
-                    <div class="sticky-scan-bar bg-white rounded-top p-3 mb-0">
-                        <form method="post" action="<?= h($selfUrl) ?>" id="scan-form">
-                            <input type="hidden" name="mode" value="scan_asset">
-                            <div class="row g-2 align-items-end">
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold mb-1">Find or scan asset</label>
-                                    <div class="position-relative asset-autocomplete-wrapper">
-                                        <input type="text" name="scan_tag" id="scan-tag-input"
-                                               class="form-control asset-autocomplete"
-                                               autocomplete="off"
-                                               placeholder="Scan barcode or search by name, model..." autofocus>
-                                        <div class="list-group position-absolute w-100"
-                                             data-asset-suggestions
-                                             style="z-index: 1050; max-height: 220px; overflow-y: auto; display: none;"></div>
-                                    </div>
-                                </div>
-                                <div class="col-md-3 d-grid">
-                                    <button type="submit" class="btn btn-outline-primary">Assign</button>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                    <hr class="mt-0">
 
                     <form method="post" action="<?= h($selfUrl) ?>">
                         <?php foreach ($baseQuery as $k => $v): ?>
