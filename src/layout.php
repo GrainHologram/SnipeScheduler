@@ -125,6 +125,8 @@ if (!function_exists('layout_theme_styles')) {
 </style>
 CSS;
 
+        $style .= "\n" . '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">';
+
         return $style;
     }
 }
@@ -245,6 +247,8 @@ if (!function_exists('layout_footer')) {
         $commitSuffix = $commitHash !== '' ? ' (' . $commitHash . ')' : '';
 
         echo '<script src="assets/nav.js"></script>';
+        echo '<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>';
+        echo '<script src="assets/datetime-picker.js"></script>';
         echo '<footer class="text-center text-muted mt-4 small">'
             . 'SnipeScheduler Version ' . $versionEsc . $commitSuffix . ' - Created by '
             . '<a href="https://www.linkedin.com/in/ben-pirozzolo-76212a88" target="_blank" rel="noopener noreferrer">Ben Pirozzolo</a>'
