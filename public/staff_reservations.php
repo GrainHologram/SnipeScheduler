@@ -13,6 +13,18 @@ $embedded  = defined('RESERVATIONS_EMBED');
 $pageBase  = $embedded ? 'reservations.php' : 'staff_reservations.php';
 $baseQuery = $embedded ? ['tab' => 'history'] : [];
 $editSuffix = $embedded ? '&from=reservations' : '';
+$todayPageBase = $embedded ? 'reservations.php' : 'staff_checkout.php';
+$todayBaseQuery = $embedded ? ['tab' => 'today'] : [];
+
+// Compute today's UTC boundaries for "Process" link visibility
+$_srConfig = load_config();
+$_srTz     = new DateTimeZone($_srConfig['app']['timezone'] ?? 'UTC');
+$_srUtc    = new DateTimeZone('UTC');
+$_srNow    = new DateTime('now', $_srTz);
+$_srTodayStart = new DateTime($_srNow->format('Y-m-d') . ' 00:00:00', $_srTz);
+$_srTodayEnd   = new DateTime($_srNow->format('Y-m-d') . ' 23:59:59', $_srTz);
+$todayUtcStart = $_srTodayStart->setTimezone($_srUtc)->format('Y-m-d H:i:s');
+$todayUtcEnd   = $_srTodayEnd->setTimezone($_srUtc)->format('Y-m-d H:i:s');
 
 function display_date(?string $isoDate): string
 {
@@ -480,6 +492,28 @@ try {
                                                class="btn btn-sm btn-outline-primary btn-action">
                                                 Edit
                                             </a>
+                                        <?php endif; ?>
+                                        <?php
+                                            $startsToday = ($r['start_datetime'] ?? '') >= $todayUtcStart
+                                                        && ($r['start_datetime'] ?? '') <= $todayUtcEnd;
+                                            if (in_array($status, ['pending', 'confirmed'], true) && $startsToday):
+                                        ?>
+                                            <?php
+                                                $processUrl = $todayPageBase;
+                                                if (!empty($todayBaseQuery)) {
+                                                    $processUrl .= '?' . http_build_query($todayBaseQuery);
+                                                }
+                                            ?>
+                                            <form method="post" action="<?= h($processUrl) ?>" class="d-inline">
+                                                <input type="hidden" name="mode" value="select_reservation">
+                                                <input type="hidden" name="reservation_id" value="<?= (int)$r['id'] ?>">
+                                                <?php foreach ($todayBaseQuery as $k => $v): ?>
+                                                    <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
+                                                <?php endforeach; ?>
+                                                <button type="submit" class="btn btn-sm btn-outline-success btn-action">
+                                                    Process
+                                                </button>
+                                            </form>
                                         <?php endif; ?>
                                         <?php if ($status === 'missed'): ?>
                                             <form method="post" action="<?= h($actionUrl) ?>">
