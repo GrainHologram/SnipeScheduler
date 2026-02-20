@@ -709,29 +709,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </div>
 <script>
 (function () {
-    // Beep on first user interaction after a successful scan (deferred for autoplay policy)
-    if (document.querySelector('.alert-success')) {
-        const ac = new AbortController();
-        function beepOnce() {
-            ac.abort();
-            try {
-                const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.type = 'sine';
-                osc.frequency.value = 880;
-                gain.gain.value = 0.8;
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.start();
-                osc.stop(ctx.currentTime + 0.15);
-            } catch (e) {}
-        }
-        document.addEventListener('keydown', beepOnce, { signal: ac.signal });
-        document.addEventListener('click', beepOnce, { signal: ac.signal });
-        document.addEventListener('touchstart', beepOnce, { signal: ac.signal });
-    }
-
     const assetWrappers = document.querySelectorAll('.asset-autocomplete-wrapper');
     assetWrappers.forEach((wrapper) => {
         const input = wrapper.querySelector('.asset-autocomplete');
