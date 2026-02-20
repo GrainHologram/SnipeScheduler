@@ -1538,18 +1538,14 @@ $active  = basename($_SERVER['PHP_SELF']);
 
         <!-- Reservation checkout (per booking) -->
         <?php if ($selectedReservation): ?>
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h5 class="card-title">Reservation checkout</h5>
-                    <p class="card-text">
-                        Choose assets for each model in reservation #<?= (int)$selectedReservation['id'] ?>.
-                    </p>
-
+            <div class="sticky-scan-sentinel"></div>
+            <div class="card mb-3 sticky-scan-bar">
+                <div class="card-body py-2">
                     <form method="post" action="<?= h($selfUrl) ?>" id="scan-form">
                         <input type="hidden" name="mode" value="scan_asset">
-                        <div class="row g-2 align-items-end mb-3">
+                        <div class="row g-2 align-items-end">
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold">Find or scan asset</label>
+                                <label class="form-label fw-semibold mb-1">Find or scan asset</label>
                                 <div class="position-relative asset-autocomplete-wrapper">
                                     <input type="text" name="scan_tag" id="scan-tag-input"
                                            class="form-control asset-autocomplete"
@@ -1565,7 +1561,14 @@ $active  = basename($_SERVER['PHP_SELF']);
                             </div>
                         </div>
                     </form>
-                    <hr>
+                </div>
+            </div>
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Reservation checkout</h5>
+                    <p class="card-text">
+                        Choose assets for each model in reservation #<?= (int)$selectedReservation['id'] ?>.
+                    </p>
 
                     <form method="post" action="<?= h($selfUrl) ?>">
                         <?php foreach ($baseQuery as $k => $v): ?>

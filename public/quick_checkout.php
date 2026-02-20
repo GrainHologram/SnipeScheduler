@@ -544,18 +544,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php endif; ?>
 
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Bulk checkout (via Snipe-IT)</h5>
-                <p class="card-text">
-                    Scan or type asset tags to add them to the checkout list. When ready, enter
-                    the Snipe-IT user (email or name) and check out all items in one go.
-                </p>
-
-                <form method="post" class="row g-2 mb-3">
+        <div class="sticky-scan-sentinel"></div>
+        <div class="card mb-3 sticky-scan-bar">
+            <div class="card-body py-2">
+                <form method="post" class="row g-2 align-items-end">
                     <input type="hidden" name="mode" value="add_asset">
-                    <div class="col-md-6">
-                        <label class="form-label">Find or scan asset</label>
+                    <div class="col">
+                        <label class="form-label mb-1 fw-semibold">Find or scan asset</label>
                         <div class="position-relative asset-autocomplete-wrapper">
                             <input type="text"
                                    name="asset_tag"
@@ -568,12 +563,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                  style="z-index: 1050; max-height: 220px; overflow-y: auto; display: none;"></div>
                         </div>
                     </div>
-                    <div class="col-md-3 d-grid align-items-end">
-                        <button type="submit" class="btn btn-outline-primary mt-4 mt-md-0">
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-outline-primary">
                             Add to checkout list
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Bulk checkout (via Snipe-IT)</h5>
+                <p class="card-text">
+                    Scan or type asset tags to add them to the checkout list. When ready, enter
+                    the Snipe-IT user (email or name) and check out all items in one go.
+                </p>
 
                 <?php if (empty($checkoutAssets)): ?>
                     <div class="alert alert-secondary">
