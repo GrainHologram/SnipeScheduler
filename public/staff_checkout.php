@@ -95,9 +95,10 @@ if (($_GET['ajax'] ?? '') === 'asset_search') {
         $results = [];
         foreach ($rows as $row) {
             $results[] = [
-                'asset_tag' => $row['asset_tag'] ?? '',
-                'name'      => $row['name'] ?? '',
-                'model'     => $row['model']['name'] ?? '',
+                'asset_tag'    => $row['asset_tag'] ?? '',
+                'name'         => $row['name'] ?? '',
+                'model'        => $row['model']['name'] ?? '',
+                'manufacturer' => $row['manufacturer']['name'] ?? '',
             ];
         }
         echo json_encode(['results' => $results]);
@@ -1509,12 +1510,12 @@ $active  = basename($_SERVER['PHP_SELF']);
                         <input type="hidden" name="mode" value="scan_asset">
                         <div class="row g-2 align-items-end mb-3">
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold">Scan asset barcode</label>
+                                <label class="form-label fw-semibold">Find or scan asset</label>
                                 <div class="position-relative asset-autocomplete-wrapper">
                                     <input type="text" name="scan_tag" id="scan-tag-input"
                                            class="form-control asset-autocomplete"
                                            autocomplete="off"
-                                           placeholder="Scan or type asset tag..." autofocus>
+                                           placeholder="Scan barcode or search by name, model..." autofocus>
                                     <div class="list-group position-absolute w-100"
                                          data-asset-suggestions
                                          style="z-index: 1050; max-height: 220px; overflow-y: auto; display: none;"></div>
@@ -1937,14 +1938,33 @@ $active  = basename($_SERVER['PHP_SELF']);
 
             items.forEach((item) => {
                 const tag = item.asset_tag || '';
+                const name = item.name || '';
                 const model = item.model || '';
-                const label = model !== '' ? `${tag} [${model}]` : tag;
+                const manufacturer = item.manufacturer || '';
 
                 const btn = document.createElement('button');
                 btn.type = 'button';
-                btn.className = 'list-group-item list-group-item-action';
-                btn.textContent = label;
+                btn.className = 'list-group-item list-group-item-action py-1 px-3';
                 btn.dataset.value = tag;
+
+                const primary = document.createElement('div');
+                const tagSpan = document.createElement('strong');
+                tagSpan.textContent = tag;
+                primary.appendChild(tagSpan);
+                if (name) {
+                    const nameSpan = document.createElement('span');
+                    nameSpan.textContent = ' ' + name;
+                    primary.appendChild(nameSpan);
+                }
+                btn.appendChild(primary);
+
+                if (model || manufacturer) {
+                    const secondary = document.createElement('div');
+                    secondary.className = 'text-muted small';
+                    const parts = [model, manufacturer].filter(Boolean);
+                    secondary.textContent = parts.join(' \u2013 ');
+                    btn.appendChild(secondary);
+                }
 
                 btn.addEventListener('click', () => {
                     input.value = btn.dataset.value;
