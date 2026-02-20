@@ -2166,14 +2166,22 @@ document.addEventListener('DOMContentLoaded', function () {
             + ':' + pad(date.getMinutes());
     }
 
+    function setPickerValue(input, val) {
+        if (input._flatpickr) {
+            input._flatpickr.setDate(val, true);
+        } else {
+            input.value = val;
+        }
+    }
+
     function setTodayWindow() {
         if (!windowStartInput || !windowEndInput) return;
         const now = new Date();
         const tomorrow = new Date(now);
         tomorrow.setDate(now.getDate() + 1);
         tomorrow.setHours(9, 0, 0, 0);
-        windowStartInput.value = toLocalDatetimeValue(now);
-        windowEndInput.value = toLocalDatetimeValue(tomorrow);
+        setPickerValue(windowStartInput, toLocalDatetimeValue(now));
+        setPickerValue(windowEndInput, toLocalDatetimeValue(tomorrow));
         showLoadingOverlay();
         maybeSubmitWindow();
     }
@@ -2191,7 +2199,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const nextDay = new Date(startDate);
             nextDay.setDate(startDate.getDate() + 1);
             nextDay.setHours(9, 0, 0, 0);
-            windowEndInput.value = toLocalDatetimeValue(nextDay);
+            setPickerValue(windowEndInput, toLocalDatetimeValue(nextDay));
         }
     }
 
@@ -2312,7 +2320,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const nextDay = new Date(startDate);
             nextDay.setDate(startDate.getDate() + 1);
             nextDay.setHours(9, 0, 0, 0);
-            kitsEndInput.value = toLocalDatetimeValue(nextDay);
+            setPickerValue(kitsEndInput, toLocalDatetimeValue(nextDay));
         }
     }
 
@@ -2322,8 +2330,8 @@ document.addEventListener('DOMContentLoaded', function () {
         const tomorrow = new Date(now);
         tomorrow.setDate(now.getDate() + 1);
         tomorrow.setHours(9, 0, 0, 0);
-        kitsStartInput.value = toLocalDatetimeValue(now);
-        kitsEndInput.value = toLocalDatetimeValue(tomorrow);
+        setPickerValue(kitsStartInput, toLocalDatetimeValue(now));
+        setPickerValue(kitsEndInput, toLocalDatetimeValue(tomorrow));
         showLoadingOverlay();
         maybeSubmitKitsWindow();
     }

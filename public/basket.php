@@ -610,6 +610,14 @@ document.addEventListener('DOMContentLoaded', function () {
             + ':' + pad(date.getMinutes());
     }
 
+    function setPickerValue(input, val) {
+        if (input._flatpickr) {
+            input._flatpickr.setDate(val, true);
+        } else {
+            input.value = val;
+        }
+    }
+
     function normalizeWindowEnd() {
         if (!startInput || !endInput) return;
         const startVal = startInput.value.trim();
@@ -623,7 +631,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const nextDay = new Date(startDate);
             nextDay.setDate(startDate.getDate() + 1);
             nextDay.setHours(9, 0, 0, 0);
-            endInput.value = toLocalDatetimeValue(nextDay);
+            setPickerValue(endInput, toLocalDatetimeValue(nextDay));
         }
     }
 

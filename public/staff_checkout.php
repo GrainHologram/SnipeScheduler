@@ -29,6 +29,8 @@ $tz       = new DateTimeZone($timezone);
 $utc      = new DateTimeZone('UTC');
 $now      = new DateTime('now', $tz);
 $todayStr = $now->format('Y-m-d');
+$clCfg    = checkout_limits_config();
+$staffDateOverride = !empty($clCfg['staff_date_override']);
 // UTC boundaries of "today" in the app's local timezone (start_datetime is stored in UTC)
 $todayLocalStart = new DateTime($todayStr . ' 00:00:00', $tz);
 $todayLocalEnd   = new DateTime($todayStr . ' 23:59:59', $tz);
@@ -255,6 +257,9 @@ $bulkNoteValue = '';
 $reservationNoteValue = '';
 $showAppendOverride = false;
 $activeCheckoutExpected = '';
+$overrideStart = '';
+$overrideEnd   = '';
+$dateConflictWarnings = [];
 
 // Current counts per model already in checkout list (for quota enforcement)
 $currentModelCounts = [];
@@ -965,6 +970,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $checkoutErrors[] = 'This reservation has no associated user name.';
             }
 
+            // Staff date override: accept custom start/end from POST
+            if ($staffDateOverride) {
+                $overrideStart = trim($_POST['override_start_datetime'] ?? '');
+                $overrideEnd   = trim($_POST['override_end_datetime'] ?? '');
+
+                if ($overrideStart !== '' && $overrideEnd !== '') {
+                    try {
+                        $overrideStartDt = new DateTime($overrideStart, $tz);
+                        $overrideEndDt   = new DateTime($overrideEnd, $tz);
+                        if ($overrideEndDt <= $overrideStartDt) {
+                            $checkoutErrors[] = 'End date/time must be after start date/time.';
+                        } else {
+                            $selectedStart = $overrideStartDt->setTimezone($utc)->format('Y-m-d H:i:s');
+                            $selectedEnd   = $overrideEndDt->setTimezone($utc)->format('Y-m-d H:i:s');
+                        }
+                    } catch (Throwable $e) {
+                        $checkoutErrors[] = 'Invalid override date/time format.';
+                    }
+                }
+            }
+
+            // Conflict detection for overridden date window
+            if ($overrideStart !== '' && $overrideEnd !== '' && empty($checkoutErrors)) {
+                foreach ($selectedItems as $item) {
+                    $mid = (int)($item['model_id'] ?? 0);
+                    if ($mid > 0 && model_booked_elsewhere($pdo, $mid, $selectedStart, $selectedEnd, $selectedReservationId)) {
+                        $dateConflictWarnings[] = ($item['name'] ?? "Model #$mid")
+                            . ' has overlapping reservations/checkouts in this window.';
+                    }
+                }
+            }
+
             $selectedAssetsInput = $_POST['selected_assets'] ?? [];
             $assetsToCheckout    = [];
 
@@ -1480,6 +1517,8 @@ $active  = basename($_SERVER['PHP_SELF']);
                         <input type="hidden" name="append_to_active" value="1">
                         <input type="hidden" name="reservation_note" value="<?= h($reservationNoteValue) ?>">
                         <input type="hidden" name="reservation_user_id" value="<?= (int)$selectedReservationUserId ?>">
+                        <input type="hidden" name="override_start_datetime" value="<?= h($overrideStart) ?>">
+                        <input type="hidden" name="override_end_datetime" value="<?= h($overrideEnd) ?>">
                         <?php foreach ($selectedItems as $item): ?>
                             <?php
                                 $mid = (int)$item['model_id'];
@@ -1579,6 +1618,81 @@ $active  = basename($_SERVER['PHP_SELF']);
                                     </select>
                                     <div class="form-text">Multiple users matched the reservation user. Choose which account to use.</div>
                                 </div>
+                            </div>
+                        <?php endif; ?>
+
+                        <?php if ($staffDateOverride && $selectedReservation): ?>
+                            <?php
+                                $formStart = '';
+                                $formEnd = '';
+                                $origStart = '';
+                                $origEnd = '';
+                                if ($selectedStart !== '') {
+                                    try {
+                                        $dt = new DateTime($selectedStart, $utc);
+                                        $dt->setTimezone($tz);
+                                        $formStart = $dt->format('Y-m-d\TH:i');
+                                    } catch (Throwable $e) {}
+                                }
+                                if ($selectedEnd !== '') {
+                                    try {
+                                        $dt = new DateTime($selectedEnd, $utc);
+                                        $dt->setTimezone($tz);
+                                        $formEnd = $dt->format('Y-m-d\TH:i');
+                                    } catch (Throwable $e) {}
+                                }
+                                if (($selectedReservation['start_datetime'] ?? '') !== '') {
+                                    try {
+                                        $dt = new DateTime($selectedReservation['start_datetime'], $utc);
+                                        $dt->setTimezone($tz);
+                                        $origStart = $dt->format('Y-m-d\TH:i');
+                                    } catch (Throwable $e) {}
+                                }
+                                if (($selectedReservation['end_datetime'] ?? '') !== '') {
+                                    try {
+                                        $dt = new DateTime($selectedReservation['end_datetime'], $utc);
+                                        $dt->setTimezone($tz);
+                                        $origEnd = $dt->format('Y-m-d\TH:i');
+                                    } catch (Throwable $e) {}
+                                }
+                            ?>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-5">
+                                    <label class="form-label fw-semibold">Checkout start</label>
+                                    <input type="datetime-local"
+                                           name="override_start_datetime"
+                                           id="override-start"
+                                           class="form-control"
+                                           value="<?= h($formStart) ?>">
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="form-label fw-semibold">Expected return</label>
+                                    <input type="datetime-local"
+                                           name="override_end_datetime"
+                                           id="override-end"
+                                           class="form-control"
+                                           value="<?= h($formEnd) ?>">
+                                </div>
+                                <div class="col-md-2 d-flex align-items-end">
+                                    <button type="button"
+                                            class="btn btn-outline-secondary btn-sm w-100"
+                                            id="reset-dates-btn"
+                                            data-orig-start="<?= h($origStart) ?>"
+                                            data-orig-end="<?= h($origEnd) ?>">
+                                        Reset dates
+                                    </button>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+
+                        <?php if (!empty($dateConflictWarnings)): ?>
+                            <div class="alert alert-warning">
+                                <strong>Date window conflicts:</strong>
+                                <ul class="mb-0">
+                                    <?php foreach ($dateConflictWarnings as $w): ?>
+                                        <li><?= h($w) ?></li>
+                                    <?php endforeach; ?>
+                                </ul>
                             </div>
                         <?php endif; ?>
 
@@ -1742,6 +1856,25 @@ $active  = basename($_SERVER['PHP_SELF']);
     const scanInput = document.getElementById('scan-tag-input');
     if (scanInput) {
         setTimeout(() => scanInput.focus(), 50);
+    }
+
+    // Reset dates button for staff date override
+    const resetBtn = document.getElementById('reset-dates-btn');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function () {
+            const startInput = document.getElementById('override-start');
+            const endInput = document.getElementById('override-end');
+            const origStart = resetBtn.dataset.origStart;
+            const origEnd = resetBtn.dataset.origEnd;
+            if (startInput) {
+                if (startInput._flatpickr) startInput._flatpickr.setDate(origStart, true);
+                else startInput.value = origStart;
+            }
+            if (endInput) {
+                if (endInput._flatpickr) endInput._flatpickr.setDate(origEnd, true);
+                else endInput.value = origEnd;
+            }
+        });
     }
 
     document.addEventListener('click', (event) => {

@@ -159,6 +159,7 @@ return [
             // 12 => ['max_checkout_hours' => 720, 'max_renewal_hours' => 168, 'max_total_hours' => 1440, 'max_advance_days' => 30],
         ],
         'single_active_checkout' => false,  // true = enforce one active checkout per user
+        'staff_date_override' => true,  // true = staff can edit start/end dates during checkout
     ],
 
     'smtp' => [

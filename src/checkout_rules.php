@@ -30,6 +30,7 @@ function checkout_limits_config(): array
         ],
         'group_overrides'        => $limits['group_overrides'] ?? [],
         'single_active_checkout' => !empty($limits['single_active_checkout']),
+        'staff_date_override'    => $limits['staff_date_override'] ?? true,
     ];
     return $cfg;
 }
