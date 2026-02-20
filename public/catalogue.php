@@ -7,17 +7,13 @@ require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/layout.php';
 
 $config   = load_config();
-$authCfg  = $config['auth'] ?? [];
 $isAdmin  = !empty($currentUser['is_admin']);
 $isStaff  = !empty($currentUser['is_staff']) || $isAdmin;
-$ldapEnabled = array_key_exists('ldap_enabled', $authCfg) ? !empty($authCfg['ldap_enabled']) : true;
-$googleEnabled = !empty($authCfg['google_oauth_enabled']);
-$msEnabled     = !empty($authCfg['microsoft_oauth_enabled']);
 
 $bookingOverride = $_SESSION['booking_user_override'] ?? null;
 $activeUser      = $bookingOverride ?: $currentUser;
+$staffNoUserSelected = $isStaff && !$bookingOverride;
 
-$ldapCfg  = $config['ldap'] ?? [];
 $appCfg   = $config['app'] ?? [];
 $debugOn  = !empty($appCfg['debug']);
 $blockCatalogueOverdue = array_key_exists('block_catalogue_overdue', $appCfg)
@@ -149,245 +145,9 @@ if (($_GET['ajax'] ?? '') === 'overdue_check') {
     exit;
 }
 
-function base64url_encode(string $data): string
-{
-    return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
-}
-
-function http_post_form_json(string $url, array $fields, array $headers = []): array
-{
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POSTFIELDS     => http_build_query($fields),
-        CURLOPT_HTTPHEADER     => $headers,
-    ]);
-    $raw = curl_exec($ch);
-    if ($raw === false) {
-        $err = curl_error($ch);
-        curl_close($ch);
-        throw new Exception('HTTP request failed: ' . $err);
-    }
-    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    if ($status >= 400) {
-        throw new Exception('HTTP request failed with status ' . $status . ': ' . $raw);
-    }
-    $data = json_decode($raw, true);
-    if (!is_array($data)) {
-        throw new Exception('Unexpected response format.');
-    }
-    return $data;
-}
-
-function http_get_json(string $url, array $headers = []): array
-{
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER     => $headers,
-    ]);
-    $raw = curl_exec($ch);
-    if ($raw === false) {
-        $err = curl_error($ch);
-        curl_close($ch);
-        throw new Exception('HTTP request failed: ' . $err);
-    }
-    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    if ($status >= 400) {
-        throw new Exception('HTTP request failed with status ' . $status . ': ' . $raw);
-    }
-    $data = json_decode($raw, true);
-    if (!is_array($data)) {
-        throw new Exception('Unexpected response format.');
-    }
-    return $data;
-}
-
-function google_directory_search(string $q, array $config): array
-{
-    $dirCfg = $config['google_directory'] ?? [];
-    $svcJson = $dirCfg['service_account_json'] ?? '';
-    $svcPath = $dirCfg['service_account_path'] ?? '';
-    $impersonate = trim($dirCfg['impersonated_user'] ?? '');
-
-    if ($svcJson === '' && $svcPath !== '' && is_file($svcPath)) {
-        $svcJson = file_get_contents($svcPath) ?: '';
-    }
-
-    if ($svcJson === '' || $impersonate === '') {
-        return [];
-    }
-
-    $json = json_decode($svcJson, true);
-    if (!is_array($json)) {
-        throw new Exception('Google directory service account JSON is invalid.');
-    }
-
-    $clientEmail = $json['client_email'] ?? '';
-    $privateKey  = $json['private_key'] ?? '';
-    if ($clientEmail === '' || $privateKey === '') {
-        throw new Exception('Google directory service account credentials are missing.');
-    }
-
-    $now = time();
-    $header  = base64url_encode(json_encode(['alg' => 'RS256', 'typ' => 'JWT']));
-    $payload = base64url_encode(json_encode([
-        'iss'   => $clientEmail,
-        'scope' => 'https://www.googleapis.com/auth/admin.directory.user.readonly',
-        'aud'   => 'https://oauth2.googleapis.com/token',
-        'iat'   => $now,
-        'exp'   => $now + 3600,
-        'sub'   => $impersonate,
-    ]));
-
-    $signingInput = $header . '.' . $payload;
-    $signature = '';
-    $key = openssl_pkey_get_private($privateKey);
-    if (!$key || !openssl_sign($signingInput, $signature, $key, 'sha256')) {
-        throw new Exception('Failed to sign Google service account JWT.');
-    }
-    openssl_pkey_free($key);
-    $jwt = $signingInput . '.' . base64url_encode($signature);
-
-    $token = http_post_form_json('https://oauth2.googleapis.com/token', [
-        'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-        'assertion'  => $jwt,
-    ]);
-    $accessToken = $token['access_token'] ?? '';
-    if ($accessToken === '') {
-        throw new Exception('Google directory token response missing access token.');
-    }
-
-    $qEsc = str_replace(['\\', '"'], ['\\\\', '\"'], $q);
-    $qWild = '*' . $qEsc . '*';
-    $query = 'email:' . $qWild
-        . ' OR name:' . $qWild
-        . ' OR givenName:' . $qWild
-        . ' OR familyName:' . $qWild;
-    $url = 'https://admin.googleapis.com/admin/directory/v1/users?'
-        . http_build_query([
-            'query'      => $query,
-            'maxResults' => 20,
-            'orderBy'    => 'email',
-        ]);
-
-    $data = http_get_json($url, [
-        'Authorization: Bearer ' . $accessToken,
-        'Accept: application/json',
-    ]);
-
-    $results = [];
-    $users = $data['users'] ?? [];
-    if (is_array($users)) {
-        foreach ($users as $user) {
-            $email = $user['primaryEmail'] ?? '';
-            $name  = $user['name']['fullName'] ?? '';
-            if ($email === '' && $name === '') {
-                continue;
-            }
-            $results[] = [
-                'email' => $email,
-                'name'  => $name !== '' ? $name : $email,
-            ];
-        }
-    }
-
-    return $results;
-}
-
-function entra_directory_search(string $q, array $config): array
-{
-    $accessToken = $_SESSION['ms_access_token'] ?? '';
-    if ($accessToken === '') {
-        return [];
-    }
-    $expiresAt = (int)($_SESSION['ms_access_token_expires_at'] ?? 0);
-    if ($expiresAt > 0 && $expiresAt <= time()) {
-        unset($_SESSION['ms_access_token'], $_SESSION['ms_access_token_expires_at']);
-        return [];
-    }
-
-    $data = null;
-    try {
-        $qSearch = str_replace('"', '\"', $q);
-        $search = '"displayName:' . $qSearch . '"'
-            . ' OR "mail:' . $qSearch . '"'
-            . ' OR "userPrincipalName:' . $qSearch . '"'
-            . ' OR "givenName:' . $qSearch . '"'
-            . ' OR "surname:' . $qSearch . '"';
-        $url = 'https://graph.microsoft.com/v1.0/users?'
-            . http_build_query([
-                '$select' => 'displayName,mail,userPrincipalName',
-                '$top'    => 20,
-                '$count'  => 'true',
-                '$search' => $search,
-            ]);
-
-        $data = http_get_json($url, [
-            'Authorization: Bearer ' . $accessToken,
-            'ConsistencyLevel: eventual',
-            'Accept: application/json',
-        ]);
-    } catch (Throwable $e) {
-        $data = null;
-    }
-
-    if (!is_array($data)) {
-        $qEsc = str_replace("'", "''", $q);
-        $filter = "startswith(displayName,'{$qEsc}')"
-            . " or startswith(mail,'{$qEsc}')"
-            . " or startswith(userPrincipalName,'{$qEsc}')"
-            . " or startswith(givenName,'{$qEsc}')"
-            . " or startswith(surname,'{$qEsc}')";
-        $url = 'https://graph.microsoft.com/v1.0/users?'
-            . http_build_query([
-                '$select' => 'displayName,mail,userPrincipalName',
-                '$top'    => 20,
-                '$filter' => $filter,
-            ]);
-
-        $data = http_get_json($url, [
-            'Authorization: Bearer ' . $accessToken,
-            'Accept: application/json',
-        ]);
-    }
-
-    $results = [];
-    $users = $data['value'] ?? [];
-    if (is_array($users)) {
-        foreach ($users as $user) {
-            $email = $user['mail'] ?? ($user['userPrincipalName'] ?? '');
-            $name  = $user['displayName'] ?? '';
-            if ($email === '' && $name === '') {
-                continue;
-            }
-            $results[] = [
-                'email' => $email,
-                'name'  => $name !== '' ? $name : $email,
-            ];
-        }
-    }
-
-    return $results;
-}
-
-// Staff-only directory autocomplete endpoint
+// Staff-only user autocomplete endpoint (searches Snipe-IT users API)
 if ($isStaff && ($_GET['ajax'] ?? '') === 'user_search') {
     header('Content-Type: application/json');
-
-    if (!$ldapEnabled && !$googleEnabled && !$msEnabled) {
-        http_response_code(403);
-        echo json_encode(['error' => 'Directory search is disabled.']);
-        exit;
-    }
-    if ($msEnabled && !$ldapEnabled && !$googleEnabled && empty($_SESSION['ms_access_token'])) {
-        http_response_code(403);
-        echo json_encode(['error' => 'Microsoft directory search requires signing in with Microsoft.']);
-        exit;
-    }
 
     $q = trim($_GET['q'] ?? '');
     if ($q === '' || strlen($q) < 2) {
@@ -396,82 +156,29 @@ if ($isStaff && ($_GET['ajax'] ?? '') === 'user_search') {
     }
 
     try {
+        $data = snipeit_request('GET', 'users', [
+            'search' => $q,
+            'limit'  => 10,
+        ]);
+
+        $rows = $data['rows'] ?? [];
         $results = [];
-        $seen = [];
-        $addResult = static function (string $email, string $name) use (&$results, &$seen): void {
-            $key = strtolower(trim($email !== '' ? $email : $name));
-            if ($key === '' || isset($seen[$key])) {
-                return;
+        foreach ($rows as $row) {
+            $email = $row['email'] ?? '';
+            $name  = $row['name'] ?? '';
+            if ($email === '' && $name === '') {
+                continue;
             }
-            $seen[$key] = true;
             $results[] = [
                 'email' => $email,
                 'name'  => $name !== '' ? $name : $email,
             ];
-        };
-
-        if ($ldapEnabled) {
-            if (!empty($ldapCfg['ignore_cert'])) {
-                putenv('LDAPTLS_REQCERT=never');
-            }
-
-            $ldap = @ldap_connect($ldapCfg['host']);
-            if (!$ldap) {
-                throw new Exception('Cannot connect to LDAP host');
-            }
-
-            ldap_set_option($ldap, LDAP_OPT_PROTOCOL_VERSION, 3);
-            ldap_set_option($ldap, LDAP_OPT_REFERRALS, 0);
-
-            if (!@ldap_bind($ldap, $ldapCfg['bind_dn'], $ldapCfg['bind_password'])) {
-                throw new Exception('LDAP service bind failed: ' . ldap_error($ldap));
-            }
-
-            $filter = sprintf(
-                '(|(mail=*%1$s*)(displayName=*%1$s*)(sAMAccountName=*%1$s*))',
-                ldap_escape($q, null, LDAP_ESCAPE_FILTER)
-            );
-
-            $attrs = ['mail', 'displayName', 'givenName', 'sn', 'sAMAccountName'];
-            $search = @ldap_search($ldap, $ldapCfg['base_dn'], $filter, $attrs, 0, 20);
-            $entries = $search ? ldap_get_entries($ldap, $search) : ['count' => 0];
-
-            for ($i = 0; $i < ($entries['count'] ?? 0); $i++) {
-                $e    = $entries[$i];
-                $mail = $e['mail'][0] ?? '';
-                $dn   = $e['displayname'][0] ?? '';
-                $fn   = $e['givenname'][0] ?? '';
-                $ln   = $e['sn'][0] ?? '';
-                $name = $dn !== '' ? $dn : trim($fn . ' ' . $ln);
-                $sam  = $e['samaccountname'][0] ?? '';
-
-                $addResult($mail, $name !== '' ? $name : $mail);
-            }
-
-            ldap_unbind($ldap);
-        }
-
-        if ($googleEnabled) {
-            $googleResults = google_directory_search($q, $config);
-            foreach ($googleResults as $row) {
-                $addResult($row['email'] ?? '', $row['name'] ?? '');
-            }
-        }
-
-        if ($msEnabled) {
-            $entraResults = entra_directory_search($q, $config);
-            foreach ($entraResults as $row) {
-                $addResult($row['email'] ?? '', $row['name'] ?? '');
-            }
         }
 
         echo json_encode(['results' => $results]);
     } catch (Throwable $e) {
-        if (isset($ldap) && $ldap) {
-            @ldap_unbind($ldap);
-        }
         http_response_code(500);
-        echo json_encode(['error' => $debugOn ? $e->getMessage() : 'Directory search error']);
+        echo json_encode(['error' => $debugOn ? $e->getMessage() : 'User search error']);
     }
     exit;
 }
@@ -832,7 +539,7 @@ if ($catalogueSnipeUserId <= 0) {
 // Access group gate: user must belong to at least one "Access - *" group
 // ---------------------------------------------------------------------
 $accessBlocked = false;
-if ($catalogueSnipeUserId > 0) {
+if ($catalogueSnipeUserId > 0 && !$staffNoUserSelected) {
     $accessBlocked = !check_user_has_access_group($catalogueSnipeUserId);
 }
 
@@ -1067,20 +774,24 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             ?>
             <div class="alert alert-info d-flex flex-column flex-md-row align-items-md-center justify-content-md-between booking-for-alert">
                 <div class="mb-2 mb-md-0">
-                    <strong>Booking for:</strong>
-                    <?= h($activeUser['email'] ?? '') ?>
-                    <?php if (!empty($activeUser['first_name'])): ?>
-                        (<?= h(trim(($activeUser['first_name'] ?? '') . ' ' . ($activeUser['last_name'] ?? ''))) ?>)
-                    <?php endif; ?>
-                    <?php if (!empty($userAccessLevels) || !empty($userCerts)): ?>
-                        <span class="ms-2">
-                            <?php foreach ($userAccessLevels as $level): ?>
-                                <span class="badge bg-info text-dark"><?= h($level) ?></span>
-                            <?php endforeach; ?>
-                            <?php foreach ($userCerts as $cert): ?>
-                                <span class="badge bg-warning text-dark"><?= h($cert) ?></span>
-                            <?php endforeach; ?>
-                        </span>
+                    <?php if ($staffNoUserSelected): ?>
+                        <strong>No user selected</strong> — search to begin booking
+                    <?php else: ?>
+                        <strong>Booking for:</strong>
+                        <?= h($activeUser['email'] ?? '') ?>
+                        <?php if (!empty($activeUser['first_name'])): ?>
+                            (<?= h(trim(($activeUser['first_name'] ?? '') . ' ' . ($activeUser['last_name'] ?? ''))) ?>)
+                        <?php endif; ?>
+                        <?php if (!empty($userAccessLevels) || !empty($userCerts)): ?>
+                            <span class="ms-2">
+                                <?php foreach ($userAccessLevels as $level): ?>
+                                    <span class="badge bg-info text-dark"><?= h($level) ?></span>
+                                <?php endforeach; ?>
+                                <?php foreach ($userCerts as $cert): ?>
+                                    <span class="badge bg-warning text-dark"><?= h($cert) ?></span>
+                                <?php endforeach; ?>
+                            </span>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
                 <form method="post" id="booking_user_form" class="d-flex gap-2 mb-0 flex-wrap position-relative" style="z-index: 9998;">
@@ -1097,8 +808,9 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                              id="booking_user_suggestions"
                              style="z-index: 9999; max-height: 260px; overflow-y: auto; display: none; box-shadow: 0 12px 24px rgba(0,0,0,0.18);"></div>
                     </div>
-                    <button class="btn btn-sm btn-primary" type="submit">Use</button>
-                    <button class="btn btn-sm btn-outline-secondary" type="submit" name="booking_user_revert" value="1">Revert to logged in user</button>
+                    <?php if ($bookingOverride): ?>
+                        <button class="btn btn-sm btn-outline-secondary" type="submit" name="booking_user_revert" value="1">Revert to logged in user</button>
+                    <?php endif; ?>
                 </form>
             </div>
         <?php endif; ?>
@@ -1489,7 +1201,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     ];
                     $authMissing = [];
                     try {
-                        if ((!empty($authReqs['certs']) || !empty($authReqs['access_levels'])) && $catalogueSnipeUserId > 0) {
+                        if ((!empty($authReqs['certs']) || !empty($authReqs['access_levels'])) && $catalogueSnipeUserId > 0 && !$staffNoUserSelected) {
                             $authMissing = check_model_authorization($catalogueSnipeUserId, $authReqs);
                         }
                     } catch (Throwable $e) {
@@ -1625,7 +1337,10 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                         <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
                                     <?php endif; ?>
 
-                                    <?php if ($accessBlocked): ?>
+                                    <?php if ($staffNoUserSelected): ?>
+                                        <div class="alert alert-info small mb-0">Select a user above before adding to basket.</div>
+                                        <button type="button" class="btn btn-sm btn-secondary w-100 mt-2" disabled>Add to basket</button>
+                                    <?php elseif ($accessBlocked): ?>
                                         <div class="alert alert-warning small mb-0">
                                             You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.
                                         </div>
@@ -1909,7 +1624,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         'access_levels' => array_keys($kitAccessLevels),
                     ];
                     $kitAuthMissing = [];
-                    if ((!empty($kitAuthReqs['certs']) || !empty($kitAuthReqs['access_levels'])) && $catalogueSnipeUserId > 0) {
+                    if ((!empty($kitAuthReqs['certs']) || !empty($kitAuthReqs['access_levels'])) && $catalogueSnipeUserId > 0 && !$staffNoUserSelected) {
                         try {
                             $kitAuthMissing = check_model_authorization($catalogueSnipeUserId, $kitAuthReqs);
                         } catch (Throwable $e) {
@@ -2034,7 +1749,10 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                         <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
                                     <?php endif; ?>
 
-                                    <?php if ($accessBlocked): ?>
+                                    <?php if ($staffNoUserSelected): ?>
+                                        <div class="alert alert-info small mb-0">Select a user above before adding to basket.</div>
+                                        <button type="button" class="btn btn-sm btn-secondary w-100 mt-2" disabled>Add kit to basket</button>
+                                    <?php elseif ($accessBlocked): ?>
                                         <div class="alert alert-warning small mb-0">
                                             You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.
                                         </div>
@@ -2434,11 +2152,11 @@ document.addEventListener('DOMContentLoaded', function () {
             btn.type = 'button';
             btn.className = 'list-group-item list-group-item-action';
             btn.textContent = label;
-            btn.addEventListener('click', function () {
-                bookingInput.value = label;
+            btn.addEventListener('mousedown', function (e) {
+                e.preventDefault();
                 bookingEmail.value = email;
                 bookingName.value  = name || email;
-                hideBookingSuggestions();
+                document.getElementById('booking_user_form').submit();
             });
             bookingList.appendChild(btn);
         });
