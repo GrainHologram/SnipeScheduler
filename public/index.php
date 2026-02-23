@@ -176,9 +176,12 @@ if ($isStaff) {
                         <a href="quick_checkin.php" class="btn btn-outline-primary" id="dash_btn_checkin">
                             Quick Checkin
                         </a>
-                        <a href="catalogue.php" class="btn btn-outline-primary" id="dash_btn_catalogue">
-                            Browse Catalogue
-                        </a>
+                        <form method="post" action="catalogue.php" id="dash_catalogue_form" style="display:inline;">
+                            <input type="hidden" name="mode" value="set_booking_user">
+                            <input type="hidden" name="booking_user_email" id="dash_catalogue_email">
+                            <input type="hidden" name="booking_user_name" id="dash_catalogue_name">
+                            <button type="submit" class="btn btn-outline-primary">Browse Catalogue</button>
+                        </form>
                     </div>
                 </div>
                 <div id="dash_user_selected" class="mt-2" style="display:none">
@@ -453,6 +456,9 @@ document.addEventListener('DOMContentLoaded', function() {
         actionBtns.setAttribute('style', 'display:none !important');
     }
 
+    var catEmail = document.getElementById('dash_catalogue_email');
+    var catName  = document.getElementById('dash_catalogue_name');
+
     function selectUser(user) {
         selectedUser = user;
         var label = user.name;
@@ -462,6 +468,8 @@ document.addEventListener('DOMContentLoaded', function() {
         input.value = '';
         hideSuggestions();
         showActions();
+        if (catEmail) catEmail.value = user.email || '';
+        if (catName) catName.value = user.name || user.email || '';
     }
 
     function clearUser() {
@@ -470,6 +478,8 @@ document.addEventListener('DOMContentLoaded', function() {
         badge.textContent = '';
         hideActions();
         input.value = '';
+        if (catEmail) catEmail.value = '';
+        if (catName) catName.value = '';
     }
 
     input.addEventListener('input', function() {
