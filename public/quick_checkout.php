@@ -600,7 +600,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <tr>
                                         <td><?= h($asset['asset_tag']) ?></td>
                                         <td><?= h($asset['name']) ?></td>
-                                        <td><?= h($asset['model']) ?></td>
+                                        <td><a href="#" class="model-history-link" onclick="openModelHistory(<?= (int)($asset['model_id'] ?? 0) ?>, <?= htmlspecialchars(json_encode($asset['model'] ?? ''), ENT_QUOTES) ?>); return false;"><?= h($asset['model']) ?></a></td>
                                         <?php
                                             $statusText = $asset['status'] ?? '';
                                             if (is_array($statusText)) {
@@ -914,6 +914,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     });
 })();
 </script>
+<?php layout_model_history_modal(); ?>
 <?php layout_footer(); ?>
 </body>
 </html>
