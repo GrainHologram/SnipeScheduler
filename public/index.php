@@ -156,8 +156,8 @@ if ($isStaff) {
         <?php if ($isStaff): ?>
 
         <!-- Quick user lookup -->
-        <div class="card mb-3">
-            <div class="card-body">
+        <div class="card mb-3" style="overflow:visible; z-index:10;">
+            <div class="card-body" style="overflow:visible;">
                 <div class="row g-2 align-items-end">
                     <div class="col-md-5">
                         <label class="form-label fw-semibold">Quick user lookup</label>
