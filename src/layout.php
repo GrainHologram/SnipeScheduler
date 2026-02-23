@@ -140,11 +140,11 @@ if (!function_exists('layout_render_nav')) {
         $links = [
             ['href' => 'index.php',          'label' => 'Dashboard',           'staff' => false],
             ['href' => 'catalogue.php',      'label' => 'Catalogue',           'staff' => false],
-            ['href' => 'my_bookings.php',    'label' => 'My Reservations',     'staff' => false],
             ['href' => 'reservations.php',   'label' => 'Reservations',        'staff' => true],
             ['href' => 'quick_checkout.php', 'label' => 'Quick Checkout',      'staff' => true],
             ['href' => 'quick_checkin.php',  'label' => 'Quick Checkin',       'staff' => true],
             ['href' => 'activity_log.php',   'label' => 'Admin',               'staff' => false, 'admin_only' => true],
+            ['href' => 'my_bookings.php',    'label' => 'My Reservations',     'staff' => false, 'right' => true],
         ];
 
         $html = '<nav class="app-nav">';
@@ -160,8 +160,9 @@ if (!function_exists('layout_render_nav')) {
             $href    = htmlspecialchars($link['href'], ENT_QUOTES, 'UTF-8');
             $label   = htmlspecialchars($link['label'], ENT_QUOTES, 'UTF-8');
             $classes = 'app-nav-link' . ($active === $link['href'] ? ' active' : '');
+            $style  = !empty($link['right']) ? ' style="margin-left:auto"' : '';
 
-            $html .= '<a href="' . $href . '" class="' . $classes . '">' . $label . '</a>';
+            $html .= '<a href="' . $href . '" class="' . $classes . '"' . $style . '>' . $label . '</a>';
         }
         $html .= '</nav>';
 
