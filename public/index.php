@@ -470,6 +470,8 @@ document.addEventListener('DOMContentLoaded', function() {
         showActions();
         if (catEmail) catEmail.value = user.email || '';
         if (catName) catName.value = user.name || user.email || '';
+        var checkinBtn = document.getElementById('dash_btn_checkin');
+        if (checkinBtn && user.id) checkinBtn.href = 'quick_checkin.php?user=' + encodeURIComponent(user.id);
     }
 
     function clearUser() {
@@ -480,6 +482,8 @@ document.addEventListener('DOMContentLoaded', function() {
         input.value = '';
         if (catEmail) catEmail.value = '';
         if (catName) catName.value = '';
+        var checkinBtn = document.getElementById('dash_btn_checkin');
+        if (checkinBtn) checkinBtn.href = 'quick_checkin.php';
     }
 
     input.addEventListener('input', function() {
