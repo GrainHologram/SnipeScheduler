@@ -202,12 +202,14 @@ if ($isStaff) {
                 </div>
             </div>
             <div class="col-6 col-md-3">
+                <a href="reservations.php?tab=checkout_history" class="text-decoration-none">
                 <div class="card text-center h-100">
                     <div class="card-body py-3">
                         <div class="fs-3 fw-bold text-info"><?= $activeCount ?></div>
                         <div class="small text-muted">Active Checkouts</div>
                     </div>
                 </div>
+                </a>
             </div>
             <div class="col-6 col-md-3">
                 <div class="card text-center h-100">
