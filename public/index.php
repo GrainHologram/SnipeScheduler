@@ -162,8 +162,8 @@ if ($isStaff) {
                     <div class="col-md-5">
                         <label class="form-label fw-semibold">Quick user lookup</label>
                         <div class="position-relative">
-                            <input type="text" id="dash_user_input" class="form-control"
-                                   placeholder="Start typing name or email" autocomplete="off">
+                            <input type="search" id="dash_user_input" name="user_lookup" class="form-control"
+                                   placeholder="Start typing name or email" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="dash_user_suggestions">
                             <div class="list-group position-absolute w-100" id="dash_user_suggestions"
                                  style="z-index:9999; max-height:260px; overflow-y:auto; display:none;
                                         box-shadow:0 12px 24px rgba(0,0,0,0.18);"></div>
@@ -433,9 +433,13 @@ document.addEventListener('DOMContentLoaded', function() {
     var lastQuery = '';
     var selectedUser = null;
 
+    var activeIndex = -1;
+
     function hideSuggestions() {
         list.style.display = 'none';
         list.innerHTML = '';
+        input.setAttribute('aria-expanded', 'false');
+        activeIndex = -1;
     }
 
     function showActions() {
@@ -502,11 +506,38 @@ document.addEventListener('DOMContentLoaded', function() {
                     list.appendChild(btn);
                 });
                 list.style.display = 'block';
+                input.setAttribute('aria-expanded', 'true');
+                activeIndex = -1;
             })
             .catch(function() {
                 hideSuggestions();
             });
         }, 250);
+    });
+
+    input.addEventListener('keydown', function(e) {
+        var items = list.querySelectorAll('.list-group-item');
+        if (!items.length) return;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            activeIndex = (activeIndex + 1) % items.length;
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            activeIndex = (activeIndex - 1 + items.length) % items.length;
+        } else if (e.key === 'Enter' && activeIndex >= 0 && activeIndex < items.length) {
+            e.preventDefault();
+            items[activeIndex].click();
+            return;
+        } else if (e.key === 'Escape') {
+            hideSuggestions();
+            return;
+        } else {
+            return;
+        }
+        items.forEach(function(el, i) {
+            el.classList.toggle('active', i === activeIndex);
+        });
+        items[activeIndex].scrollIntoView({ block: 'nearest' });
     });
 
     input.addEventListener('blur', function() {
