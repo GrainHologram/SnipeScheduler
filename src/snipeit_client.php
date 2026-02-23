@@ -373,7 +373,7 @@ function get_model_hardware_count(int $modelId): int
 /**
  * Fetch all predefined kits from Snipe-IT.
  *
- * Uses 24h outer cache since kit definitions change infrequently.
+ * Uses 5-minute cache to balance API load with timely updates.
  *
  * @return array  Flat array of kit objects
  * @throws Exception
@@ -381,7 +381,7 @@ function get_model_hardware_count(int $modelId): int
 function get_kits(): array
 {
     $cacheKey = 'kits_list';
-    $cached = snipeit_cache_get($cacheKey, 86400);
+    $cached = snipeit_cache_get($cacheKey, 300);
     if ($cached !== null) {
         return $cached;
     }
@@ -407,7 +407,7 @@ function get_kit(int $kitId): array
     }
 
     $cacheKey = 'kit_' . $kitId;
-    $cached = snipeit_cache_get($cacheKey, 86400);
+    $cached = snipeit_cache_get($cacheKey, 300);
     if ($cached !== null) {
         return $cached;
     }
@@ -431,7 +431,7 @@ function get_kit_models(int $kitId): array
     }
 
     $cacheKey = 'kit_' . $kitId . '_models';
-    $cached = snipeit_cache_get($cacheKey, 86400);
+    $cached = snipeit_cache_get($cacheKey, 300);
     if ($cached !== null) {
         return $cached;
     }
