@@ -802,11 +802,15 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     <input type="hidden" name="booking_user_email" id="booking_user_email">
                     <input type="hidden" name="booking_user_name" id="booking_user_name">
                     <div class="position-relative">
-                        <input type="text"
+                        <input type="search"
                                id="booking_user_input"
+                               name="user_lookup"
                                class="form-control form-control-sm"
                                placeholder="Start typing email or name"
-                               autocomplete="off">
+                               autocomplete="off"
+                               role="combobox"
+                               aria-expanded="false"
+                               aria-controls="booking_user_suggestions">
                         <div class="list-group position-absolute w-100"
                              id="booking_user_suggestions"
                              style="z-index: 9999; max-height: 260px; overflow-y: auto; display: none; box-shadow: 0 12px 24px rgba(0,0,0,0.18);"></div>
@@ -1857,6 +1861,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const todayBtn = document.getElementById('catalogue-today-btn');
     let bookingTimer   = null;
     let bookingQuery   = '';
+    let bookingActiveIndex = -1;
     let basketToastTimer = null;
 
     function showLoadingOverlay() {
@@ -2138,6 +2143,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!bookingList) return;
         bookingList.style.display = 'none';
         bookingList.innerHTML = '';
+        if (bookingInput) bookingInput.setAttribute('aria-expanded', 'false');
+        bookingActiveIndex = -1;
     }
 
     function renderBookingSuggestions(items) {
@@ -2164,6 +2171,8 @@ document.addEventListener('DOMContentLoaded', function () {
             bookingList.appendChild(btn);
         });
         bookingList.style.display = 'block';
+        if (bookingInput) bookingInput.setAttribute('aria-expanded', 'true');
+        bookingActiveIndex = -1;
     }
 
     if (bookingInput && bookingList) {
@@ -2188,6 +2197,31 @@ document.addEventListener('DOMContentLoaded', function () {
                         hideBookingSuggestions();
                     });
             }, 250);
+        });
+
+        bookingInput.addEventListener('keydown', function (e) {
+            var items = bookingList.querySelectorAll('.list-group-item');
+            if (!items.length) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                bookingActiveIndex = (bookingActiveIndex + 1) % items.length;
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                bookingActiveIndex = (bookingActiveIndex - 1 + items.length) % items.length;
+            } else if (e.key === 'Enter' && bookingActiveIndex >= 0 && bookingActiveIndex < items.length) {
+                e.preventDefault();
+                items[bookingActiveIndex].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                return;
+            } else if (e.key === 'Escape') {
+                hideBookingSuggestions();
+                return;
+            } else {
+                return;
+            }
+            items.forEach(function (el, i) {
+                el.classList.toggle('active', i === bookingActiveIndex);
+            });
+            items[bookingActiveIndex].scrollIntoView({ block: 'nearest' });
         });
 
         bookingInput.addEventListener('blur', function () {
