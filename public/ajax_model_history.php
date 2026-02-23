@@ -73,8 +73,8 @@ foreach ($stmtCheckouts->fetchAll(PDO::FETCH_ASSOC) as $co) {
         $items[] = [
             'asset_tag'      => $ci['asset_tag'],
             'asset_name'     => $ci['asset_name'],
-            'checked_out_at' => app_format_datetime_local($ci['checked_out_at'] ?? ''),
-            'checked_in_at'  => $ci['checked_in_at'] ? app_format_datetime_local($ci['checked_in_at']) : null,
+            'checked_out_at' => app_format_datetime($ci['checked_out_at'] ?? ''),
+            'checked_in_at'  => $ci['checked_in_at'] ? app_format_datetime($ci['checked_in_at']) : null,
         ];
     }
 
@@ -82,8 +82,8 @@ foreach ($stmtCheckouts->fetchAll(PDO::FETCH_ASSOC) as $co) {
         'checkout_id'    => (int)$co['id'],
         'user_name'      => $co['user_name'] ?? '',
         'user_email'     => $co['user_email'] ?? '',
-        'start_datetime' => app_format_datetime_local($co['start_datetime'] ?? ''),
-        'end_datetime'   => app_format_datetime_local($co['end_datetime'] ?? ''),
+        'start_datetime' => app_format_datetime($co['start_datetime'] ?? ''),
+        'end_datetime'   => app_format_datetime($co['end_datetime'] ?? ''),
         'status'         => $co['status'] ?? '',
         'items'          => $items,
     ];
