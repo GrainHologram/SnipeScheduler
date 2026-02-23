@@ -347,26 +347,29 @@ function fetch_overdue_assets_for_user(array $lookup, int $snipeUserId): array
 {
     global $pdo;
 
+    // When we have a definitive Snipe-IT user ID, match only on that to avoid
+    // false positives from name collisions between different accounts.
     $where = [];
     $params = [];
     if ($snipeUserId > 0) {
         $where[] = 'assigned_to_id = ?';
         $params[] = $snipeUserId;
-    }
-    if (!empty($lookup['emails'])) {
-        $placeholders = implode(',', array_fill(0, count($lookup['emails']), '?'));
-        $where[] = "(assigned_to_email IS NOT NULL AND LOWER(assigned_to_email) IN ({$placeholders}))";
-        $params = array_merge($params, $lookup['emails']);
-    }
-    if (!empty($lookup['usernames'])) {
-        $placeholders = implode(',', array_fill(0, count($lookup['usernames']), '?'));
-        $where[] = "(assigned_to_username IS NOT NULL AND LOWER(assigned_to_username) IN ({$placeholders}))";
-        $params = array_merge($params, $lookup['usernames']);
-    }
-    if (!empty($lookup['names'])) {
-        $placeholders = implode(',', array_fill(0, count($lookup['names']), '?'));
-        $where[] = "(assigned_to_name IS NOT NULL AND LOWER(assigned_to_name) IN ({$placeholders}))";
-        $params = array_merge($params, $lookup['names']);
+    } else {
+        if (!empty($lookup['emails'])) {
+            $placeholders = implode(',', array_fill(0, count($lookup['emails']), '?'));
+            $where[] = "(assigned_to_email IS NOT NULL AND LOWER(assigned_to_email) IN ({$placeholders}))";
+            $params = array_merge($params, $lookup['emails']);
+        }
+        if (!empty($lookup['usernames'])) {
+            $placeholders = implode(',', array_fill(0, count($lookup['usernames']), '?'));
+            $where[] = "(assigned_to_username IS NOT NULL AND LOWER(assigned_to_username) IN ({$placeholders}))";
+            $params = array_merge($params, $lookup['usernames']);
+        }
+        if (!empty($lookup['names'])) {
+            $placeholders = implode(',', array_fill(0, count($lookup['names']), '?'));
+            $where[] = "(assigned_to_name IS NOT NULL AND LOWER(assigned_to_name) IN ({$placeholders}))";
+            $params = array_merge($params, $lookup['names']);
+        }
     }
 
     if (empty($where)) {
