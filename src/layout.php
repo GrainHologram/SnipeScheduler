@@ -298,3 +298,139 @@ if (!function_exists('layout_logo_tag')) {
             . '</div>';
     }
 }
+
+if (!function_exists('layout_model_history_modal')) {
+    /**
+     * Output the model history modal shell + JS. Call once per page, staff-only.
+     */
+    function layout_model_history_modal(): void
+    {
+        ?>
+<div id="modelHistoryBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1050;" onclick="closeModelHistory()"></div>
+<div id="modelHistoryModal" style="display:none; position:fixed; inset:0; z-index:1055; overflow-y:auto; padding:1.75rem;">
+    <div style="max-width:800px; margin:0 auto; background:#fff; border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid #dee2e6;">
+            <h5 id="modelHistoryModalLabel" style="margin:0;">Model History</h5>
+            <button type="button" onclick="closeModelHistory()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
+        </div>
+        <div id="modelHistoryBody" style="padding:1rem; max-height:70vh; overflow-y:auto;">
+            <div class="text-center py-4"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>
+        </div>
+    </div>
+</div>
+<style>
+.model-history-link { text-decoration: none; color: inherit; }
+.model-history-link:hover { text-decoration: underline; }
+.mh-toggle { cursor:pointer; user-select:none; }
+.mh-toggle:hover { background:#f8f9fa; }
+.mh-panel { display:none; }
+.mh-panel.mh-open { display:block; }
+</style>
+<script>
+function openModelHistory(modelId, modelName) {
+    var backdrop = document.getElementById('modelHistoryBackdrop');
+    var modal = document.getElementById('modelHistoryModal');
+    var body = document.getElementById('modelHistoryBody');
+    var title = document.getElementById('modelHistoryModalLabel');
+
+    title.textContent = modelName || 'Model History';
+    body.innerHTML = '<div class="text-center py-4"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+
+    backdrop.style.display = 'block';
+    modal.style.display = 'block';
+    document.body.style.overflow = 'hidden';
+
+    fetch('ajax_model_history.php?model_id=' + encodeURIComponent(modelId))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var html = '';
+
+            // Currently checked out
+            html += '<h6 class="mb-2">Currently Checked Out</h6>';
+            if (data.currently_out && data.currently_out.length > 0) {
+                html += '<div class="table-responsive mb-3"><table class="table table-sm table-striped align-middle mb-0">';
+                html += '<thead class="table-warning"><tr><th>Asset Tag</th><th>Asset Name</th><th>Checked Out To</th><th>Last Checkout</th><th>Expected Return</th></tr></thead><tbody>';
+                data.currently_out.forEach(function(a) {
+                    var user = a.assigned_to_name || a.assigned_to_email || '';
+                    if (a.assigned_to_email && a.assigned_to_name && a.assigned_to_name !== a.assigned_to_email) {
+                        user = a.assigned_to_name + ' (' + a.assigned_to_email + ')';
+                    }
+                    html += '<tr><td>' + esc(a.asset_tag) + '</td><td>' + esc(a.asset_name) + '</td><td>' + esc(user) + '</td><td>' + esc(a.last_checkout) + '</td><td>' + esc(a.expected_checkin) + '</td></tr>';
+                });
+                html += '</tbody></table></div>';
+            } else {
+                html += '<p class="text-muted mb-3">None currently checked out.</p>';
+            }
+
+            // Recent checkouts
+            html += '<h6 class="mb-2">Recent Checkouts</h6>';
+            if (data.recent_checkouts && data.recent_checkouts.length > 0) {
+                data.recent_checkouts.forEach(function(co, idx) {
+                    var badge = statusBadge(co.status);
+                    var user = co.user_name || co.user_email || 'Unknown';
+                    var header = '#' + co.checkout_id + ' &mdash; ' + esc(user) + ' ' + badge;
+                    var dates = esc(co.start_datetime) + ' &rarr; ' + esc(co.end_datetime);
+
+                    html += '<div class="card mb-2">';
+                    html += '<div class="card-header py-2 px-3 mh-toggle" onclick="this.nextElementSibling.classList.toggle(\'mh-open\')">';
+                    html += '<span>' + header + '</span>';
+                    html += '</div>';
+                    html += '<div class="mh-panel"><div class="card-body p-2">';
+                    html += '<div class="small text-muted mb-2">' + dates + '</div>';
+
+                    if (co.items && co.items.length > 0) {
+                        html += '<table class="table table-sm table-striped align-middle mb-0"><thead><tr><th>Asset Tag</th><th>Asset Name</th><th>Checked Out</th><th>Returned</th></tr></thead><tbody>';
+                        co.items.forEach(function(ci) {
+                            var returned = ci.checked_in_at ? esc(ci.checked_in_at) : '<span class="badge bg-warning text-dark">Out</span>';
+                            var rowClass = ci.checked_in_at ? 'table-success' : '';
+                            html += '<tr class="' + rowClass + '"><td>' + esc(ci.asset_tag) + '</td><td>' + esc(ci.asset_name) + '</td><td>' + esc(ci.checked_out_at) + '</td><td>' + returned + '</td></tr>';
+                        });
+                        html += '</tbody></table>';
+                    } else {
+                        html += '<p class="text-muted mb-0">No item details.</p>';
+                    }
+
+                    html += '</div></div></div>';
+                });
+            } else {
+                html += '<p class="text-muted">No recent checkout history.</p>';
+            }
+
+            body.innerHTML = html;
+        })
+        .catch(function(err) {
+            body.innerHTML = '<div class="alert alert-danger">Failed to load model history.</div>';
+        });
+}
+
+function closeModelHistory() {
+    document.getElementById('modelHistoryBackdrop').style.display = 'none';
+    document.getElementById('modelHistoryModal').style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('modelHistoryModal').style.display === 'block') {
+        closeModelHistory();
+    }
+});
+
+function esc(s) {
+    if (!s) return '';
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(s));
+    return d.innerHTML;
+}
+
+function statusBadge(status) {
+    var map = {
+        'open':    '<span class="badge status-badge-checked-out">Checked Out</span>',
+        'partial': '<span class="badge bg-warning text-dark">Partial Return</span>',
+        'closed':  '<span class="badge bg-success">Returned</span>'
+    };
+    return map[status] || '<span class="badge bg-secondary">' + esc(status) + '</span>';
+}
+</script>
+        <?php
+    }
+}

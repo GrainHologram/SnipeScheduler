@@ -1726,7 +1726,7 @@ $active  = basename($_SERVER['PHP_SELF']);
                                                     <?php endif; ?>
                                                     <div class="reservation-model-title">
                                                         <div class="form-label mb-1">
-                                                            <?= h($item['name'] ?? ('Model #' . $mid)) ?> (need <?= $qty ?>)
+                                                            <a href="#" class="model-history-link" onclick="openModelHistory(<?= (int)$mid ?>, <?= htmlspecialchars(json_encode($item['name'] ?? ('Model #' . $mid)), ENT_QUOTES) ?>); return false;"><?= h($item['name'] ?? ('Model #' . $mid)) ?></a> (need <?= $qty ?>)
                                                         </div>
                                                         <div class="mt-2">
                                                             <?php $removeAllDeletes = $selectedTotalQty > 0 && $selectedTotalQty <= $qty; ?>
@@ -2124,6 +2124,7 @@ $active  = basename($_SERVER['PHP_SELF']);
 })();
 </script>
 <?php if (!$embedded): ?>
+<?php layout_model_history_modal(); ?>
 <?php layout_footer(); ?>
 </body>
 </html>

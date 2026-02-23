@@ -1239,7 +1239,13 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
 
                             <div class="card-body d-flex flex-column">
                                 <h5 class="card-title">
-                                    <?= label_safe($name) ?>
+                                    <?php if ($isStaff): ?>
+                                        <a href="#" class="model-history-link" onclick="openModelHistory(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
+                                            <?= label_safe($name) ?>
+                                        </a>
+                                    <?php else: ?>
+                                        <?= label_safe($name) ?>
+                                    <?php endif; ?>
                                 </h5>
                                 <p class="card-text small text-muted mb-2">
                                     <?php if ($manuName): ?>
@@ -2270,6 +2276,7 @@ function revertToLoggedIn(e) {
 }
 });
 </script>
+<?php if ($isStaff) { layout_model_history_modal(); } ?>
 <?php layout_footer(); ?>
 </body>
 </html>

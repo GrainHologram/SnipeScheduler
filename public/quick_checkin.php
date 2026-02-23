@@ -163,6 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'asset_tag'  => $assetTag,
                     'name'       => $assetName,
                     'model'      => $modelName,
+                    'model_id'   => (int)($asset['model']['id'] ?? 0),
                     'status'     => $status,
                     'assigned_id'    => $assignedId,
                     'assigned_email' => $assignedEmail,
@@ -619,7 +620,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         <tr class="<?= $inCheckinList ? 'table-success' : '' ?>">
                                             <td><?= h($ua['asset_tag'] ?? '') ?></td>
                                             <td><?= h($ua['name'] ?? '') ?></td>
-                                            <td><?= h($ua['model']['name'] ?? '') ?></td>
+                                            <td><a href="#" class="model-history-link" onclick="openModelHistory(<?= (int)($ua['model']['id'] ?? 0) ?>, <?= htmlspecialchars(json_encode($ua['model']['name'] ?? ''), ENT_QUOTES) ?>); return false;"><?= h($ua['model']['name'] ?? '') ?></a></td>
                                             <td>
                                                 <?php if ($inCheckinList): ?>
                                                     <span class="badge bg-success">&#10003; Added</span>
@@ -661,7 +662,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <tr>
                                         <td><?= h($asset['asset_tag']) ?></td>
                                         <td><?= h($asset['name']) ?></td>
-                                        <td><?= h($asset['model']) ?></td>
+                                        <td><a href="#" class="model-history-link" onclick="openModelHistory(<?= (int)($asset['model_id'] ?? 0) ?>, <?= htmlspecialchars(json_encode($asset['model'] ?? ''), ENT_QUOTES) ?>); return false;"><?= h($asset['model']) ?></a></td>
                                         <?php
                                             $assignedName = $asset['assigned_name'] ?? '';
                                             $assignedEmail = $asset['assigned_email'] ?? '';
@@ -807,6 +808,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     });
 })();
 </script>
+<?php layout_model_history_modal(); ?>
 <?php layout_footer(); ?>
 </body>
 </html>

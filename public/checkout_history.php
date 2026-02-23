@@ -335,7 +335,7 @@ foreach ($checkouts as $co) {
                                             <tr class="<?= $ci['checked_in_at'] ? 'table-success' : '' ?>">
                                                 <td><?= h($ci['asset_tag'] ?? '') ?></td>
                                                 <td><?= h($ci['asset_name'] ?? '') ?></td>
-                                                <td><?= h($ci['model_name'] ?? '') ?></td>
+                                                <td><?php if ($isStaff && !empty($ci['model_id'])): ?><a href="#" class="model-history-link" onclick="openModelHistory(<?= (int)$ci['model_id'] ?>, <?= htmlspecialchars(json_encode($ci['model_name'] ?? ''), ENT_QUOTES) ?>); return false;"><?= h($ci['model_name'] ?? '') ?></a><?php else: ?><?= h($ci['model_name'] ?? '') ?><?php endif; ?></td>
                                                 <td><?= h(display_datetime($ci['checked_out_at'] ?? '')) ?></td>
                                                 <td><?= $ci['checked_in_at'] ? h(display_datetime($ci['checked_in_at'])) : '<span class="badge bg-warning text-dark">Out</span>' ?></td>
                                             </tr>
@@ -383,7 +383,7 @@ foreach ($checkouts as $co) {
                                                     <tr class="<?= $ci['checked_in_at'] ? 'table-success' : '' ?>">
                                                         <td><?= h($ci['asset_tag'] ?? '') ?></td>
                                                         <td><?= h($ci['asset_name'] ?? '') ?></td>
-                                                        <td><?= h($ci['model_name'] ?? '') ?></td>
+                                                        <td><?php if ($isStaff && !empty($ci['model_id'])): ?><a href="#" class="model-history-link" onclick="openModelHistory(<?= (int)$ci['model_id'] ?>, <?= htmlspecialchars(json_encode($ci['model_name'] ?? ''), ENT_QUOTES) ?>); return false;"><?= h($ci['model_name'] ?? '') ?></a><?php else: ?><?= h($ci['model_name'] ?? '') ?><?php endif; ?></td>
                                                         <td><?= h(display_datetime($ci['checked_out_at'] ?? '')) ?></td>
                                                         <td><?= $ci['checked_in_at'] ? h(display_datetime($ci['checked_in_at'])) : '<span class="badge bg-warning text-dark">Out</span>' ?></td>
                                                     </tr>
@@ -443,6 +443,7 @@ foreach ($checkouts as $co) {
 <?php if (!$embedded): ?>
     </div>
 </div>
+<?php if ($isStaff) { layout_model_history_modal(); } ?>
 <?php layout_footer(); ?>
 </body>
 </html>
