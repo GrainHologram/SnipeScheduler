@@ -201,7 +201,8 @@ if ($isStaff && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') 
     }
     // Bust cached user groups so auth badges and permissions refresh immediately
     unset($_SESSION['snipeit_user_groups']);
-    header('Location: catalogue.php');
+    $qs = $_SERVER['QUERY_STRING'] ?? '';
+    header('Location: catalogue.php' . ($qs !== '' ? '?' . $qs : ''));
     exit;
 }
 
