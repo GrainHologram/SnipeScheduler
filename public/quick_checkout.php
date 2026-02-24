@@ -713,7 +713,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     Check out to (Snipe-IT user email or name)
                                 </label>
                                 <div class="position-relative user-autocomplete-wrapper">
-                                    <input type="text"
+                                    <input type="search"
                                            name="checkout_to"
                                            class="form-control user-autocomplete"
                                            autocomplete="off"
@@ -876,7 +876,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     btn.appendChild(secondary);
                 }
 
-                btn.addEventListener('click', () => {
+                btn.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
                     input.value = btn.dataset.value;
                     hideSuggestions();
                     input.focus();
@@ -951,7 +952,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 btn.textContent = label;
                 btn.dataset.value = value;
 
-                btn.addEventListener('click', () => {
+                btn.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
                     input.value = btn.dataset.value;
                     hideSuggestions();
                     input.focus();
