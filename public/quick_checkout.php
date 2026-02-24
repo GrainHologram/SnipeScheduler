@@ -229,17 +229,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
 
                     // Staff bypass warnings — not hard blocks, just alerts
-                    if (!check_user_has_access_group($userId)) {
+                    $config = load_config();
+                    $qcCfg  = $config['quick_checkout'] ?? [];
+
+                    if (($qcCfg['warn_access_group'] ?? true) && !check_user_has_access_group($userId)) {
                         $warnings[] = 'This user does not belong to an Access group. Normally they would be blocked from reserving equipment.';
                     }
 
-                    $ohErrors = oh_validate_reservation_window($startDt, $endDt);
-                    foreach ($ohErrors as $ohErr) {
-                        $warnings[] = $ohErr;
+                    if ($qcCfg['warn_opening_hours'] ?? true) {
+                        $ohErrors = oh_validate_reservation_window($startDt, $endDt);
+                        foreach ($ohErrors as $ohErr) {
+                            $warnings[] = $ohErr;
+                        }
                     }
 
-                    $config = load_config();
-                    if (!empty($config['app']['block_catalogue_overdue'])) {
+                    if (($qcCfg['warn_overdue'] ?? true) && !empty($config['app']['block_catalogue_overdue'])) {
                         try {
                             $overdueStmt = $pdo->prepare("
                                 SELECT asset_tag, model_name, expected_checkin

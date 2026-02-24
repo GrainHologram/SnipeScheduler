@@ -146,6 +146,12 @@ return [
         'allowed_categories' => [],
     ],
 
+    'quick_checkout' => [
+        'warn_access_group'  => true,  // warn when user lacks an Access group
+        'warn_opening_hours' => true,  // warn when dates fall outside opening hours
+        'warn_overdue'       => true,  // warn when user has overdue items
+    ],
+
     'checkout_limits' => [
         'enabled' => false,  // master switch; false = no restrictions (backwards compatible)
         'default' => [
