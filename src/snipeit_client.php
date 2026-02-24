@@ -1619,3 +1619,132 @@ function prefetch_catalogue_model_stats(array $modelIds): array
     $cacheKey = $key;
     return $results;
 }
+
+/**
+ * Create a maintenance record for an asset in Snipe-IT.
+ *
+ * @param int    $assetId
+ * @param string $title
+ * @param string $notes
+ * @param string $type  Maintenance type (e.g. 'Repair', 'Maintenance')
+ * @return void
+ * @throws Exception
+ */
+if (!function_exists('create_asset_maintenance')) {
+    function create_asset_maintenance(int $assetId, string $title, string $notes, string $type = 'Repair'): void
+    {
+        if ($assetId <= 0) {
+            throw new InvalidArgumentException('Invalid asset ID for maintenance.');
+        }
+
+        $config = load_config();
+        $snipeTz = $config['snipeit']['timezone'] ?? ($config['app']['timezone'] ?? 'UTC');
+
+        $startDate = (new DateTimeImmutable('now', new DateTimeZone($snipeTz)))->format('Y-m-d');
+
+        $supplierId = (int)($config['snipeit']['maintenance_supplier_id'] ?? 0);
+
+        $payload = [
+            'asset_id'                 => $assetId,
+            'name'                     => $title,
+            'asset_maintenance_type'   => $type,
+            'start_date'               => $startDate,
+            'notes'                    => $notes,
+        ];
+        if ($supplierId > 0) {
+            $payload['supplier_id'] = $supplierId;
+        }
+
+        $resp = snipeit_request('POST', 'maintenances', $payload);
+
+        $status = $resp['status'] ?? 'success';
+        if ($status !== 'success') {
+            $message = $resp['messages'] ?? ($resp['message'] ?? 'Unknown API response');
+            if (is_array($message)) {
+                $flat = [];
+                array_walk_recursive($message, function ($val) use (&$flat) {
+                    if (is_string($val) && trim($val) !== '') {
+                        $flat[] = $val;
+                    }
+                });
+                $message = $flat ? implode('; ', $flat) : 'Unknown API response';
+            }
+            throw new Exception('Snipe-IT create maintenance failed: ' . $message);
+        }
+    }
+}
+
+/**
+ * Update an asset's status label in Snipe-IT.
+ *
+ * @param int $assetId
+ * @param int $statusId  Snipe-IT status label ID
+ * @return void
+ * @throws Exception
+ */
+if (!function_exists('update_asset_status')) {
+    function update_asset_status(int $assetId, int $statusId): void
+    {
+        if ($assetId <= 0) {
+            throw new InvalidArgumentException('Invalid asset ID for status update.');
+        }
+        if ($statusId <= 0) {
+            throw new InvalidArgumentException('Invalid status label ID.');
+        }
+
+        $resp = snipeit_request('PUT', 'hardware/' . $assetId, [
+            'status_id' => $statusId,
+        ]);
+
+        $status = $resp['status'] ?? 'success';
+        if ($status !== 'success') {
+            $message = $resp['messages'] ?? ($resp['message'] ?? 'Unknown API response');
+            if (is_array($message)) {
+                $flat = [];
+                array_walk_recursive($message, function ($val) use (&$flat) {
+                    if (is_string($val) && trim($val) !== '') {
+                        $flat[] = $val;
+                    }
+                });
+                $message = $flat ? implode('; ', $flat) : 'Unknown API response';
+            }
+            throw new Exception('Snipe-IT status update failed: ' . $message);
+        }
+    }
+}
+
+/**
+ * Look up a Snipe-IT status label ID by name.
+ *
+ * @param string $name  Status label name to search for
+ * @return int|null  Status label ID, or null if not found
+ */
+if (!function_exists('get_status_label_id_by_name')) {
+    function get_status_label_id_by_name(string $name): ?int
+    {
+        static $cache = [];
+        $key = strtolower(trim($name));
+        if ($key === '') {
+            return null;
+        }
+        if (array_key_exists($key, $cache)) {
+            return $cache[$key];
+        }
+
+        try {
+            $resp = snipeit_request('GET', 'statuslabels', ['search' => $name]);
+            $rows = $resp['rows'] ?? [];
+            foreach ($rows as $row) {
+                if (strtolower(trim((string)($row['name'] ?? ''))) === $key) {
+                    $cache[$key] = (int)$row['id'];
+                    return $cache[$key];
+                }
+            }
+        } catch (Throwable $e) {
+            // Lookup failure — treat as not found
+        }
+
+        $cache[$key] = null;
+        return null;
+    }
+}

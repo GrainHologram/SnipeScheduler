@@ -89,12 +89,15 @@ $checkinAssets = &$_SESSION['quick_checkin_assets'];
 
 $messages = [];
 $errors   = [];
+$warnings = [];
 
 // Remove single asset
 if (isset($_GET['remove'])) {
     $rid = (int)$_GET['remove'];
     if ($rid > 0 && isset($checkinAssets[$rid])) {
         unset($checkinAssets[$rid]);
+        // Clear any deferred actions for this asset
+        unset($_SESSION['checkin_asset_actions'][$rid]);
     }
     // Clear detected user if list is now empty
     if (empty($checkinAssets)) {
@@ -110,6 +113,7 @@ if (isset($_GET['clear'])) {
     $checkinAssets = [];
     unset($_SESSION['quick_checkin_detected_user']);
     unset($_SESSION['quick_checkin_user_assets']);
+    unset($_SESSION['checkin_asset_actions']);
     header('Location: quick_checkin.php');
     exit;
 }
@@ -487,10 +491,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ],
                 ]);
             }
+            // Process deferred per-asset actions (notes, maintenance, status changes)
+            if (empty($errors)) {
+                $deferredActions = $_SESSION['checkin_asset_actions'] ?? [];
+                unset($_SESSION['checkin_asset_actions']);
+                $deferWarnings = [];
+
+                foreach ($deferredActions as $dAssetId => $action) {
+                    $dAssetId = (int)$dAssetId;
+                    if ($dAssetId <= 0) continue;
+
+                    $dNote    = trim((string)($action['note'] ?? ''));
+                    $dMaint   = !empty($action['create_maintenance']);
+                    $dPull    = !empty($action['pull_for_repair']);
+                    $dTag     = '';
+                    foreach ($checkinAssets as $ca) {
+                        if ((int)$ca['id'] === $dAssetId) {
+                            $dTag = $ca['asset_tag'] ?? '';
+                            break;
+                        }
+                    }
+                    $dLabel = $dTag !== '' ? $dTag : "#{$dAssetId}";
+
+                    // Note / maintenance
+                    if ($dMaint) {
+                        try {
+                            $maintTitle = 'Repair request — ' . $dLabel;
+                            create_asset_maintenance($dAssetId, $maintTitle, $dNote !== '' ? $dNote : 'Flagged during checkin');
+                        } catch (Throwable $e) {
+                            $deferWarnings[] = "Could not create maintenance for {$dLabel}: " . $e->getMessage();
+                        }
+                    } elseif ($dNote !== '') {
+                        try {
+                            add_asset_note($dAssetId, $dNote);
+                        } catch (Throwable $e) {
+                            $deferWarnings[] = "Could not add note for {$dLabel}: " . $e->getMessage();
+                        }
+                    }
+
+                    // Pull for repair — change status
+                    if ($dPull) {
+                        try {
+                            $config = load_config();
+                            $repairStatusName = $config['snipeit']['repair_status_name'] ?? 'Pulled for Repair/Replace';
+                            $statusId = get_status_label_id_by_name($repairStatusName);
+                            if ($statusId !== null) {
+                                update_asset_status($dAssetId, $statusId);
+                            } else {
+                                $deferWarnings[] = "Could not find status label \"{$repairStatusName}\" for {$dLabel}.";
+                            }
+                        } catch (Throwable $e) {
+                            $deferWarnings[] = "Could not update status for {$dLabel}: " . $e->getMessage();
+                        }
+                    }
+                }
+
+                if (!empty($deferWarnings)) {
+                    $warnings = array_merge($warnings, $deferWarnings);
+                }
+            }
+
             if ($hadCheckinAssets) {
                 $checkinAssets = [];
                 unset($_SESSION['quick_checkin_detected_user']);
                 unset($_SESSION['quick_checkin_user_assets']);
+                unset($_SESSION['checkin_asset_actions']);
             }
         }
     }
@@ -535,6 +600,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <ul class="mb-0">
                     <?php foreach ($errors as $e): ?>
                         <li><?= h($e) ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        <?php endif; ?>
+
+        <?php if (!empty($warnings)): ?>
+            <div class="alert alert-warning">
+                <ul class="mb-0">
+                    <?php foreach ($warnings as $w): ?>
+                        <li><?= h($w) ?></li>
                     <?php endforeach; ?>
                 </ul>
             </div>
@@ -646,6 +721,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         No assets in the check-in list yet. Scan or enter an asset tag above.
                     </div>
                 <?php else: ?>
+                    <?php $savedActions = $_SESSION['checkin_asset_actions'] ?? []; ?>
                     <div class="table-responsive mb-3">
                         <table class="table table-sm table-striped align-middle mb-0">
                             <thead>
@@ -654,11 +730,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <th>Name</th>
                                     <th>Model</th>
                                     <th>Checked out to</th>
-                                    <th style="width: 80px;"></th>
+                                    <th style="width: 150px;"></th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($checkinAssets as $asset): ?>
+                                <?php foreach ($checkinAssets as $asset):
+                                    $aId = (int)$asset['id'];
+                                    $hasAction = isset($savedActions[$aId]);
+                                    $actionData = $hasAction ? $savedActions[$aId] : null;
+                                ?>
                                     <tr>
                                         <td><?= h($asset['asset_tag']) ?></td>
                                         <td><?= h($asset['name']) ?></td>
@@ -677,11 +757,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                             }
                                         ?>
                                         <td><?php if ($assignedLabel !== ''): ?><?= h($assignedLabel) ?><?php else: ?><span class="badge bg-warning text-dark">Not checked out</span><?php endif; ?></td>
-                                        <td>
-                                            <a href="quick_checkin.php?remove=<?= (int)$asset['id'] ?>"
+                                        <td class="text-nowrap">
+                                            <button type="button"
+                                                    id="noteBtn_<?= $aId ?>"
+                                                    class="btn btn-sm <?= $hasAction ? 'btn-warning' : 'btn-outline-secondary' ?>"
+                                                    onclick="openAssetNoteModal(<?= $aId ?>, <?= htmlspecialchars(json_encode($asset['asset_tag']), ENT_QUOTES) ?>, <?= htmlspecialchars(json_encode($asset['name'] ?: $asset['model']), ENT_QUOTES) ?>)">
+                                                Note
+                                            </button>
+                                            <a href="quick_checkin.php?remove=<?= $aId ?>"
                                                class="btn btn-sm btn-outline-danger">
                                                 Remove
                                             </a>
+                                        </td>
+                                    </tr>
+                                    <tr id="noteRow_<?= $aId ?>" style="<?= $hasAction ? '' : 'display:none;' ?>"
+                                        data-note="<?= $hasAction ? h($actionData['note'] ?? '') : '' ?>"
+                                        data-maint="<?= $hasAction && !empty($actionData['create_maintenance']) ? '1' : '0' ?>"
+                                        data-pull="<?= $hasAction && !empty($actionData['pull_for_repair']) ? '1' : '0' ?>">
+                                        <td colspan="5" class="py-1 px-3 bg-light border-0">
+                                            <small class="text-muted">
+                                                <span id="notePreview_<?= $aId ?>"><?= $hasAction && ($actionData['note'] ?? '') !== '' ? h(mb_strimwidth($actionData['note'], 0, 80, '...')) : '' ?></span>
+                                                <?php if ($hasAction && !empty($actionData['create_maintenance'])): ?>
+                                                    <span class="badge bg-danger ms-1" id="maintBadge_<?= $aId ?>">Repair</span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-danger ms-1" id="maintBadge_<?= $aId ?>" style="display:none;">Repair</span>
+                                                <?php endif; ?>
+                                                <?php if ($hasAction && !empty($actionData['pull_for_repair'])): ?>
+                                                    <span class="badge bg-secondary ms-1" id="pullBadge_<?= $aId ?>">Pulled</span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-secondary ms-1" id="pullBadge_<?= $aId ?>" style="display:none;">Pulled</span>
+                                                <?php endif; ?>
+                                            </small>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -809,6 +915,192 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 })();
 </script>
 <?php layout_model_history_modal(); ?>
+
+<!-- Asset Note Modal -->
+<div id="assetNoteBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1060;" onclick="closeAssetNoteModal()"></div>
+<div id="assetNoteModal" style="display:none; position:fixed; inset:0; z-index:1065; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)closeAssetNoteModal()">
+    <div style="max-width:500px; margin:0 auto; background:#fff; border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid #dee2e6;">
+            <h5 id="assetNoteModalLabel" style="margin:0;">Asset Note</h5>
+            <button type="button" onclick="closeAssetNoteModal()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
+        </div>
+        <div style="padding:1rem;">
+            <input type="hidden" id="assetNoteAssetId" value="">
+            <div class="mb-3">
+                <label for="assetNoteText" class="form-label">Note</label>
+                <textarea id="assetNoteText" class="form-control" rows="3" placeholder="e.g. Lens scratched, missing cable..."></textarea>
+            </div>
+            <div class="mb-2">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="assetNoteCreateMaint" onchange="togglePullCheckbox()">
+                    <label class="form-check-label" for="assetNoteCreateMaint">
+                        Create maintenance request (Repair)
+                    </label>
+                </div>
+            </div>
+            <div class="mb-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="assetNotePullRepair" disabled>
+                    <label class="form-check-label text-muted" for="assetNotePullRepair" id="assetNotePullLabel">
+                        Change status to Pulled for Repair/Replace
+                    </label>
+                </div>
+            </div>
+            <div class="d-flex justify-content-between">
+                <button type="button" class="btn btn-sm btn-outline-danger" id="assetNoteClearBtn" style="display:none;" onclick="clearAssetNote()">Clear</button>
+                <div class="ms-auto">
+                    <button type="button" class="btn btn-secondary me-1" onclick="closeAssetNoteModal()">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveAssetNote()">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+// Per-asset note modal — saves to session via AJAX, processed after checkin
+var _noteModalAssetId = null;
+
+function openAssetNoteModal(assetId, assetTag, assetLabel) {
+    _noteModalAssetId = assetId;
+    document.getElementById('assetNoteAssetId').value = assetId;
+    document.getElementById('assetNoteModalLabel').textContent = assetTag + (assetLabel ? ' — ' + assetLabel : '');
+
+    // Pre-fill from DOM state (reflects session data rendered on page load)
+    var noteRow = document.getElementById('noteRow_' + assetId);
+    var notePreview = document.getElementById('notePreview_' + assetId);
+    var maintBadge = document.getElementById('maintBadge_' + assetId);
+    var pullBadge = document.getElementById('pullBadge_' + assetId);
+
+    var hasSaved = noteRow && noteRow.style.display !== 'none';
+    document.getElementById('assetNoteClearBtn').style.display = hasSaved ? '' : 'none';
+
+    // Read current saved state from data attributes if available
+    var savedNote = '';
+    var savedMaint = false;
+    var savedPull = false;
+    if (noteRow && noteRow.dataset.note !== undefined) {
+        savedNote = noteRow.dataset.note || '';
+        savedMaint = noteRow.dataset.maint === '1';
+        savedPull = noteRow.dataset.pull === '1';
+    } else if (hasSaved) {
+        // Fallback: read from visible DOM
+        savedNote = notePreview ? notePreview.textContent.replace(/\.\.\.$/, '') : '';
+        savedMaint = maintBadge && maintBadge.style.display !== 'none';
+        savedPull = pullBadge && pullBadge.style.display !== 'none';
+    }
+
+    document.getElementById('assetNoteText').value = savedNote;
+    document.getElementById('assetNoteCreateMaint').checked = savedMaint;
+    document.getElementById('assetNotePullRepair').checked = savedPull;
+    document.getElementById('assetNotePullRepair').disabled = !savedMaint;
+    document.getElementById('assetNotePullLabel').classList.toggle('text-muted', !savedMaint);
+
+    document.getElementById('assetNoteBackdrop').style.display = 'block';
+    document.getElementById('assetNoteModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+    document.getElementById('assetNoteText').focus();
+}
+
+function closeAssetNoteModal() {
+    document.getElementById('assetNoteBackdrop').style.display = 'none';
+    document.getElementById('assetNoteModal').style.display = 'none';
+    document.body.style.overflow = '';
+    _noteModalAssetId = null;
+}
+
+function togglePullCheckbox() {
+    var maint = document.getElementById('assetNoteCreateMaint').checked;
+    var pull = document.getElementById('assetNotePullRepair');
+    pull.disabled = !maint;
+    if (!maint) pull.checked = false;
+    document.getElementById('assetNotePullLabel').classList.toggle('text-muted', !maint);
+}
+
+function saveAssetNote() {
+    var assetId = _noteModalAssetId;
+    if (!assetId) return;
+
+    var note = document.getElementById('assetNoteText').value.trim();
+    var createMaint = document.getElementById('assetNoteCreateMaint').checked;
+    var pullRepair = document.getElementById('assetNotePullRepair').checked;
+
+    if (note === '' && !createMaint && !pullRepair) {
+        // Nothing to save — clear instead
+        clearAssetNote();
+        return;
+    }
+
+    fetch('ajax_checkin_asset_action.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+        body: JSON.stringify({
+            asset_id: assetId,
+            note: note,
+            create_maintenance: createMaint,
+            pull_for_repair: pullRepair
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            updateNoteRow(assetId, note, createMaint, pullRepair);
+            closeAssetNoteModal();
+        }
+    })
+    .catch(function() {
+        // Silently fail — data persists in session on next page load anyway
+        closeAssetNoteModal();
+    });
+}
+
+function clearAssetNote() {
+    var assetId = _noteModalAssetId;
+    if (!assetId) return;
+
+    fetch('ajax_checkin_asset_action.php', {
+        method: 'DELETE',
+        headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+        body: JSON.stringify({asset_id: assetId})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function() {
+        updateNoteRow(assetId, '', false, false);
+        closeAssetNoteModal();
+    })
+    .catch(function() {
+        closeAssetNoteModal();
+    });
+}
+
+function updateNoteRow(assetId, note, createMaint, pullRepair) {
+    var noteRow = document.getElementById('noteRow_' + assetId);
+    var noteBtn = document.getElementById('noteBtn_' + assetId);
+    var notePreview = document.getElementById('notePreview_' + assetId);
+    var maintBadge = document.getElementById('maintBadge_' + assetId);
+    var pullBadge = document.getElementById('pullBadge_' + assetId);
+
+    var hasData = note !== '' || createMaint || pullRepair;
+
+    if (noteBtn) {
+        noteBtn.className = 'btn btn-sm ' + (hasData ? 'btn-warning' : 'btn-outline-secondary');
+    }
+    if (noteRow) {
+        noteRow.style.display = hasData ? '' : 'none';
+        noteRow.dataset.note = note;
+        noteRow.dataset.maint = createMaint ? '1' : '0';
+        noteRow.dataset.pull = pullRepair ? '1' : '0';
+    }
+    if (notePreview) {
+        notePreview.textContent = note.length > 80 ? note.substring(0, 77) + '...' : note;
+    }
+    if (maintBadge) {
+        maintBadge.style.display = createMaint ? '' : 'none';
+    }
+    if (pullBadge) {
+        pullBadge.style.display = pullRepair ? '' : 'none';
+    }
+}
+</script>
 <?php layout_footer(); ?>
 </body>
 </html>
