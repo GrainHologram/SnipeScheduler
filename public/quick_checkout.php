@@ -360,7 +360,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     if (!empty($reservationConflicts) && !$overrideAllowed) {
                         $errors[] = 'Some assets are reserved for this time. Review who reserved them below or tick "Override" to proceed anyway.';
-                    } else {
+                    }
+
+                    if (empty($errors)) {
                         $expectedCheckinIso = $endDt->setTimezone($utc)->format('Y-m-d H:i:s');
 
                         foreach ($checkoutAssets as $asset) {
