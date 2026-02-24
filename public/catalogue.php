@@ -816,7 +816,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                              style="z-index: 9999; max-height: 260px; overflow-y: auto; display: none; box-shadow: 0 12px 24px rgba(0,0,0,0.18);"></div>
                     </div>
                     <?php if ($bookingOverride): ?>
-                        <button class="btn btn-sm btn-outline-secondary" type="submit" name="booking_user_revert" value="1">Revert to logged in user</button>
+                        <button class="btn btn-sm btn-outline-secondary" type="submit" name="booking_user_revert" value="1">Book as myself</button>
                     <?php endif; ?>
                 </form>
             </div>
