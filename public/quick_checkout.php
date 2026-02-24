@@ -10,6 +10,7 @@ require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/activity_log.php';
 require_once SRC_PATH . '/email.php';
 require_once SRC_PATH . '/layout.php';
+require_once SRC_PATH . '/opening_hours.php';
 
 $appTz = app_get_timezone();
 $now = new DateTime('now', $appTz);
@@ -225,6 +226,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     if ($userId <= 0) {
                         throw new Exception('Matched user has no valid ID.');
+                    }
+
+                    // Staff bypass warnings — not hard blocks, just alerts
+                    if (!check_user_has_access_group($userId)) {
+                        $warnings[] = 'This user does not belong to an Access group. Normally they would be blocked from reserving equipment.';
+                    }
+
+                    $ohErrors = oh_validate_reservation_window($startDt, $endDt);
+                    foreach ($ohErrors as $ohErr) {
+                        $warnings[] = $ohErr;
+                    }
+
+                    $config = load_config();
+                    if (!empty($config['app']['block_catalogue_overdue'])) {
+                        try {
+                            $overdueStmt = $pdo->prepare("
+                                SELECT asset_tag, model_name, expected_checkin
+                                  FROM checked_out_asset_cache
+                                 WHERE assigned_to_id = ?
+                            ");
+                            $overdueStmt->execute([$userId]);
+                            $overdueRows = $overdueStmt->fetchAll(PDO::FETCH_ASSOC);
+                            $nowTs = time();
+                            $snipeTz = snipe_get_timezone();
+                            foreach ($overdueRows as $oRow) {
+                                $ecRaw = $oRow['expected_checkin'] ?? '';
+                                if (is_array($ecRaw)) {
+                                    $ecRaw = $ecRaw['datetime'] ?? ($ecRaw['date'] ?? '');
+                                }
+                                $ecRaw = trim((string)$ecRaw);
+                                if ($ecRaw === '') continue;
+                                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $ecRaw)) {
+                                    $ecRaw .= ' 23:59:59';
+                                }
+                                try {
+                                    $ecTs = (new DateTime($ecRaw, $snipeTz))->getTimestamp();
+                                } catch (Throwable $e) {
+                                    continue;
+                                }
+                                if ($ecTs <= $nowTs) {
+                                    $warnings[] = 'This user has overdue items. Normally they would be blocked from the catalogue.';
+                                    break;
+                                }
+                            }
+                        } catch (Throwable $e) {
+                            // Skip overdue check on DB error
+                        }
                     }
 
                     // Checkout rules enforcement
