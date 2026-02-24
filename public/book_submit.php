@@ -103,6 +103,7 @@ $insert->execute([
 ]);
 
 $reservationId = (int)$pdo->lastInsertId();
+unset($_SESSION['booking_user_override']);
 activity_log_event('reservation_submitted', 'Reservation submitted', [
     'subject_type' => 'reservation',
     'subject_id'   => $reservationId,
