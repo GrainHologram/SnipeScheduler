@@ -550,7 +550,7 @@ if ($catalogueSnipeUserId > 0 && !$staffNoUserSelected) {
 // ---------------------------------------------------------------------
 // Filters
 // ---------------------------------------------------------------------
-$tab          = ($_GET['tab'] ?? 'equipment') === 'kits' ? 'kits' : 'equipment';
+$tab          = ($_GET['tab'] ?? 'kits') === 'equipment' ? 'equipment' : 'kits';
 $searchRaw    = trim($_GET['q'] ?? '');
 $categoryRaw  = trim($_GET['category'] ?? '');
 $sortRaw      = trim($_GET['sort'] ?? '');
