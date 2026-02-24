@@ -244,7 +244,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     if (!$isCheckedOut) {
                         // Asset is not currently checked out — add a note to its history instead of failing
-                        $noteText = 'Asset returned via quick check-in by ' . $staffDisplayName . '. Asset was not checked out at the time.';
+                        $noteText = 'Asset returned via quick check-in by ' . $staffDisplayName . '.';
+                        $detectedUser = $_SESSION['quick_checkin_detected_user'] ?? null;
+                        if ($detectedUser) {
+                            $noteText .= ' Checkin user: ' . $detectedUser['name'] . ' (' . $detectedUser['email'] . ').';
+                        }
+                        $noteText .= ' Asset was not checked out at the time.';
                         if ($note !== '') {
                             $noteText .= ' Staff note: ' . $note;
                         }
