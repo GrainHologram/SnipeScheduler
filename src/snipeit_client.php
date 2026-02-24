@@ -1642,13 +1642,20 @@ if (!function_exists('create_asset_maintenance')) {
 
         $startDate = (new DateTimeImmutable('now', new DateTimeZone($snipeTz)))->format('Y-m-d');
 
-        $resp = snipeit_request('POST', 'maintenances', [
+        $supplierId = (int)($config['snipeit']['maintenance_supplier_id'] ?? 0);
+
+        $payload = [
             'asset_id'                 => $assetId,
-            'title'                    => $title,
+            'name'                     => $title,
             'asset_maintenance_type'   => $type,
             'start_date'               => $startDate,
             'notes'                    => $notes,
-        ]);
+        ];
+        if ($supplierId > 0) {
+            $payload['supplier_id'] = $supplierId;
+        }
+
+        $resp = snipeit_request('POST', 'maintenances', $payload);
 
         $status = $resp['status'] ?? 'success';
         if ($status !== 'success') {

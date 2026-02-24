@@ -40,6 +40,7 @@ return [
         'timezone' => '',  // Snipe-IT server timezone (e.g. 'America/New_York'). Defaults to app timezone if empty.
         'expected_checkin_custom_field' => '',  // DB column name for a Snipe-IT text custom field, e.g. '_snipeit_expected_return_datetime_5'
         'repair_status_name' => 'Pulled for Repair/Replace',  // Snipe-IT status label name used when pulling assets for repair
+        'maintenance_supplier_id' => 0,  // Snipe-IT supplier ID for maintenance requests (0 = omit)
     ],
 
     'ldap' => [
