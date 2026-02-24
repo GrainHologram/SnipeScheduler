@@ -12,6 +12,12 @@ require_once SRC_PATH . '/email.php';
 require_once SRC_PATH . '/layout.php';
 require_once SRC_PATH . '/opening_hours.php';
 
+$qcConfig = load_config();
+if (!($qcConfig['app']['quick_checkout_enabled'] ?? true)) {
+    header('Location: index.php');
+    exit;
+}
+
 $appTz = app_get_timezone();
 $now = new DateTime('now', $appTz);
 $defaultStart = $now->format('Y-m-d\TH:i');

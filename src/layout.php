@@ -137,11 +137,14 @@ if (!function_exists('layout_render_nav')) {
      */
     function layout_render_nav(string $active, bool $isStaff, bool $isAdmin = false): string
     {
+        $cfg = load_config();
+        $quickCheckoutEnabled = $cfg['app']['quick_checkout_enabled'] ?? true;
+
         $links = [
             ['href' => 'index.php',          'label' => 'Dashboard',           'staff' => false],
             ['href' => 'catalogue.php',      'label' => 'Catalogue',           'staff' => false],
             ['href' => 'reservations.php',   'label' => 'Reservations',        'staff' => true],
-            ['href' => 'quick_checkout.php', 'label' => 'Quick Checkout',      'staff' => true],
+            ['href' => 'quick_checkout.php', 'label' => 'Quick Checkout',      'staff' => true, 'enabled' => $quickCheckoutEnabled],
             ['href' => 'quick_checkin.php',  'label' => 'Quick Checkin',       'staff' => true],
             ['href' => 'activity_log.php',   'label' => 'Admin',               'staff' => false, 'admin_only' => true],
             ['href' => 'my_bookings.php',    'label' => 'My Reservations',     'staff' => false, 'right' => true],
@@ -149,6 +152,9 @@ if (!function_exists('layout_render_nav')) {
 
         $html = '<nav class="app-nav">';
         foreach ($links as $link) {
+            if (isset($link['enabled']) && !$link['enabled']) {
+                continue;
+            }
             if (!empty($link['admin_only'])) {
                 if (!$isAdmin) {
                     continue;
