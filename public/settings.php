@@ -386,6 +386,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $app['overdue_staff_email']   = $post('app_overdue_staff_email', $app['overdue_staff_email'] ?? '');
     $app['overdue_staff_name']    = $post('app_overdue_staff_name', $app['overdue_staff_name'] ?? '');
     $app['block_catalogue_overdue'] = isset($_POST['app_block_catalogue_overdue']);
+    $app['quick_checkout_enabled'] = isset($_POST['app_quick_checkout_enabled']);
 
     $catalogue = $config['catalogue'] ?? [];
     $allowedRaw = $_POST['catalogue_allowed_categories'] ?? [];
@@ -1135,6 +1136,23 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                                 </div>
                                 <div class="form-text mt-1">
                                     When enabled, users with overdue assets cannot access the catalogue until items are returned.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row g-3 mt-2">
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input"
+                                           type="checkbox"
+                                           name="app_quick_checkout_enabled"
+                                           id="app_quick_checkout_enabled"
+                                        <?= $cfg(['app', 'quick_checkout_enabled'], true) ? 'checked' : '' ?>>
+                                    <label class="form-check-label fw-semibold" for="app_quick_checkout_enabled">
+                                        Enable Quick Checkout
+                                    </label>
+                                </div>
+                                <div class="form-text mt-1">
+                                    Show the Quick Checkout tab for staff. When disabled, the page is hidden and direct access redirects to the dashboard.
                                 </div>
                             </div>
                         </div>
