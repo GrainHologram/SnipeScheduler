@@ -135,6 +135,8 @@ return [
         'overdue_staff_name'  => '', // optional names for recipients (comma/newline separated)
         'block_catalogue_overdue' => true, // block catalogue for users with overdue checkouts
         'quick_checkout_enabled' => true, // show the Quick Checkout tab for staff
+        'slot_interval_minutes' => 15,  // time slot granularity (minutes)
+        'slot_capacity'         => 0,   // max checkouts+returns per slot (0 = unlimited)
     ],
 
     'reservations' => [

@@ -387,6 +387,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $app['overdue_staff_name']    = $post('app_overdue_staff_name', $app['overdue_staff_name'] ?? '');
     $app['block_catalogue_overdue'] = isset($_POST['app_block_catalogue_overdue']);
     $app['quick_checkout_enabled'] = isset($_POST['app_quick_checkout_enabled']);
+    $app['slot_interval_minutes'] = max(5, min(60, (int)$post('app_slot_interval', $app['slot_interval_minutes'] ?? 15)));
+    $app['slot_capacity'] = max(0, (int)$post('app_slot_capacity', $app['slot_capacity'] ?? 0));
 
     $catalogue = $config['catalogue'] ?? [];
     $allowedRaw = $_POST['catalogue_allowed_categories'] ?? [];
@@ -1154,6 +1156,18 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                                 <div class="form-text mt-1">
                                     Show the Quick Checkout tab for staff. When disabled, the page is hidden and direct access redirects to the dashboard.
                                 </div>
+                            </div>
+                        </div>
+                        <div class="row g-3 mt-2">
+                            <div class="col-md-4">
+                                <label class="form-label">Slot interval (minutes)</label>
+                                <input type="number" name="app_slot_interval" class="form-control" min="5" max="60" step="5" value="<?= (int)$cfg(['app', 'slot_interval_minutes'], 15) ?>">
+                                <div class="form-text">Time slot granularity for the booking calendar (5–60 minutes).</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Slot capacity</label>
+                                <input type="number" name="app_slot_capacity" class="form-control" min="0" value="<?= (int)$cfg(['app', 'slot_capacity'], 0) ?>">
+                                <div class="form-text">Max checkouts + returns per time slot. 0 = unlimited.</div>
                             </div>
                         </div>
                     </div>
