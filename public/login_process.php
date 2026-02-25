@@ -102,7 +102,7 @@ $upsertUser = static function (PDO $pdo, string $email, string $fullName): int {
     if ($existing) {
         $update = $pdo->prepare("
             UPDATE {$userTable}
-               SET name = :name
+               SET name = :name, last_login_at = NOW()
              WHERE id = :id
         ");
         $update->execute([
@@ -114,8 +114,8 @@ $upsertUser = static function (PDO $pdo, string $email, string $fullName): int {
 
     $userIdHex = sprintf('%u', crc32(strtolower($email)));
     $insert = $pdo->prepare("
-        INSERT INTO {$userTable} ({$userIdCol}, name, email, created_at)
-        VALUES (:user_id, :name, :email, NOW())
+        INSERT INTO {$userTable} ({$userIdCol}, name, email, created_at, last_login_at)
+        VALUES (:user_id, :name, :email, NOW(), NOW())
     ");
     $insert->execute([
         ':user_id' => $userIdHex,
