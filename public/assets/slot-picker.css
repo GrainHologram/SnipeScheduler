@@ -279,6 +279,71 @@
     text-decoration: underline;
 }
 
+/* ---- Dark-background context (e.g. .filter-panel) ---- */
+
+.filter-panel .sp-month-label,
+.filter-panel .sp-day,
+.filter-panel .sp-month-btn {
+    color: #ffffff;
+}
+
+.filter-panel .sp-calendar th,
+.filter-panel .sp-slots-label,
+.filter-panel .sp-loading,
+.filter-panel .sp-empty {
+    color: rgba(255, 255, 255, 0.65);
+}
+
+.filter-panel .sp-month-btn {
+    border-color: rgba(255, 255, 255, 0.25);
+}
+
+.filter-panel .sp-month-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+.filter-panel .sp-day:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.filter-panel .sp-day-past {
+    opacity: 0.3;
+}
+
+.filter-panel .sp-day-today {
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+.filter-panel .sp-slot {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+}
+
+.filter-panel .sp-slot:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+.filter-panel .sp-selection {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+}
+
+.filter-panel .sp-selection-value {
+    color: #ffffff;
+}
+
+.filter-panel .sp-change-link {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.filter-panel .sp-change-link:hover {
+    color: #ffffff;
+}
+
 /* ---- Responsive ---- */
 
 @media (max-width: 400px) {
