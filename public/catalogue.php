@@ -1757,7 +1757,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                     <strong><?= $windowActive ? 'Kits available for selected dates:' : 'Kits available now:' ?></strong>
                                     <?= (int)$kitCard['availability'] ?>
                                     <?php if ($kitCard['availability'] <= 0 && $kitCard['bottleneck']): ?>
-                                        <span class="text-danger">(limited by <?= h($kitCard['bottleneck']) ?>)</span>
+                                        <span class="text-danger"><?php if ($kitCard['any_available']): ?>(limited by <?= h($kitCard['bottleneck']) ?>)<?php else: ?>(no items available)<?php endif; ?></span>
                                     <?php endif; ?>
                                 </p>
                                 <?php if (!empty($kitCard['certs'])): ?>
