@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_login_at DATETIME DEFAULT NULL,
 
     PRIMARY KEY (id),
     UNIQUE KEY uq_users_user_id (user_id),
