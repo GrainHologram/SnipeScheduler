@@ -6,6 +6,7 @@
 
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/snipeit_client.php';
+require_once __DIR__ . '/opening_hours.php';
 
 /**
  * Get checkout limits config, with defaults for missing keys.
@@ -96,22 +97,14 @@ function get_effective_checkout_limits(int $snipeitUserId): array
  */
 function validate_checkout_duration(int $snipeitUserId, DateTime $start, DateTime $end): ?string
 {
-    $cfg = checkout_limits_config();
-    if (!$cfg['enabled']) {
-        return null;
-    }
-
-    $limits = get_effective_checkout_limits($snipeitUserId);
-    $maxHours = $limits['max_checkout_hours'];
-
-    if ($maxHours <= 0) {
+    $maxEnd = get_max_checkout_end($snipeitUserId, $start);
+    if ($maxEnd === null) {
         return null; // unlimited
     }
 
-    $diffSeconds = $end->getTimestamp() - $start->getTimestamp();
-    $diffHours = $diffSeconds / 3600;
-
-    if ($diffHours > $maxHours) {
+    if ($end > $maxEnd) {
+        $limits = get_effective_checkout_limits($snipeitUserId);
+        $maxHours = $limits['max_checkout_hours'];
         $days = round($maxHours / 24, 1);
         return "Checkout duration exceeds the maximum allowed ({$maxHours} hours / {$days} days). "
              . "Please select a shorter period.";
@@ -164,45 +157,38 @@ function validate_advance_reservation(int $snipeitUserId, DateTime $start): ?str
  */
 function validate_renewal_duration(int $snipeitUserId, string $currentExpected, DateTime $newExpected, ?string $lastCheckout = null): ?string
 {
-    $cfg = checkout_limits_config();
-    if (!$cfg['enabled']) {
-        return null;
+    $maxEnd = get_max_renewal_end($snipeitUserId, $currentExpected, $lastCheckout ?? '');
+    if ($maxEnd === null) {
+        return null; // unlimited
     }
 
-    $limits = get_effective_checkout_limits($snipeitUserId);
-    $maxRenewalHours = $limits['max_renewal_hours'];
-    $maxTotalHours = $limits['max_total_hours'];
+    if ($newExpected > $maxEnd) {
+        $limits = get_effective_checkout_limits($snipeitUserId);
+        $maxRenewalHours = $limits['max_renewal_hours'];
+        $maxTotalHours = $limits['max_total_hours'];
 
-    // Check renewal limit: extension from current expected to new expected
-    if ($maxRenewalHours > 0 && $currentExpected !== '') {
-        try {
-            $currentDt = new DateTime($currentExpected);
-            $extensionSeconds = $newExpected->getTimestamp() - $currentDt->getTimestamp();
-            $extensionHours = $extensionSeconds / 3600;
-
-            if ($extensionHours > $maxRenewalHours) {
-                $days = round($maxRenewalHours / 24, 1);
-                return "Renewal extension exceeds the maximum allowed ({$maxRenewalHours} hours / {$days} days).";
+        // Determine which limit is the binding constraint
+        if ($maxRenewalHours > 0 && $currentExpected !== '') {
+            try {
+                $currentDt = new DateTime($currentExpected);
+                $extensionSeconds = $newExpected->getTimestamp() - $currentDt->getTimestamp();
+                $extensionHours = $extensionSeconds / 3600;
+                if ($extensionHours > $maxRenewalHours) {
+                    $days = round($maxRenewalHours / 24, 1);
+                    return "Renewal extension exceeds the maximum allowed ({$maxRenewalHours} hours / {$days} days).";
+                }
+            } catch (Throwable $e) {
+                // ignore
             }
-        } catch (Throwable $e) {
-            // Can't parse current expected, skip renewal check
         }
-    }
 
-    // Check total limit: from last checkout to new expected
-    if ($maxTotalHours > 0 && $lastCheckout !== null && $lastCheckout !== '') {
-        try {
-            $checkoutDt = new DateTime($lastCheckout);
-            $totalSeconds = $newExpected->getTimestamp() - $checkoutDt->getTimestamp();
-            $totalHours = $totalSeconds / 3600;
-
-            if ($totalHours > $maxTotalHours) {
-                $days = round($maxTotalHours / 24, 1);
-                return "Total checkout duration (including renewals) exceeds the maximum allowed ({$maxTotalHours} hours / {$days} days).";
-            }
-        } catch (Throwable $e) {
-            // Can't parse last checkout, skip total check
+        if ($maxTotalHours > 0 && $lastCheckout !== null && $lastCheckout !== '') {
+            $days = round($maxTotalHours / 24, 1);
+            return "Total checkout duration (including renewals) exceeds the maximum allowed ({$maxTotalHours} hours / {$days} days).";
         }
+
+        // Generic fallback
+        return "Renewal exceeds the maximum allowed duration.";
     }
 
     return null;
@@ -231,6 +217,14 @@ function get_max_checkout_end(int $snipeitUserId, DateTime $start): ?DateTime
 
     $max = clone $start;
     $max->modify("+{$maxHours} hours");
+
+    // Extend past closed hours to the first available open slot
+    $intervalMinutes = (int)(load_config()['app']['slot_interval_minutes'] ?? 15);
+    $firstSlot = oh_first_available_slot($max, $intervalMinutes);
+    if ($firstSlot !== null) {
+        $max = $firstSlot;
+    }
+
     return $max;
 }
 
@@ -252,13 +246,16 @@ function get_max_renewal_end(int $snipeitUserId, string $currentExpected, string
     $limits = get_effective_checkout_limits($snipeitUserId);
     $maxRenewalHours = $limits['max_renewal_hours'];
     $maxTotalHours = $limits['max_total_hours'];
+    $intervalMinutes = (int)(load_config()['app']['slot_interval_minutes'] ?? 15);
     $candidates = [];
 
     if ($maxRenewalHours > 0 && $currentExpected !== '') {
         try {
             $dt = new DateTime($currentExpected);
             $dt->modify("+{$maxRenewalHours} hours");
-            $candidates[] = $dt;
+            // Extend past closed hours to the first available open slot
+            $slot = oh_first_available_slot($dt, $intervalMinutes);
+            $candidates[] = ($slot !== null) ? $slot : $dt;
         } catch (Throwable $e) {
             // ignore
         }
@@ -268,7 +265,9 @@ function get_max_renewal_end(int $snipeitUserId, string $currentExpected, string
         try {
             $dt = new DateTime($lastCheckout);
             $dt->modify("+{$maxTotalHours} hours");
-            $candidates[] = $dt;
+            // Extend past closed hours to the first available open slot
+            $slot = oh_first_available_slot($dt, $intervalMinutes);
+            $candidates[] = ($slot !== null) ? $slot : $dt;
         } catch (Throwable $e) {
             // ignore
         }

@@ -101,11 +101,14 @@ if ($snipeUserId > 0) {
     }
 }
 
-// Opening hours enforcement (end users only)
+// Opening hours enforcement (admins can bypass)
+$isAdmin = !empty($currentUser['is_admin']);
 require_once SRC_PATH . '/opening_hours.php';
-$ohErrors = oh_validate_reservation_window($startDt, $endDt);
-if (!empty($ohErrors)) {
-    basket_error($ohErrors[0]);
+if (!$isAdmin) {
+    $ohErrors = oh_validate_reservation_window($startDt, $endDt);
+    if (!empty($ohErrors)) {
+        basket_error($ohErrors[0]);
+    }
 }
 
 $pdo->beginTransaction();

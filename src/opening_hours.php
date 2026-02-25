@@ -360,3 +360,107 @@ if (!function_exists('oh_validate_reservation_window')) {
         return $errors;
     }
 }
+
+// -------------------------------------------------------
+// Slot availability: find the first open slot with capacity
+// -------------------------------------------------------
+
+if (!function_exists('oh_first_available_slot')) {
+    /**
+     * Find the earliest available return slot at or after a UTC datetime.
+     *
+     * Iterates open hours forward (up to 14 days) in $intervalMinutes increments
+     * and returns the first slot that is within open hours AND has remaining
+     * capacity (based on reservation end times and active checkout returns
+     * scheduled in that slot window).
+     *
+     * @param DateTime $utcDt           UTC datetime to start searching from
+     * @param int      $intervalMinutes Slot size in minutes (default 15)
+     * @return DateTime|null            UTC datetime of the first available slot, or null if none within 14 days
+     */
+    function oh_first_available_slot(DateTime $utcDt, int $intervalMinutes = 15): ?DateTime
+    {
+        global $pdo;
+        require_once SRC_PATH . '/db.php';
+
+        $config = load_config();
+        $slotCapacity = (int)($config['app']['slot_capacity'] ?? 0);
+        $appTz = app_get_timezone();
+        $utcTz = new DateTimeZone('UTC');
+
+        // Work in app timezone for hour comparisons
+        $localDt = (clone $utcDt)->setTimezone($appTz);
+        $startDate = $localDt->format('Y-m-d');
+
+        $maxDays = 14;
+        $intervalSec = $intervalMinutes * 60;
+
+        for ($dayOffset = 0; $dayOffset <= $maxDays; $dayOffset++) {
+            $dateStr = (new DateTime($startDate, $appTz))
+                ->modify("+{$dayOffset} days")
+                ->format('Y-m-d');
+
+            $hours = oh_get_hours_for_date($dateStr);
+            if ($hours['is_closed'] || $hours['open_time'] === null || $hours['close_time'] === null) {
+                continue;
+            }
+
+            // Build slot start: open_time on this date (in app tz)
+            $dayOpen  = new DateTime($dateStr . ' ' . $hours['open_time'], $appTz);
+            $dayClose = new DateTime($dateStr . ' ' . $hours['close_time'], $appTz);
+
+            // On the first day, skip slots before the input time
+            $slotLocal = clone $dayOpen;
+            if ($dayOffset === 0 && $localDt > $dayOpen) {
+                // Advance to the next slot boundary at or after localDt
+                $secSinceOpen = $localDt->getTimestamp() - $dayOpen->getTimestamp();
+                $slotsToSkip = (int)ceil($secSinceOpen / $intervalSec);
+                $slotLocal->modify('+' . ($slotsToSkip * $intervalSec) . ' seconds');
+            }
+
+            while ($slotLocal <= $dayClose) {
+                // Convert slot boundaries to UTC for DB queries
+                $slotStartUtc = (clone $slotLocal)->setTimezone($utcTz);
+                $slotEndLocal = (clone $slotLocal)->modify("+{$intervalMinutes} minutes");
+                $slotEndUtc   = (clone $slotEndLocal)->setTimezone($utcTz);
+
+                $slotStartStr = $slotStartUtc->format('Y-m-d H:i:s');
+                $slotEndStr   = $slotEndUtc->format('Y-m-d H:i:s');
+
+                // Capacity 0 = unlimited — return first open slot
+                if ($slotCapacity <= 0) {
+                    return $slotStartUtc;
+                }
+
+                // Count reservations ending in this slot window
+                $stmt = $pdo->prepare("
+                    SELECT COUNT(*) FROM reservations
+                    WHERE status IN ('pending','confirmed')
+                      AND end_datetime >= :slot_start AND end_datetime < :slot_end
+                ");
+                $stmt->execute([':slot_start' => $slotStartStr, ':slot_end' => $slotEndStr]);
+                $reservationCount = (int)$stmt->fetchColumn();
+
+                // Count active checkout returns expected in this slot window
+                $stmt = $pdo->prepare("
+                    SELECT COUNT(*) FROM checkouts
+                    WHERE status IN ('open','partial')
+                      AND end_datetime >= :slot_start AND end_datetime < :slot_end
+                ");
+                $stmt->execute([':slot_start' => $slotStartStr, ':slot_end' => $slotEndStr]);
+                $checkoutCount = (int)$stmt->fetchColumn();
+
+                $totalInSlot = $reservationCount + $checkoutCount;
+                if ($totalInSlot < $slotCapacity) {
+                    return $slotStartUtc;
+                }
+
+                // Advance to next slot
+                $slotLocal->modify("+{$intervalMinutes} minutes");
+            }
+        }
+
+        // No available slot within 14 days
+        return null;
+    }
+}

@@ -4,6 +4,7 @@ require_once SRC_PATH . '/auth.php';
 require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/activity_log.php';
 require_once SRC_PATH . '/snipeit_client.php';
+require_once SRC_PATH . '/checkout_rules.php';
 require_once SRC_PATH . '/layout.php';
 
 $isAdmin = !empty($currentUser['is_admin']);
@@ -129,6 +130,10 @@ if (($reservation['status'] ?? '') !== 'pending') {
     echo 'Only pending reservations can be edited.';
     exit;
 }
+
+$resSnipeitUserId = (int)($reservation['snipeit_user_id'] ?? 0);
+$limits = get_effective_checkout_limits($resSnipeitUserId > 0 ? $resSnipeitUserId : (int)($currentUser['snipeit_user_id'] ?? 0));
+$maxCheckoutHours = $limits['max_checkout_hours'];
 
 try {
     $itemsStmt = $pdo->prepare('
@@ -514,8 +519,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$startValue = datetime_local_value($reservation['start_datetime'] ?? '');
-$endValue   = datetime_local_value($reservation['end_datetime'] ?? '');
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Preserve user's submitted values on validation failure
+    $startValue = $_POST['start_datetime'] ?? '';
+    $endValue   = $_POST['end_datetime'] ?? '';
+} else {
+    $startValue = datetime_local_value($reservation['start_datetime'] ?? '');
+    $endValue   = datetime_local_value($reservation['end_datetime'] ?? '');
+}
 
 $active = $embedded ? 'reservations.php' : ($fromMy ? 'my_bookings.php' : 'staff_reservations.php');
 $ajaxBase = 'reservation_edit.php?id=' . (int)$id;
@@ -549,6 +560,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/slot-picker.css">
     <?= layout_theme_styles() ?>
 </head>
 <body class="p-4">
@@ -596,22 +608,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
-                        <label class="form-label">Start date/time</label>
-                        <input type="datetime-local"
-                               name="start_datetime"
-                               class="form-control"
-                               value="<?= h($startValue) ?>"
-                               required>
+                        <label class="form-label fw-semibold">Start date &amp; time</label>
+                        <div id="edit-start-picker"></div>
+                        <input type="hidden" name="start_datetime" id="edit-start-datetime"
+                               value="<?= h($startValue) ?>">
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">End date/time</label>
-                        <input type="datetime-local"
-                               name="end_datetime"
-                               class="form-control"
-                               value="<?= h($endValue) ?>"
-                               required>
+                        <label class="form-label fw-semibold">End date &amp; time</label>
+                        <div id="edit-end-picker"></div>
+                        <input type="hidden" name="end_datetime" id="edit-end-datetime"
+                               value="<?= h($endValue) ?>">
                     </div>
                 </div>
+                <?php if ($isStaff): ?>
+                <div class="mb-3">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="bypass-capacity">
+                        <label class="form-check-label" for="bypass-capacity">Bypass slot capacity</label>
+                    </div>
+                    <?php if ($isAdmin): ?>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="bypass-closed">
+                        <label class="form-check-label" for="bypass-closed">Bypass closed hours</label>
+                    </div>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
 
                 <?php if (empty($displayItems)): ?>
                     <div class="alert alert-warning mb-0">
@@ -811,8 +833,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 </div>
 <?php layout_footer(); ?>
+<script src="assets/slot-picker.js"></script>
 <script>
 (function () {
+    // ---- Slot pickers ----
+    var maxCheckoutHours = <?= json_encode($maxCheckoutHours) ?>;
+    var intervalMinutes = <?= (int)(load_config()['app']['slot_interval_minutes'] ?? 15) ?>;
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function toDatetimeStr(d) {
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+            + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+
+    var startPicker = new SlotPicker({
+        container: document.getElementById('edit-start-picker'),
+        hiddenInput: document.getElementById('edit-start-datetime'),
+        type: 'start',
+        intervalMinutes: intervalMinutes,
+        isStaff: <?= $isStaff ? 'true' : 'false' ?>,
+        isAdmin: <?= $isAdmin ? 'true' : 'false' ?>,
+        timeFormat: <?= json_encode(app_get_time_format()) ?>,
+        dateFormat: <?= json_encode(app_get_date_format()) ?>,
+        onSelect: function (datetime) {
+            if (maxCheckoutHours > 0) {
+                var startMs = Date.parse(datetime);
+                if (!isNaN(startMs)) {
+                    var endDate = new Date(startMs + maxCheckoutHours * 3600000);
+                    endPicker.setValue(toDatetimeStr(endDate));
+                }
+            } else {
+                var parts = datetime.split('T');
+                var dateParts = parts[0].split('-');
+                var nextDay = new Date(
+                    parseInt(dateParts[0], 10),
+                    parseInt(dateParts[1], 10) - 1,
+                    parseInt(dateParts[2], 10) + 1,
+                    9, 0, 0
+                );
+                endPicker.setValue(toDatetimeStr(nextDay));
+            }
+        }
+    });
+
+    var endPicker = new SlotPicker({
+        container: document.getElementById('edit-end-picker'),
+        hiddenInput: document.getElementById('edit-end-datetime'),
+        type: 'end',
+        intervalMinutes: intervalMinutes,
+        isStaff: <?= $isStaff ? 'true' : 'false' ?>,
+        isAdmin: <?= $isAdmin ? 'true' : 'false' ?>,
+        timeFormat: <?= json_encode(app_get_time_format()) ?>,
+        dateFormat: <?= json_encode(app_get_date_format()) ?>
+    });
+
+    // Restore selection from hidden inputs (initial load or POST failure re-render)
+    var existingStart = document.getElementById('edit-start-datetime').value;
+    var existingEnd = document.getElementById('edit-end-datetime').value;
+    if (existingStart) { startPicker.setValue(existingStart); }
+    if (existingEnd) { endPicker.setValue(existingEnd); }
+
+    // Bypass toggles
+    var capToggle = document.getElementById('bypass-capacity');
+    var closedToggle = document.getElementById('bypass-closed');
+    if (capToggle) {
+        capToggle.addEventListener('change', function () {
+            startPicker.setBypass('capacity', this.checked);
+            endPicker.setBypass('capacity', this.checked);
+        });
+    }
+    if (closedToggle) {
+        closedToggle.addEventListener('change', function () {
+            startPicker.setBypass('closed', this.checked);
+            endPicker.setBypass('closed', this.checked);
+        });
+    }
+
+    // ---- Model autocomplete ----
     function initAutocomplete(wrapper) {
         const input = wrapper.querySelector('.model-autocomplete');
         const hidden = wrapper.querySelector('.model-autocomplete-id');

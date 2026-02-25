@@ -1,0 +1,294 @@
+/* --------------------------------------------------
+   Slot Picker component
+   Scoped under .slot-picker
+-------------------------------------------------- */
+
+.slot-picker {
+    user-select: none;
+}
+
+/* ---- Calendar ---- */
+
+.sp-calendar {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+}
+
+.sp-calendar th {
+    text-align: center;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.4rem 0;
+}
+
+.sp-calendar td {
+    text-align: center;
+    padding: 0.2rem;
+}
+
+/* ---- Month navigation header ---- */
+
+.sp-month-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.sp-month-label {
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--text);
+}
+
+.sp-month-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+    padding: 0.25rem 0.6rem;
+    cursor: pointer;
+    color: var(--text);
+    font-size: 0.9rem;
+    line-height: 1;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.sp-month-btn:hover {
+    background: rgba(var(--primary-rgb), 0.08);
+    border-color: rgba(var(--primary-rgb), 0.3);
+}
+
+.sp-month-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+/* ---- Day cells ---- */
+
+.sp-day {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    aspect-ratio: 1;
+    max-width: 42px;
+    max-height: 42px;
+    margin: 0 auto;
+    border-radius: 0.5rem;
+    border: 2px solid transparent;
+    background: none;
+    cursor: pointer;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text);
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+    padding: 0;
+    line-height: 1;
+}
+
+.sp-day:hover {
+    background: rgba(var(--primary-rgb), 0.08);
+}
+
+.sp-day-empty {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.sp-day-past {
+    opacity: 0.35;
+    pointer-events: none;
+    cursor: default;
+}
+
+.sp-day-closed {
+    color: var(--muted);
+    opacity: 0.35;
+    pointer-events: none;
+    cursor: default;
+    text-decoration: line-through;
+}
+
+.sp-day-closed.sp-bypass-active {
+    opacity: 0.6;
+    pointer-events: auto;
+    cursor: pointer;
+    text-decoration: line-through;
+}
+
+.sp-day-today {
+    border-color: var(--primary-soft);
+}
+
+.sp-day-selected {
+    background: var(--primary);
+    color: #ffffff;
+    border-color: var(--primary-strong);
+}
+
+.sp-day-selected:hover {
+    background: var(--primary-strong);
+}
+
+/* ---- Slots grid ---- */
+
+.sp-slots-panel {
+    margin-top: 0.75rem;
+}
+
+.sp-slots-label {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.4rem;
+}
+
+.sp-slots-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.4rem;
+}
+
+.sp-slot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background: #ffffff;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.sp-slot:hover {
+    background: rgba(var(--primary-rgb), 0.06);
+    border-color: rgba(var(--primary-rgb), 0.3);
+}
+
+.sp-slot-full {
+    opacity: 0.4;
+    pointer-events: none;
+    cursor: not-allowed;
+}
+
+.sp-slot-full.sp-bypass-active {
+    opacity: 0.6;
+    pointer-events: auto;
+    cursor: pointer;
+    text-decoration: line-through;
+}
+
+.sp-slot-selected {
+    background: var(--primary);
+    color: #ffffff;
+    border-color: var(--primary-strong);
+    box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.2);
+}
+
+.sp-slot-selected:hover {
+    background: var(--primary-strong);
+    color: #ffffff;
+}
+
+.sp-slot-remaining {
+    font-size: 0.75rem;
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+/* ---- Loading / empty states ---- */
+
+.sp-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1.5rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+.sp-loading-spinner {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgba(var(--primary-rgb), 0.2);
+    border-top-color: var(--primary);
+    animation: sp-spin 800ms linear infinite;
+}
+
+@keyframes sp-spin {
+    to { transform: rotate(360deg); }
+}
+
+.sp-empty {
+    text-align: center;
+    padding: 1.25rem;
+    color: var(--muted);
+    font-size: 0.88rem;
+}
+
+.sp-error {
+    text-align: center;
+    padding: 1rem;
+    color: #dc3545;
+    font-size: 0.88rem;
+}
+
+/* ---- Selected summary ---- */
+
+.sp-selection {
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    background: rgba(var(--primary-rgb), 0.06);
+    border: 1px solid rgba(var(--primary-rgb), 0.15);
+    font-size: 0.88rem;
+    color: var(--text);
+}
+
+.sp-selection-value {
+    font-weight: 700;
+    color: var(--primary-strong);
+}
+
+.sp-change-link {
+    margin-left: 0.75rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--primary);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.sp-change-link:hover {
+    text-decoration: underline;
+}
+
+/* ---- Responsive ---- */
+
+@media (max-width: 400px) {
+    .sp-slots-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .sp-day {
+        max-width: 36px;
+        max-height: 36px;
+        font-size: 0.82rem;
+    }
+}
