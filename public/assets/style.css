@@ -855,6 +855,10 @@ form .form-select {
     border-color: rgba(var(--primary-rgb), 0.45);
 }
 
+.table .btn-outline-danger {
+    color: var(--bs-danger, #dc3545);
+}
+
 .btn-primary,
 .btn-success {
     border-radius: 0.6rem;
