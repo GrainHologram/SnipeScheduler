@@ -547,6 +547,9 @@ if ($catalogueSnipeUserId > 0 && !$staffNoUserSelected) {
     $accessBlocked = !check_user_has_access_group($catalogueSnipeUserId);
 }
 
+$catLimits = get_effective_checkout_limits($catalogueSnipeUserId > 0 ? $catalogueSnipeUserId : 0);
+$maxCheckoutHours = $catLimits['max_checkout_hours'];
+
 // ---------------------------------------------------------------------
 // Filters
 // ---------------------------------------------------------------------
@@ -629,6 +632,7 @@ $checkedOutCounts = [];
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/slot-picker.css">
     <?= layout_theme_styles() ?>
 </head>
 <body class="p-4"
@@ -959,22 +963,16 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             <input type="hidden" name="category" value="<?= h($categoryRaw) ?>">
             <input type="hidden" name="sort" value="<?= h($sortRaw) ?>">
             <input type="hidden" name="prefetch" value="1">
+            <input type="hidden" name="start_datetime" id="catalogue_start_datetime" value="<?= h($windowStartRaw) ?>">
+            <input type="hidden" name="end_datetime" id="catalogue_end_datetime" value="<?= h($windowEndRaw) ?>">
             <div class="row g-3 align-items-end">
                 <div class="col-md-4">
-                    <label class="form-label fw-semibold">Start date &amp; time</label>
-                    <input type="datetime-local"
-                           name="start_datetime"
-                           id="catalogue_start_datetime"
-                           class="form-control form-control-lg"
-                           value="<?= h($windowStartRaw) ?>">
+                    <label class="form-label fw-semibold">Pick-up date &amp; time</label>
+                    <div id="equip-start-picker"></div>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label fw-semibold">End date &amp; time</label>
-                    <input type="datetime-local"
-                           name="end_datetime"
-                           id="catalogue_end_datetime"
-                           class="form-control form-control-lg"
-                           value="<?= h($windowEndRaw) ?>">
+                    <label class="form-label fw-semibold">Return date &amp; time</label>
+                    <div id="equip-end-picker"></div>
                 </div>
                 <div class="col-md-4 d-grid d-md-flex gap-2">
                     <button class="btn btn-primary btn-lg w-100 flex-md-fill mt-3 mt-md-0 reservation-window-btn" type="button" id="catalogue-today-btn">
@@ -985,6 +983,20 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     </button>
                 </div>
             </div>
+            <?php if ($isStaff): ?>
+            <div class="mt-2">
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input equip-bypass-cap" type="checkbox" id="equip-bypass-capacity">
+                    <label class="form-check-label" for="equip-bypass-capacity">Bypass slot capacity</label>
+                </div>
+                <?php if ($isAdmin): ?>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input equip-bypass-closed" type="checkbox" id="equip-bypass-closed">
+                    <label class="form-check-label" for="equip-bypass-closed">Bypass closed hours</label>
+                </div>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
             <?php if ($windowError !== ''): ?>
                 <div class="text-danger small mt-2"><?= h($windowError) ?></div>
             <?php endif; ?>
@@ -1694,22 +1706,16 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 <input type="hidden" name="category" value="<?= h($categoryRaw) ?>">
                 <input type="hidden" name="sort" value="<?= h($sortRaw) ?>">
                 <input type="hidden" name="prefetch" value="1">
+                <input type="hidden" name="start_datetime" id="kits_start_datetime" value="<?= h($windowStartRaw) ?>">
+                <input type="hidden" name="end_datetime" id="kits_end_datetime" value="<?= h($windowEndRaw) ?>">
                 <div class="row g-3 align-items-end">
                     <div class="col-md-4">
-                        <label class="form-label fw-semibold">Start date &amp; time</label>
-                        <input type="datetime-local"
-                               name="start_datetime"
-                               id="kits_start_datetime"
-                               class="form-control form-control-lg"
-                               value="<?= h($windowStartRaw) ?>">
+                        <label class="form-label fw-semibold">Pick-up date &amp; time</label>
+                        <div id="kits-start-picker"></div>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label fw-semibold">End date &amp; time</label>
-                        <input type="datetime-local"
-                               name="end_datetime"
-                               id="kits_end_datetime"
-                               class="form-control form-control-lg"
-                               value="<?= h($windowEndRaw) ?>">
+                        <label class="form-label fw-semibold">Return date &amp; time</label>
+                        <div id="kits-end-picker"></div>
                     </div>
                     <div class="col-md-4 d-grid d-md-flex gap-2">
                         <button class="btn btn-primary btn-lg w-100 flex-md-fill mt-3 mt-md-0 reservation-window-btn" type="button" id="kits-today-btn">
@@ -1720,6 +1726,20 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         </button>
                     </div>
                 </div>
+                <?php if ($isStaff): ?>
+                <div class="mt-2">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input kits-bypass-cap" type="checkbox" id="kits-bypass-capacity">
+                        <label class="form-check-label" for="kits-bypass-capacity">Bypass slot capacity</label>
+                    </div>
+                    <?php if ($isAdmin): ?>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input kits-bypass-closed" type="checkbox" id="kits-bypass-closed">
+                        <label class="form-check-label" for="kits-bypass-closed">Bypass closed hours</label>
+                    </div>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
             </form>
 
             <div class="row g-3">
@@ -1842,6 +1862,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
      aria-hidden="true"></div>
 
 <!-- AJAX add-to-basket + update basket count text -->
+<script src="assets/slot-picker.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const loadingOverlay = document.getElementById('catalogue-loading');
@@ -1863,10 +1884,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const filterForm = document.getElementById('catalogue-filter-form');
     const categorySelect = filterForm ? filterForm.querySelector('select[name="category"]') : null;
     const sortSelect = filterForm ? filterForm.querySelector('select[name="sort"]') : null;
-    const windowStartInput = document.getElementById('catalogue_start_datetime');
-    const windowEndInput = document.getElementById('catalogue_end_datetime');
-    const windowForm = document.getElementById('catalogue-window-form');
-    const todayBtn = document.getElementById('catalogue-today-btn');
     let bookingTimer   = null;
     let bookingQuery   = '';
     let bookingActiveIndex = -1;
@@ -1878,64 +1895,126 @@ document.addEventListener('DOMContentLoaded', function () {
         loadingOverlay.setAttribute('aria-busy', 'true');
     }
 
-    function maybeSubmitWindow() {
-        if (!windowForm || !windowStartInput || !windowEndInput) return;
-        const startVal = windowStartInput.value.trim();
-        const endVal = windowEndInput.value.trim();
-        if (startVal === '' && endVal === '') return;
-        if (startVal === '' || endVal === '') return;
-        const startMs = Date.parse(startVal);
-        const endMs = Date.parse(endVal);
-        if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs <= startMs) return;
-        showLoadingOverlay();
-        windowForm.submit();
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function toDatetimeStr(d) {
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+            + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
     }
 
-    function toLocalDatetimeValue(date) {
-        const pad = function (n) { return String(n).padStart(2, '0'); };
-        return date.getFullYear()
-            + '-' + pad(date.getMonth() + 1)
-            + '-' + pad(date.getDate())
-            + 'T' + pad(date.getHours())
-            + ':' + pad(date.getMinutes());
-    }
+    var maxCheckoutHours = <?= json_encode($maxCheckoutHours) ?>;
+    var intervalMinutes = <?= (int)(load_config()['app']['slot_interval_minutes'] ?? 15) ?>;
+    var spOpts = {
+        isStaff: <?= $isStaff ? 'true' : 'false' ?>,
+        isAdmin: <?= $isAdmin ? 'true' : 'false' ?>,
+        timeFormat: <?= json_encode(app_get_time_format()) ?>,
+        dateFormat: <?= json_encode(app_get_date_format()) ?>
+    };
 
-    function setPickerValue(input, val) {
-        if (input._flatpickr) {
-            input._flatpickr.setDate(val, true);
+    function autoSetEnd(endPicker, datetime) {
+        if (maxCheckoutHours > 0) {
+            var ms = Date.parse(datetime);
+            if (!isNaN(ms)) {
+                endPicker.setValue(toDatetimeStr(new Date(ms + maxCheckoutHours * 3600000)));
+            }
         } else {
-            input.value = val;
+            var parts = datetime.split('T')[0].split('-');
+            var nextDay = new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, parseInt(parts[2],10)+1, 9, 0, 0);
+            endPicker.setValue(toDatetimeStr(nextDay));
         }
     }
 
-    function setTodayWindow() {
-        if (!windowStartInput || !windowEndInput) return;
-        const now = new Date();
-        const tomorrow = new Date(now);
-        tomorrow.setDate(now.getDate() + 1);
-        tomorrow.setHours(9, 0, 0, 0);
-        setPickerValue(windowStartInput, toLocalDatetimeValue(now));
-        setPickerValue(windowEndInput, toLocalDatetimeValue(tomorrow));
+    function submitWindowForm(form) {
         showLoadingOverlay();
-        maybeSubmitWindow();
+        form.submit();
     }
 
-    function normalizeWindowEnd() {
-        if (!windowStartInput || !windowEndInput) return;
-        const startVal = windowStartInput.value.trim();
-        const endVal = windowEndInput.value.trim();
-        if (startVal === '' || endVal === '') return;
-        const startMs = Date.parse(startVal);
-        const endMs = Date.parse(endVal);
-        if (Number.isNaN(startMs) || Number.isNaN(endMs)) return;
-        if (endMs <= startMs) {
-            const startDate = new Date(startMs);
-            const nextDay = new Date(startDate);
-            nextDay.setDate(startDate.getDate() + 1);
-            nextDay.setHours(9, 0, 0, 0);
-            setPickerValue(windowEndInput, toLocalDatetimeValue(nextDay));
+    // ---- Equipment tab slot pickers ----
+    var equipForm = document.getElementById('catalogue-window-form');
+    var equipStartHidden = document.getElementById('catalogue_start_datetime');
+    var equipEndHidden = document.getElementById('catalogue_end_datetime');
+    var equipStartPicker = null, equipEndPicker = null;
+
+    if (document.getElementById('equip-start-picker')) {
+        equipEndPicker = new SlotPicker(Object.assign({}, spOpts, {
+            container: document.getElementById('equip-end-picker'),
+            hiddenInput: equipEndHidden,
+            type: 'end',
+            intervalMinutes: intervalMinutes,
+            onSelect: function () { if (equipStartHidden.value) submitWindowForm(equipForm); }
+        }));
+        equipStartPicker = new SlotPicker(Object.assign({}, spOpts, {
+            container: document.getElementById('equip-start-picker'),
+            hiddenInput: equipStartHidden,
+            type: 'start',
+            intervalMinutes: intervalMinutes,
+            onSelect: function (dt) { autoSetEnd(equipEndPicker, dt); }
+        }));
+        if (equipStartHidden.value) equipStartPicker.setValue(equipStartHidden.value);
+        if (equipEndHidden.value) equipEndPicker.setValue(equipEndHidden.value);
+    }
+
+    // ---- Kits tab slot pickers ----
+    var kitsForm = document.getElementById('kits-window-form');
+    var kitsStartHidden = document.getElementById('kits_start_datetime');
+    var kitsEndHidden = document.getElementById('kits_end_datetime');
+    var kitsStartPicker = null, kitsEndPicker = null;
+
+    if (document.getElementById('kits-start-picker')) {
+        kitsEndPicker = new SlotPicker(Object.assign({}, spOpts, {
+            container: document.getElementById('kits-end-picker'),
+            hiddenInput: kitsEndHidden,
+            type: 'end',
+            intervalMinutes: intervalMinutes,
+            onSelect: function () { if (kitsStartHidden.value) submitWindowForm(kitsForm); }
+        }));
+        kitsStartPicker = new SlotPicker(Object.assign({}, spOpts, {
+            container: document.getElementById('kits-start-picker'),
+            hiddenInput: kitsStartHidden,
+            type: 'start',
+            intervalMinutes: intervalMinutes,
+            onSelect: function (dt) { autoSetEnd(kitsEndPicker, dt); }
+        }));
+        if (kitsStartHidden.value) kitsStartPicker.setValue(kitsStartHidden.value);
+        if (kitsEndHidden.value) kitsEndPicker.setValue(kitsEndHidden.value);
+    }
+
+    // ---- Today buttons ----
+    var todayBtn = document.getElementById('catalogue-today-btn');
+    var kitsTodayBtn = document.getElementById('kits-today-btn');
+
+    function handleToday(startPicker, endPicker, form) {
+        var now = new Date();
+        startPicker.setValue(toDatetimeStr(now));
+        autoSetEnd(endPicker, toDatetimeStr(now));
+        submitWindowForm(form);
+    }
+
+    if (todayBtn && equipStartPicker) {
+        todayBtn.addEventListener('click', function () { handleToday(equipStartPicker, equipEndPicker, equipForm); });
+    }
+    if (kitsTodayBtn && kitsStartPicker) {
+        kitsTodayBtn.addEventListener('click', function () { handleToday(kitsStartPicker, kitsEndPicker, kitsForm); });
+    }
+
+    // ---- Bypass toggles ----
+    function wireBypass(capId, closedId, startP, endP) {
+        var cap = document.getElementById(capId);
+        var closed = document.getElementById(closedId);
+        if (cap && startP) {
+            cap.addEventListener('change', function () {
+                startP.setBypass('capacity', this.checked);
+                endP.setBypass('capacity', this.checked);
+            });
+        }
+        if (closed && startP) {
+            closed.addEventListener('change', function () {
+                startP.setBypass('closed', this.checked);
+                endP.setBypass('closed', this.checked);
+            });
         }
     }
+    wireBypass('equip-bypass-capacity', 'equip-bypass-closed', equipStartPicker, equipEndPicker);
+    wireBypass('kits-bypass-capacity', 'kits-bypass-closed', kitsStartPicker, kitsEndPicker);
 
     function applyOverdueBlock(items) {
         if (catalogueContent) {
@@ -2009,77 +2088,6 @@ document.addEventListener('DOMContentLoaded', function () {
             showLoadingOverlay();
             filterForm.submit();
         });
-    }
-
-    if (windowStartInput && windowEndInput) {
-        windowStartInput.addEventListener('change', normalizeWindowEnd);
-        windowEndInput.addEventListener('change', normalizeWindowEnd);
-        windowStartInput.addEventListener('change', maybeSubmitWindow);
-        windowEndInput.addEventListener('change', maybeSubmitWindow);
-        windowStartInput.addEventListener('blur', maybeSubmitWindow);
-        windowEndInput.addEventListener('blur', maybeSubmitWindow);
-    }
-    if (todayBtn) {
-        todayBtn.addEventListener('click', setTodayWindow);
-    }
-
-    // Kits tab window controls
-    const kitsWindowForm = document.getElementById('kits-window-form');
-    const kitsStartInput = document.getElementById('kits_start_datetime');
-    const kitsEndInput = document.getElementById('kits_end_datetime');
-    const kitsTodayBtn = document.getElementById('kits-today-btn');
-
-    function maybeSubmitKitsWindow() {
-        if (!kitsWindowForm || !kitsStartInput || !kitsEndInput) return;
-        const startVal = kitsStartInput.value.trim();
-        const endVal = kitsEndInput.value.trim();
-        if (startVal === '' || endVal === '') return;
-        const startMs = Date.parse(startVal);
-        const endMs = Date.parse(endVal);
-        if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs <= startMs) return;
-        showLoadingOverlay();
-        kitsWindowForm.submit();
-    }
-
-    function normalizeKitsWindowEnd() {
-        if (!kitsStartInput || !kitsEndInput) return;
-        const startVal = kitsStartInput.value.trim();
-        const endVal = kitsEndInput.value.trim();
-        if (startVal === '' || endVal === '') return;
-        const startMs = Date.parse(startVal);
-        const endMs = Date.parse(endVal);
-        if (Number.isNaN(startMs) || Number.isNaN(endMs)) return;
-        if (endMs <= startMs) {
-            const startDate = new Date(startMs);
-            const nextDay = new Date(startDate);
-            nextDay.setDate(startDate.getDate() + 1);
-            nextDay.setHours(9, 0, 0, 0);
-            setPickerValue(kitsEndInput, toLocalDatetimeValue(nextDay));
-        }
-    }
-
-    function setKitsTodayWindow() {
-        if (!kitsStartInput || !kitsEndInput) return;
-        const now = new Date();
-        const tomorrow = new Date(now);
-        tomorrow.setDate(now.getDate() + 1);
-        tomorrow.setHours(9, 0, 0, 0);
-        setPickerValue(kitsStartInput, toLocalDatetimeValue(now));
-        setPickerValue(kitsEndInput, toLocalDatetimeValue(tomorrow));
-        showLoadingOverlay();
-        maybeSubmitKitsWindow();
-    }
-
-    if (kitsStartInput && kitsEndInput) {
-        kitsStartInput.addEventListener('change', normalizeKitsWindowEnd);
-        kitsEndInput.addEventListener('change', normalizeKitsWindowEnd);
-        kitsStartInput.addEventListener('change', maybeSubmitKitsWindow);
-        kitsEndInput.addEventListener('change', maybeSubmitKitsWindow);
-        kitsStartInput.addEventListener('blur', maybeSubmitKitsWindow);
-        kitsEndInput.addEventListener('blur', maybeSubmitKitsWindow);
-    }
-    if (kitsTodayBtn) {
-        kitsTodayBtn.addEventListener('click', setKitsTodayWindow);
     }
 
     const overdueEnabled = document.body.dataset.catalogueOverdue === '1';
