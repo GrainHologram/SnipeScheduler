@@ -1420,6 +1420,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     <ul class="pagination">
                         <?php
                         $baseQuery = [
+                            'tab'      => $tab,
                             'q'        => $searchRaw,
                             'category' => $categoryRaw,
                             'sort'     => $sortRaw,
