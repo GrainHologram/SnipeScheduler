@@ -1,18 +1,12 @@
 <?php
 require_once __DIR__ . '/../../../src/bootstrap.php';
-if (!defined('AUTH_LOGIN_PATH')) {
-    define('AUTH_LOGIN_PATH', '../../login.php');
-}
-require_once SRC_PATH . '/auth.php';
 require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/layout.php';
 require_once SRC_PATH . '/config_writer.php';
 
-$isAdmin = !empty($currentUser['is_admin']);
-if (!$isAdmin) {
-    http_response_code(403);
-    echo 'Access denied.';
-    exit;
+// h() is normally provided by auth.php — define a fallback
+if (!function_exists('h')) {
+    function h(?string $s): string { return htmlspecialchars($s ?? '', ENT_QUOTES, 'UTF-8'); }
 }
 
 $versionFile = APP_ROOT . '/version.txt';
