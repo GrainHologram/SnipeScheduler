@@ -99,12 +99,20 @@ $upsertUser = static function (PDO $pdo, string $email, string $fullName): int {
     $stmt->execute([':email' => $email]);
     $existing = $stmt->fetch(PDO::FETCH_ASSOC);
 
+    // Check if last_login_at column exists (added in v1.3.0)
+    $hasLastLogin = false;
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM {$userTable} LIKE 'last_login_at'")->fetchAll();
+        $hasLastLogin = !empty($cols);
+    } catch (Throwable $e) {
+        // ignore
+    }
+
     if ($existing) {
-        $update = $pdo->prepare("
-            UPDATE {$userTable}
-               SET name = :name, last_login_at = NOW()
-             WHERE id = :id
-        ");
+        $sql = $hasLastLogin
+            ? "UPDATE {$userTable} SET name = :name, last_login_at = NOW() WHERE id = :id"
+            : "UPDATE {$userTable} SET name = :name WHERE id = :id";
+        $update = $pdo->prepare($sql);
         $update->execute([
             ':name' => $fullName,
             ':id'   => $existing['id'],
@@ -113,10 +121,17 @@ $upsertUser = static function (PDO $pdo, string $email, string $fullName): int {
     }
 
     $userIdHex = sprintf('%u', crc32(strtolower($email)));
-    $insert = $pdo->prepare("
-        INSERT INTO {$userTable} ({$userIdCol}, name, email, created_at, last_login_at)
-        VALUES (:user_id, :name, :email, NOW(), NOW())
-    ");
+    if ($hasLastLogin) {
+        $insert = $pdo->prepare("
+            INSERT INTO {$userTable} ({$userIdCol}, name, email, created_at, last_login_at)
+            VALUES (:user_id, :name, :email, NOW(), NOW())
+        ");
+    } else {
+        $insert = $pdo->prepare("
+            INSERT INTO {$userTable} ({$userIdCol}, name, email, created_at)
+            VALUES (:user_id, :name, :email, NOW())
+        ");
+    }
     $insert->execute([
         ':user_id' => $userIdHex,
         ':name'    => $fullName,
