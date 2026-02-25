@@ -410,6 +410,7 @@ if (!empty($basket)) {
                 <table class="table table-striped table-bookings align-middle">
                     <thead>
                         <tr>
+                            <th style="width:60px"></th>
                             <th>Model</th>
                             <th>Manufacturer</th>
                             <th>Category</th>
@@ -425,7 +426,7 @@ if (!empty($basket)) {
                             $kName = $kitNames[$kid] ?? ('Kit #' . $kid);
                     ?>
                         <tr class="table-info">
-                            <td colspan="5">
+                            <td colspan="6">
                                 <strong><?= h($kName) ?></strong>
                                 <span class="text-muted small">(kit)</span>
                             </td>
@@ -459,7 +460,16 @@ if (!empty($basket)) {
                                 }
                             }
                         ?>
+                        <?php
+                            $imgPath = $model['image'] ?? '';
+                            $imgSrc = $imgPath !== '' ? 'image_proxy.php?src=' . urlencode($imgPath) : '';
+                        ?>
                         <tr>
+                            <td>
+                                <?php if ($imgSrc !== ''): ?>
+                                    <img src="<?= h($imgSrc) ?>" alt="" class="basket-thumb">
+                                <?php endif; ?>
+                            </td>
                             <td class="ps-4"><?= h($model['name'] ?? 'Model') ?></td>
                             <td><?= h($model['manufacturer']['name'] ?? '') ?></td>
                             <td><?= h($model['category']['name'] ?? '') ?></td>
@@ -499,7 +509,16 @@ if (!empty($basket)) {
                                 }
                             }
                     ?>
+                        <?php
+                            $imgPath = $model['image'] ?? '';
+                            $imgSrc = $imgPath !== '' ? 'image_proxy.php?src=' . urlencode($imgPath) : '';
+                        ?>
                         <tr>
+                            <td>
+                                <?php if ($imgSrc !== ''): ?>
+                                    <img src="<?= h($imgSrc) ?>" alt="" class="basket-thumb">
+                                <?php endif; ?>
+                            </td>
                             <td><?= h($model['name'] ?? 'Model') ?></td>
                             <td><?= h($model['manufacturer']['name'] ?? '') ?></td>
                             <td><?= h($model['category']['name'] ?? '') ?></td>
