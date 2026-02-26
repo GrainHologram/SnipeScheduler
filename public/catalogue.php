@@ -1985,18 +1985,48 @@ document.addEventListener('DOMContentLoaded', function () {
     var todayBtn = document.getElementById('catalogue-today-btn');
     var kitsTodayBtn = document.getElementById('kits-today-btn');
 
-    function handleToday(startPicker, endPicker, form) {
-        var now = new Date();
-        startPicker.setValue(toDatetimeStr(now));
-        autoSetEnd(endPicker, toDatetimeStr(now));
-        submitWindowForm(form);
+    function handleToday(startPicker, endPicker, form, btn) {
+        if (btn) btn.disabled = true;
+        var params = 'next_open=1';
+        if (startPicker.bypassClosed) params += '&bypass_closed=1';
+
+        fetch('ajax_slot_data.php?' + params, {
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (btn) btn.disabled = false;
+                if (data.error || !data.start) {
+                    // Fallback: use current time
+                    var now = new Date();
+                    startPicker.setValue(toDatetimeStr(now));
+                    autoSetEnd(endPicker, toDatetimeStr(now));
+                } else {
+                    startPicker.setValue(data.start);
+                    if (data.end) {
+                        endPicker.setValue(data.end);
+                    } else {
+                        autoSetEnd(endPicker, data.start);
+                    }
+                }
+                submitWindowForm(form);
+            })
+            .catch(function () {
+                if (btn) btn.disabled = false;
+                // Fallback: use current time
+                var now = new Date();
+                startPicker.setValue(toDatetimeStr(now));
+                autoSetEnd(endPicker, toDatetimeStr(now));
+                submitWindowForm(form);
+            });
     }
 
     if (todayBtn && equipStartPicker) {
-        todayBtn.addEventListener('click', function () { equipEndManuallySet = false; handleToday(equipStartPicker, equipEndPicker, equipForm); });
+        todayBtn.addEventListener('click', function () { equipEndManuallySet = false; handleToday(equipStartPicker, equipEndPicker, equipForm, todayBtn); });
     }
     if (kitsTodayBtn && kitsStartPicker) {
-        kitsTodayBtn.addEventListener('click', function () { kitsEndManuallySet = false; handleToday(kitsStartPicker, kitsEndPicker, kitsForm); });
+        kitsTodayBtn.addEventListener('click', function () { kitsEndManuallySet = false; handleToday(kitsStartPicker, kitsEndPicker, kitsForm, kitsTodayBtn); });
     }
 
     // ---- Bypass toggles ----
