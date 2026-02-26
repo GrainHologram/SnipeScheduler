@@ -26,7 +26,7 @@ if ($resId <= 0) {
 
 // Load reservation to check ownership
 $stmt = $pdo->prepare("
-    SELECT id, user_id, status
+    SELECT id, user_id, snipeit_user_id, status
     FROM reservations
     WHERE id = :id
     LIMIT 1
@@ -40,9 +40,10 @@ if (!$reservation) {
     exit;
 }
 
-$ownsReservation = $currentUserId !== ''
-    && isset($reservation['user_id'])
-    && (string)$reservation['user_id'] === $currentUserId;
+$currentSnipeId = (string)($currentUser['snipeit_user_id'] ?? '');
+$ownsReservation = $currentSnipeId !== ''
+    && isset($reservation['snipeit_user_id'])
+    && (string)$reservation['snipeit_user_id'] === $currentSnipeId;
 
 if (!$isStaff && !$ownsReservation) {
     http_response_code(403);
