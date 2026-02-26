@@ -638,6 +638,8 @@ document.addEventListener('DOMContentLoaded', function () {
             + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
     }
 
+    var endManuallySet = false;
+
     var startPicker = new SlotPicker({
         container: document.getElementById('start-slot-picker'),
         hiddenInput: document.getElementById('post-start-datetime'),
@@ -648,6 +650,7 @@ document.addEventListener('DOMContentLoaded', function () {
         timeFormat: <?= json_encode(app_get_time_format()) ?>,
         dateFormat: <?= json_encode(app_get_date_format()) ?>,
         onSelect: function (datetime) {
+            if (endManuallySet) return;
             // Auto-set end picker default based on max checkout hours
             if (maxCheckoutHours > 0) {
                 var startMs = Date.parse(datetime);
@@ -680,6 +683,7 @@ document.addEventListener('DOMContentLoaded', function () {
         timeFormat: <?= json_encode(app_get_time_format()) ?>,
         dateFormat: <?= json_encode(app_get_date_format()) ?>,
         onSelect: function (datetime) {
+            endManuallySet = true;
             // When both have values, redirect to check availability
             var startVal = document.getElementById('post-start-datetime').value;
             if (startVal) {
@@ -698,6 +702,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     if (existingEnd) {
         endPicker.setValue(existingEnd);
+        endManuallySet = true;
     }
 
     // Bypass toggles

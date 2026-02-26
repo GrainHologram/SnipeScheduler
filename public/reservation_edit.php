@@ -846,6 +846,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
     }
 
+    var endManuallySet = false;
+
     var startPicker = new SlotPicker({
         container: document.getElementById('edit-start-picker'),
         hiddenInput: document.getElementById('edit-start-datetime'),
@@ -856,6 +858,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         timeFormat: <?= json_encode(app_get_time_format()) ?>,
         dateFormat: <?= json_encode(app_get_date_format()) ?>,
         onSelect: function (datetime) {
+            if (endManuallySet) return;
             if (maxCheckoutHours > 0) {
                 var startMs = Date.parse(datetime);
                 if (!isNaN(startMs)) {
@@ -884,14 +887,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         isStaff: <?= $isStaff ? 'true' : 'false' ?>,
         isAdmin: <?= $isAdmin ? 'true' : 'false' ?>,
         timeFormat: <?= json_encode(app_get_time_format()) ?>,
-        dateFormat: <?= json_encode(app_get_date_format()) ?>
+        dateFormat: <?= json_encode(app_get_date_format()) ?>,
+        onSelect: function () { endManuallySet = true; }
     });
 
     // Restore selection from hidden inputs (initial load or POST failure re-render)
     var existingStart = document.getElementById('edit-start-datetime').value;
     var existingEnd = document.getElementById('edit-end-datetime').value;
     if (existingStart) { startPicker.setValue(existingStart); }
-    if (existingEnd) { endPicker.setValue(existingEnd); }
+    if (existingEnd) { endPicker.setValue(existingEnd); endManuallySet = true; }
 
     // Bypass toggles
     var capToggle = document.getElementById('bypass-capacity');
