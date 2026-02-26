@@ -481,6 +481,9 @@ if (!empty($reservations)) {
                             <tr>
                                 <td data-label="ID">
                                     #<?= (int)$r['id'] ?>
+                                    <?php if (!empty($r['notes'])): ?>
+                                        <a href="reservation_detail.php?id=<?= (int)$r['id'] ?>" title="<?= h($r['notes']) ?>" class="text-muted ms-1" style="text-decoration:none"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5 0h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2zm0 1a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H5z"/><path d="M5.5 4h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1 0-1zm0 3h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1 0-1zm0 3h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1 0-1z"/></svg></a>
+                                    <?php endif; ?>
                                     <?php if (!empty($r['name'])): ?>
                                         <br><small class="text-muted"><?= h($r['name']) ?></small>
                                     <?php endif; ?>
