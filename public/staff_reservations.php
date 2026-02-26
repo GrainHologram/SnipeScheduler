@@ -479,7 +479,12 @@ if (!empty($reservations)) {
                                 $itemsText = $modelsHtml . $assetsHtml;
                             ?>
                             <tr>
-                                <td data-label="ID">#<?= (int)$r['id'] ?></td>
+                                <td data-label="ID">
+                                    #<?= (int)$r['id'] ?>
+                                    <?php if (!empty($r['name'])): ?>
+                                        <br><small class="text-muted"><?= h($r['name']) ?></small>
+                                    <?php endif; ?>
+                                </td>
                                 <td data-label="User Name"><?= h($r['user_name'] ?? '(Unknown)') ?></td>
                                 <td data-label="Items Reserved" class="items-cell">
                                     <?= $itemsText !== '' ? '<div class="items-cell-content">' . $itemsText . '</div>' : '' ?>

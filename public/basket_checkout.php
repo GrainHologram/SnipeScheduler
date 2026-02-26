@@ -26,6 +26,15 @@ if (empty($basket)) {
 $startRaw = $_POST['start_datetime'] ?? '';
 $endRaw   = $_POST['end_datetime'] ?? '';
 
+$isStaff = !empty($currentUser['is_staff']) || !empty($currentUser['is_admin']);
+$reservationName = trim($_POST['reservation_name'] ?? '');
+if ($reservationName === '') {
+    $reservationName = null;
+}
+if (!$isStaff && $reservationName === null) {
+    basket_error('Reservation name is required.');
+}
+
 if (!$startRaw || !$endRaw) {
     basket_error('Start and end date/time are required.');
 }
@@ -204,11 +213,11 @@ try {
         INSERT INTO reservations (
             user_name, user_email, user_id, snipeit_user_id,
             asset_id, asset_name_cache,
-            start_datetime, end_datetime, status
+            start_datetime, end_datetime, status, name
         ) VALUES (
             :user_name, :user_email, :user_id, :snipeit_user_id,
             0, :asset_name_cache,
-            :start_datetime, :end_datetime, 'pending'
+            :start_datetime, :end_datetime, 'pending', :name
         )
     ");
     $insertRes->execute([
@@ -219,6 +228,7 @@ try {
         ':asset_name_cache' => 'Pending checkout',
         ':start_datetime'   => $start,
         ':end_datetime'     => $end,
+        ':name'             => $reservationName,
     ]);
 
     $reservationId = (int)$pdo->lastInsertId();

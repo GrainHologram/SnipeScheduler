@@ -607,6 +607,15 @@ if (!empty($basket)) {
                 <input type="hidden" name="end_datetime" id="post-end-datetime"
                        value="<?= htmlspecialchars($previewEndRaw) ?>">
 
+                <div class="mb-3">
+                    <label for="reservation-name" class="form-label fw-semibold">
+                        Reservation name<?= $isStaff ? ' <span class="text-muted fw-normal">(optional)</span>' : '' ?>
+                    </label>
+                    <input type="text" class="form-control" id="reservation-name" name="reservation_name"
+                           placeholder="e.g. Studio A shoot" maxlength="255"
+                           <?= $isStaff ? '' : 'required' ?>>
+                </div>
+
                 <p class="mb-2 text-muted">
                     When you click <strong>Confirm booking</strong>, the system will re-check availability
                     and reject the booking if another user has taken items in the meantime.
