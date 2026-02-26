@@ -18,7 +18,7 @@ function display_datetime(?string $isoDatetime): string
 $active        = basename($_SERVER['PHP_SELF']);
 $isAdmin       = !empty($currentUser['is_admin']);
 $isStaff       = !empty($currentUser['is_staff']) || $isAdmin;
-$currentUserId = (string)($currentUser['id'] ?? '');
+$currentUserId = (string)($currentUser['snipeit_user_id'] ?? '');
 
 $userName = trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''));
 $tabRaw = $_GET['tab'] ?? 'reservations';
@@ -29,7 +29,7 @@ try {
     $sql = "
         SELECT *
         FROM reservations
-        WHERE user_id = :user_id
+        WHERE snipeit_user_id = :user_id
         ORDER BY
             CASE WHEN status IN ('pending','confirmed') THEN 0 ELSE 1 END,
             start_datetime DESC
@@ -40,6 +40,12 @@ try {
 } catch (Exception $e) {
     $reservations = [];
     $loadError = $e->getMessage();
+}
+
+// Batch-fetch all reservation items in one query (no API calls)
+$allResItems = [];
+if (!empty($reservations)) {
+    $allResItems = batch_get_reservation_items($pdo, array_column($reservations, 'id'));
 }
 
 // Split into upcoming (active) and past (terminal) reservations
@@ -83,7 +89,7 @@ if ($tab === 'checked_out') {
                    c.status AS checkout_status
               FROM checkout_items ci
               JOIN checkouts c ON c.id = ci.checkout_id
-             WHERE c.user_id = :uid
+             WHERE c.snipeit_user_id = :uid
                AND ci.checked_in_at IS NULL
                AND c.status IN ('open','partial')
              ORDER BY ci.checked_out_at DESC
@@ -215,7 +221,7 @@ if (!empty($_GET['deleted'])) {
                     <?php foreach ($upcomingReservations as $res): ?>
                         <?php
                             $resId   = (int)$res['id'];
-                            $items   = get_reservation_items_with_names($pdo, $resId);
+                            $items   = $allResItems[$resId] ?? [];
                             $summary = build_items_summary_text($items);
                             $status  = strtolower((string)($res['status'] ?? ''));
                         ?>
@@ -319,7 +325,7 @@ if (!empty($_GET['deleted'])) {
                         <?php foreach ($pastReservations as $res): ?>
                             <?php
                                 $resId   = (int)$res['id'];
-                                $items   = get_reservation_items_with_names($pdo, $resId);
+                                $items   = $allResItems[$resId] ?? [];
                                 $summary = build_items_summary_text($items);
                                 $status  = strtolower((string)($res['status'] ?? ''));
                             ?>

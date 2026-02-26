@@ -71,6 +71,50 @@ function get_reservation_items_with_names(PDO $pdo, int $reservationId): array
 }
 
 /**
+ * Batch-fetch reservation items for multiple reservations in a single query.
+ *
+ * Uses model_name_cache from the reservation_items table — no Snipe-IT API calls.
+ *
+ * @return array  Keyed by reservation_id: [$resId => [['model_id'=>X, 'name'=>'...', 'qty'=>N], ...], ...]
+ */
+function batch_get_reservation_items(PDO $pdo, array $reservationIds): array
+{
+    if (empty($reservationIds)) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($reservationIds), '?'));
+    $stmt = $pdo->prepare("
+        SELECT reservation_id, model_id, model_name_cache, quantity
+          FROM reservation_items
+         WHERE reservation_id IN ($placeholders)
+           AND deleted_at IS NULL
+         ORDER BY model_id
+    ");
+    $stmt->execute(array_values($reservationIds));
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $grouped = [];
+    foreach ($rows as $row) {
+        $resId   = (int)$row['reservation_id'];
+        $modelId = (int)($row['model_id'] ?? 0);
+        $qty     = (int)($row['quantity'] ?? 0);
+
+        if ($modelId <= 0 || $qty <= 0) {
+            continue;
+        }
+
+        $grouped[$resId][] = [
+            'model_id' => $modelId,
+            'name'     => $row['model_name_cache'] ?: ('Model #' . $modelId),
+            'qty'      => $qty,
+        ];
+    }
+
+    return $grouped;
+}
+
+/**
  * Build a single-line text summary from an items array.
  *
  * Example:
