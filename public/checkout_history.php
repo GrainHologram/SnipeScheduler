@@ -449,6 +449,7 @@ foreach ($checkouts as $co) {
 </html>
 <?php endif; ?>
 <?php if ($embedded): ?>
+<?php if ($isStaff) { layout_model_history_modal(); } ?>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     var form = document.getElementById('checkout-history-filter-form');
