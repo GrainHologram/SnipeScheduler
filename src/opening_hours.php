@@ -405,58 +405,110 @@ if (!function_exists('oh_first_available_slot')) {
                 continue;
             }
 
-            // Build slot start: open_time on this date (in app tz)
             $dayOpen  = new DateTime($dateStr . ' ' . $hours['open_time'], $appTz);
             $dayClose = new DateTime($dateStr . ' ' . $hours['close_time'], $appTz);
 
-            // On the first day, skip slots before the input time
-            $slotLocal = clone $dayOpen;
-            if ($dayOffset === 0 && $localDt > $dayOpen) {
-                // Advance to the next slot boundary at or after localDt
-                $secSinceOpen = $localDt->getTimestamp() - $dayOpen->getTimestamp();
-                $slotsToSkip = (int)ceil($secSinceOpen / $intervalSec);
-                $slotLocal->modify('+' . ($slotsToSkip * $intervalSec) . ' seconds');
+            // Capacity 0 = unlimited — return first open slot at or after input
+            if ($slotCapacity <= 0) {
+                $slotLocal = clone $dayOpen;
+                if ($dayOffset === 0 && $localDt > $dayOpen) {
+                    $secSinceOpen = $localDt->getTimestamp() - $dayOpen->getTimestamp();
+                    $slotsToSkip = (int)ceil($secSinceOpen / $intervalSec);
+                    $slotLocal->modify('+' . ($slotsToSkip * $intervalSec) . ' seconds');
+                }
+                if ($slotLocal <= $dayClose) {
+                    return (clone $slotLocal)->setTimezone($utcTz);
+                }
+                continue;
             }
 
-            while ($slotLocal <= $dayClose) {
-                // Convert slot boundaries to UTC for DB queries
-                $slotStartUtc = (clone $slotLocal)->setTimezone($utcTz);
-                $slotEndLocal = (clone $slotLocal)->modify("+{$intervalMinutes} minutes");
-                $slotEndUtc   = (clone $slotEndLocal)->setTimezone($utcTz);
+            // Batch-query events for this day (2 queries per day instead of 2 per slot)
+            $windowStartUtc = (clone $dayOpen)->setTimezone($utcTz)->format('Y-m-d H:i:s');
+            $windowEndUtc   = (clone $dayClose)->setTimezone($utcTz)->format('Y-m-d H:i:s');
 
-                $slotStartStr = $slotStartUtc->format('Y-m-d H:i:s');
-                $slotEndStr   = $slotEndUtc->format('Y-m-d H:i:s');
+            // Reservation starts + ends in this day window
+            $stmtRes = $pdo->prepare("
+                SELECT start_datetime, end_datetime
+                FROM reservations
+                WHERE status IN ('pending','confirmed')
+                  AND (
+                    (start_datetime >= :ws1 AND start_datetime < :we1)
+                    OR (end_datetime >= :ws2 AND end_datetime < :we2)
+                  )
+            ");
+            $stmtRes->execute([
+                ':ws1' => $windowStartUtc, ':we1' => $windowEndUtc,
+                ':ws2' => $windowStartUtc, ':we2' => $windowEndUtc,
+            ]);
+            $reservations = $stmtRes->fetchAll(PDO::FETCH_ASSOC);
 
-                // Capacity 0 = unlimited — return first open slot
-                if ($slotCapacity <= 0) {
-                    return $slotStartUtc;
+            // Checkout starts + ends in this day window
+            $stmtCo = $pdo->prepare("
+                SELECT start_datetime, end_datetime
+                FROM checkouts
+                WHERE status IN ('open','partial')
+                  AND (
+                    (start_datetime >= :ws1 AND start_datetime < :we1)
+                    OR (end_datetime >= :ws2 AND end_datetime < :we2)
+                  )
+            ");
+            $stmtCo->execute([
+                ':ws1' => $windowStartUtc, ':we1' => $windowEndUtc,
+                ':ws2' => $windowStartUtc, ':we2' => $windowEndUtc,
+            ]);
+            $checkouts = $stmtCo->fetchAll(PDO::FETCH_ASSOC);
+
+            // Build slot counts for this day
+            $openTimeStr  = substr($hours['open_time'], 0, 5);
+            $closeTimeStr = substr($hours['close_time'], 0, 5);
+            $slotCounts = [];
+            $slotKeys = [];
+            $cursor = clone $dayOpen;
+            while ($cursor <= $dayClose) {
+                $key = $cursor->format('H:i');
+                $slotCounts[$key] = 0;
+                $slotKeys[] = $key;
+                $cursor->modify("+{$intervalMinutes} minutes");
+            }
+
+            // Bucket helper
+            $bucketEvent = function (string $utcStr) use ($appTz, $dateStr, $openTimeStr, $closeTimeStr, $intervalMinutes, &$slotCounts) {
+                $dt = new DateTime($utcStr, new DateTimeZone('UTC'));
+                $dt->setTimezone($appTz);
+                if ($dt->format('Y-m-d') !== $dateStr) {
+                    return;
                 }
-
-                // Count reservations ending in this slot window
-                $stmt = $pdo->prepare("
-                    SELECT COUNT(*) FROM reservations
-                    WHERE status IN ('pending','confirmed')
-                      AND end_datetime >= :slot_start AND end_datetime < :slot_end
-                ");
-                $stmt->execute([':slot_start' => $slotStartStr, ':slot_end' => $slotEndStr]);
-                $reservationCount = (int)$stmt->fetchColumn();
-
-                // Count active checkout returns expected in this slot window
-                $stmt = $pdo->prepare("
-                    SELECT COUNT(*) FROM checkouts
-                    WHERE status IN ('open','partial')
-                      AND end_datetime >= :slot_start AND end_datetime < :slot_end
-                ");
-                $stmt->execute([':slot_start' => $slotStartStr, ':slot_end' => $slotEndStr]);
-                $checkoutCount = (int)$stmt->fetchColumn();
-
-                $totalInSlot = $reservationCount + $checkoutCount;
-                if ($totalInSlot < $slotCapacity) {
-                    return $slotStartUtc;
+                $time = $dt->format('H:i');
+                if ($time < $openTimeStr || $time > $closeTimeStr) {
+                    return;
                 }
+                $totalMin = (int)$dt->format('H') * 60 + (int)$dt->format('i');
+                $slotMin  = (int)(floor($totalMin / $intervalMinutes) * $intervalMinutes);
+                $slotKey  = sprintf('%02d:%02d', intdiv($slotMin, 60), $slotMin % 60);
+                if (isset($slotCounts[$slotKey])) {
+                    $slotCounts[$slotKey]++;
+                }
+            };
 
-                // Advance to next slot
-                $slotLocal->modify("+{$intervalMinutes} minutes");
+            foreach ($reservations as $r) {
+                $bucketEvent($r['start_datetime']);
+                $bucketEvent($r['end_datetime']);
+            }
+            foreach ($checkouts as $co) {
+                $bucketEvent($co['start_datetime']);
+                $bucketEvent($co['end_datetime']);
+            }
+
+            // Find first slot at or after input with remaining capacity
+            foreach ($slotKeys as $key) {
+                $slotDt = new DateTime($dateStr . ' ' . $key, $appTz);
+                // On the first day, skip slots before the input time
+                if ($dayOffset === 0 && $slotDt < $localDt) {
+                    continue;
+                }
+                if ($slotCounts[$key] < $slotCapacity) {
+                    return (clone $slotDt)->setTimezone($utcTz);
+                }
             }
         }
 
