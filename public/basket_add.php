@@ -105,32 +105,18 @@ if ($kitId > 0) {
     }
 
 } elseif ($modelId > 0 && $qtyRequested > 0) {
-    // --- Individual model add (existing behavior) ---
+    // --- Individual model add ---
+    // Quantity is capped here as a sanity limit; real availability is
+    // rechecked at checkout time (basket_checkout.php) so we don't need
+    // to call the Snipe-IT API here. Removing those API calls keeps the
+    // session lock duration minimal and prevents lost basket adds when
+    // users click quickly.
     if ($qtyRequested > 100) {
         $qtyRequested = 100;
     }
 
-    // Enforce hardware limits from Snipe-IT (if available)
-    try {
-        $requestableTotal = count_requestable_assets_by_model($modelId);
-        $activeCheckedOut = count_checked_out_assets_by_model($modelId);
-        $maxQty = $requestableTotal > 0 ? max(0, $requestableTotal - $activeCheckedOut) : 0;
-    } catch (Throwable $e) {
-        $maxQty = 0;
-    }
-
-    if ($maxQty > 0 && $qtyRequested > $maxQty) {
-        $qtyRequested = $maxQty;
-    }
-
     $currentQty = isset($_SESSION['basket'][$modelId]) ? (int)$_SESSION['basket'][$modelId] : 0;
-    $newQty = $currentQty + $qtyRequested;
-
-    if ($maxQty > 0 && $newQty > $maxQty) {
-        $newQty = $maxQty;
-    }
-
-    $_SESSION['basket'][$modelId] = $newQty;
+    $_SESSION['basket'][$modelId] = $currentQty + $qtyRequested;
 
 } else {
     header('Location: catalogue.php');
