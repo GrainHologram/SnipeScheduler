@@ -24,6 +24,66 @@ $bypassCapacity = !empty($_GET['bypass_capacity']) && $isStaff;
 $bypassClosed   = !empty($_GET['bypass_closed']) && $isAdmin;
 
 // -------------------------------------------------------
+// Next-open mode: find the next open slot from now (start)
+// and the next open slot >= 23 hours later (end).
+// -------------------------------------------------------
+if (!empty($_GET['next_open'])) {
+    $now = new DateTime('now', $appTz);
+
+    // Helper: find the first available slot on or after $fromDt.
+    // Searches up to 14 days ahead. Returns 'YYYY-MM-DDTHH:MM' or null.
+    $findNextOpenSlot = function (DateTime $fromDt) use ($appTz, $intervalMinutes, $bypassClosed) {
+        for ($dayOffset = 0; $dayOffset < 14; $dayOffset++) {
+            $checkDate = (clone $fromDt)->modify("+{$dayOffset} days");
+            $dateStr = $checkDate->format('Y-m-d');
+            $hours = oh_get_hours_for_date($dateStr);
+
+            if ($hours['is_closed'] && !$bypassClosed) {
+                continue;
+            }
+
+            if ($hours['is_closed'] && $bypassClosed) {
+                $openTime  = '00:00';
+                $closeTime = '23:59';
+            } else {
+                $openTime  = $hours['open_time'] ? substr($hours['open_time'], 0, 5) : '00:00';
+                $closeTime = $hours['close_time'] ? substr($hours['close_time'], 0, 5) : '23:59';
+            }
+
+            // Build slots for this day
+            $slotStart = new DateTime($dateStr . ' ' . $openTime, $appTz);
+            $slotEnd   = new DateTime($dateStr . ' ' . $closeTime, $appTz);
+            $interval  = new DateInterval('PT' . $intervalMinutes . 'M');
+
+            $cursor = clone $slotStart;
+            while ($cursor <= $slotEnd) {
+                if ($cursor >= $fromDt) {
+                    return $cursor->format('Y-m-d\TH:i');
+                }
+                $cursor->add($interval);
+            }
+        }
+        return null;
+    };
+
+    $startStr = $findNextOpenSlot($now);
+    if ($startStr === null) {
+        echo json_encode(['error' => 'No open slots found in the next 14 days.']);
+        exit;
+    }
+
+    $minEndDt = new DateTime($startStr, $appTz);
+    $minEndDt->modify('+23 hours');
+    $endStr = $findNextOpenSlot($minEndDt);
+
+    echo json_encode([
+        'start' => $startStr,
+        'end'   => $endStr, // may be null if nothing found
+    ]);
+    exit;
+}
+
+// -------------------------------------------------------
 // Month mode
 // -------------------------------------------------------
 if (!empty($_GET['month'])) {
