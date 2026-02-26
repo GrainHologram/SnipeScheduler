@@ -1910,6 +1910,9 @@ document.addEventListener('DOMContentLoaded', function () {
         dateFormat: <?= json_encode(app_get_date_format()) ?>
     };
 
+    var equipEndManuallySet = false;
+    var kitsEndManuallySet = false;
+
     function autoSetEnd(endPicker, datetime) {
         if (maxCheckoutHours > 0) {
             var ms = Date.parse(datetime);
@@ -1940,17 +1943,17 @@ document.addEventListener('DOMContentLoaded', function () {
             hiddenInput: equipEndHidden,
             type: 'end',
             intervalMinutes: intervalMinutes,
-            onSelect: function () { if (equipStartHidden.value) submitWindowForm(equipForm); }
+            onSelect: function () { equipEndManuallySet = true; if (equipStartHidden.value) submitWindowForm(equipForm); }
         }));
         equipStartPicker = new SlotPicker(Object.assign({}, spOpts, {
             container: document.getElementById('equip-start-picker'),
             hiddenInput: equipStartHidden,
             type: 'start',
             intervalMinutes: intervalMinutes,
-            onSelect: function (dt) { autoSetEnd(equipEndPicker, dt); }
+            onSelect: function (dt) { if (!equipEndManuallySet) autoSetEnd(equipEndPicker, dt); }
         }));
         if (equipStartHidden.value) equipStartPicker.setValue(equipStartHidden.value);
-        if (equipEndHidden.value) equipEndPicker.setValue(equipEndHidden.value);
+        if (equipEndHidden.value) { equipEndPicker.setValue(equipEndHidden.value); equipEndManuallySet = true; }
     }
 
     // ---- Kits tab slot pickers ----
@@ -1965,17 +1968,17 @@ document.addEventListener('DOMContentLoaded', function () {
             hiddenInput: kitsEndHidden,
             type: 'end',
             intervalMinutes: intervalMinutes,
-            onSelect: function () { if (kitsStartHidden.value) submitWindowForm(kitsForm); }
+            onSelect: function () { kitsEndManuallySet = true; if (kitsStartHidden.value) submitWindowForm(kitsForm); }
         }));
         kitsStartPicker = new SlotPicker(Object.assign({}, spOpts, {
             container: document.getElementById('kits-start-picker'),
             hiddenInput: kitsStartHidden,
             type: 'start',
             intervalMinutes: intervalMinutes,
-            onSelect: function (dt) { autoSetEnd(kitsEndPicker, dt); }
+            onSelect: function (dt) { if (!kitsEndManuallySet) autoSetEnd(kitsEndPicker, dt); }
         }));
         if (kitsStartHidden.value) kitsStartPicker.setValue(kitsStartHidden.value);
-        if (kitsEndHidden.value) kitsEndPicker.setValue(kitsEndHidden.value);
+        if (kitsEndHidden.value) { kitsEndPicker.setValue(kitsEndHidden.value); kitsEndManuallySet = true; }
     }
 
     // ---- Today buttons ----
@@ -1990,10 +1993,10 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (todayBtn && equipStartPicker) {
-        todayBtn.addEventListener('click', function () { handleToday(equipStartPicker, equipEndPicker, equipForm); });
+        todayBtn.addEventListener('click', function () { equipEndManuallySet = false; handleToday(equipStartPicker, equipEndPicker, equipForm); });
     }
     if (kitsTodayBtn && kitsStartPicker) {
-        kitsTodayBtn.addEventListener('click', function () { handleToday(kitsStartPicker, kitsEndPicker, kitsForm); });
+        kitsTodayBtn.addEventListener('click', function () { kitsEndManuallySet = false; handleToday(kitsStartPicker, kitsEndPicker, kitsForm); });
     }
 
     // ---- Bypass toggles ----
