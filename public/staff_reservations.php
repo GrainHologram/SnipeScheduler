@@ -254,6 +254,12 @@ try {
     $totalRows = 0;
     $totalPages = 1;
 }
+
+// Batch-fetch all reservation items in one query (no API calls)
+$allResItems = [];
+if (!empty($reservations)) {
+    $allResItems = batch_get_reservation_items($pdo, array_column($reservations, 'id'));
+}
 ?>
 <?php if (!$embedded): ?>
 <!DOCTYPE html>
@@ -420,7 +426,7 @@ try {
                     <tbody>
                         <?php foreach ($reservations as $r): ?>
                             <?php
-                                $items      = get_reservation_items_with_names($pdo, (int)$r['id']);
+                                $items      = $allResItems[(int)$r['id']] ?? [];
                                 $itemsLines = [];
                                 foreach ($items as $item) {
                                     $name = $item['name'] ?? '';

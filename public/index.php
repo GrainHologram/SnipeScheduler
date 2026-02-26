@@ -72,6 +72,12 @@ if ($isStaff) {
     $pendingPickups = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $pendingCount   = count($pendingPickups);
 
+    // Batch-fetch all reservation items for pending pickups (no API calls)
+    $pendingResItems = [];
+    if (!empty($pendingPickups)) {
+        $pendingResItems = batch_get_reservation_items($pdo, array_column($pendingPickups, 'id'));
+    }
+
     // Active checkouts count
     $activeCount = (int) $pdo->query("SELECT COUNT(*) FROM checkouts WHERE status IN ('open','partial')")->fetchColumn();
 
@@ -253,7 +259,7 @@ if ($isStaff) {
                                 <tbody>
                                     <?php foreach ($pendingPickups as $pickup): ?>
                                         <?php
-                                            $items = get_reservation_items_with_names($pdo, (int)$pickup['id']);
+                                            $items = $pendingResItems[(int)$pickup['id']] ?? [];
                                             $summary = build_items_summary_text($items);
                                         ?>
                                         <tr>
