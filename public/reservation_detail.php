@@ -96,6 +96,11 @@ $active  = 'staff_reservations.php'; // Treat detail view as part of booking his
             <div class="card-body">
                 <h5 class="card-title">Booking information</h5>
                 <p class="card-text">
+                    <?php if (!empty($reservation['name'])): ?>
+                        <strong>Name:</strong>
+                        <?= h($reservation['name']) ?><br>
+                    <?php endif; ?>
+
                     <strong>User Name:</strong>
                     <?= h($reservation['user_name'] ?? '(Unknown)') ?><br>
 

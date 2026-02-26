@@ -228,7 +228,7 @@ if (!empty($_GET['deleted'])) {
                         <div class="card mb-3">
                             <div class="card-body">
                                 <h5 class="card-title">
-                                    Reservation #<?= $resId ?>
+                                    Reservation #<?= $resId ?><?= !empty($res['name']) ? ' — ' . h($res['name']) : '' ?>
                                 </h5>
                                 <p class="card-text">
                                     <strong>User Name:</strong>
@@ -332,7 +332,7 @@ if (!empty($_GET['deleted'])) {
                             <div class="card mb-3">
                                 <div class="card-body">
                                     <h5 class="card-title">
-                                        Reservation #<?= $resId ?>
+                                        Reservation #<?= $resId ?><?= !empty($res['name']) ? ' — ' . h($res['name']) : '' ?>
                                     </h5>
                                     <p class="card-text">
                                         <strong>User Name:</strong>

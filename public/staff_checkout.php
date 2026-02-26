@@ -606,11 +606,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         INSERT INTO reservations (
                             user_name, user_email, user_id, snipeit_user_id,
                             asset_id, asset_name_cache,
-                            start_datetime, end_datetime, status
+                            start_datetime, end_datetime, status, name
                         ) VALUES (
                             :user_name, :user_email, :user_id, :snipeit_user_id,
                             0, :asset_name_cache,
-                            :start_datetime, :end_datetime, 'confirmed'
+                            :start_datetime, :end_datetime, 'confirmed', :name
                         )
                     ");
                     $insertRes->execute([
@@ -621,6 +621,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':asset_name_cache' => 'Pending checkout',
                         ':start_datetime'   => $selectedStart,
                         ':end_datetime'     => $selectedEnd,
+                        ':name'             => $selectedReservation['name'] ?? null,
                     ]);
                     $newReservationId = (int)$pdo->lastInsertId();
 
@@ -1419,7 +1420,7 @@ $active  = basename($_SERVER['PHP_SELF']);
                         $end     = display_datetime($res['end_datetime'] ?? '');
                                 ?>
                                 <option value="<?= $resId ?>" <?= $resId === $selectedReservationId ? 'selected' : '' ?>>
-                                    #<?= $resId ?> – <?= h($res['user_name'] ?? '') ?> (<?= h($start) ?> → <?= h($end) ?>): <?= h($summary) ?>
+                                    #<?= $resId ?><?= !empty($res['name']) ? ' — ' . h($res['name']) : '' ?> – <?= h($res['user_name'] ?? '') ?> (<?= h($start) ?> → <?= h($end) ?>): <?= h($summary) ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>

@@ -263,7 +263,12 @@ if ($isStaff) {
                                             $summary = build_items_summary_text($items);
                                         ?>
                                         <tr>
-                                            <td><?= h($pickup['user_name']) ?></td>
+                                            <td>
+                                                <?= h($pickup['user_name']) ?>
+                                                <?php if (!empty($pickup['name'])): ?>
+                                                    <br><small class="text-muted"><?= h($pickup['name']) ?></small>
+                                                <?php endif; ?>
+                                            </td>
                                             <td><?= h(app_format_datetime($pickup['start_datetime'])) ?></td>
                                             <td><?= h($summary ?: '—') ?></td>
                                             <td><?= layout_status_badge($pickup['status']) ?></td>

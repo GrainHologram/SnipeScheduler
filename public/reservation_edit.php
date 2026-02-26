@@ -445,15 +445,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
 
         try {
+            $editName = trim($_POST['reservation_name'] ?? '');
+            if ($editName === '') {
+                $editName = null;
+            }
+
             $updateRes = $pdo->prepare('
                 UPDATE reservations
                 SET start_datetime = :start,
-                    end_datetime = :end
+                    end_datetime = :end,
+                    name = :name
                 WHERE id = :id
             ');
             $updateRes->execute([
                 ':start' => $start,
                 ':end'   => $end,
+                ':name'  => $editName,
                 ':id'    => $id,
             ]);
 
@@ -606,6 +613,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <?php if ($from !== ''): ?>
                     <input type="hidden" name="from" value="<?= h($from) ?>">
                 <?php endif; ?>
+
+                <div class="mb-3">
+                    <label for="reservation-name" class="form-label fw-semibold">
+                        Reservation name <span class="text-muted fw-normal">(optional)</span>
+                    </label>
+                    <input type="text" class="form-control" id="reservation-name" name="reservation_name"
+                           placeholder="e.g. Studio A shoot" maxlength="255"
+                           value="<?= h($reservation['name'] ?? '') ?>">
+                </div>
 
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
