@@ -111,67 +111,98 @@ if (!empty($_GET['date'])) {
     }
 
     // -------------------------------------------------------
-    // Capacity counting — single-pass approach
+    // Capacity counting — event-based approach
     // -------------------------------------------------------
+    // Slot capacity limits concurrent scheduling events (pickups and
+    // returns) at a given time, NOT how many ongoing checkouts exist.
+    // A reservation starting Mon 9am only counts against Mon's 9:00
+    // slot; a checkout ending Fri 3pm only counts against Fri's 3:00
+    // slot.  The old overlap approach incorrectly counted multi-day
+    // bookings against every slot in between.
+    // -------------------------------------------------------
+
     // Convert day window to UTC for DB queries
     $windowStartUtc = (clone $slotStart)->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
     $windowEndUtc   = (clone $slotEnd)->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
 
-    // 1. Active reservations (pending/confirmed) overlapping this day's window
+    // 1. Reservations (pending/confirmed) with start or end in today's window
     $stmtRes = $pdo->prepare("
         SELECT start_datetime, end_datetime
         FROM reservations
         WHERE status IN ('pending', 'confirmed')
-          AND start_datetime < :window_end
-          AND end_datetime > :window_start
+          AND (
+            (start_datetime >= :ws1 AND start_datetime < :we1)
+            OR (end_datetime >= :ws2 AND end_datetime < :we2)
+          )
     ");
     $stmtRes->execute([
-        ':window_start' => $windowStartUtc,
-        ':window_end'   => $windowEndUtc,
+        ':ws1' => $windowStartUtc, ':we1' => $windowEndUtc,
+        ':ws2' => $windowStartUtc, ':we2' => $windowEndUtc,
     ]);
     $reservations = $stmtRes->fetchAll(PDO::FETCH_ASSOC);
 
-    // 2. Active checkouts (open/partial) overlapping this day's window
+    // 2. Active checkouts (open/partial) with start or end in today's window
     $stmtCo = $pdo->prepare("
         SELECT c.start_datetime, c.end_datetime
         FROM checkouts c
         WHERE c.status IN ('open', 'partial')
-          AND c.start_datetime < :window_end
-          AND c.end_datetime > :window_start
+          AND (
+            (c.start_datetime >= :ws1 AND c.start_datetime < :we1)
+            OR (c.end_datetime >= :ws2 AND c.end_datetime < :we2)
+          )
     ");
     $stmtCo->execute([
-        ':window_start' => $windowStartUtc,
-        ':window_end'   => $windowEndUtc,
+        ':ws1' => $windowStartUtc, ':we1' => $windowEndUtc,
+        ':ws2' => $windowStartUtc, ':we2' => $windowEndUtc,
     ]);
     $checkouts = $stmtCo->fetchAll(PDO::FETCH_ASSOC);
 
-    // Bucket bookings into slots
-    // Each slot represents a point in time; a booking overlaps the slot if
-    // booking.start < slot + interval AND booking.end > slot
+    // Build slot counts map
+    $slotCounts = [];
+    foreach ($slotTimes as $slotDt) {
+        $slotCounts[$slotDt->format('H:i')] = 0;
+    }
+
+    // Helper: bucket a UTC datetime string into the matching slot
+    $bucketEvent = function (string $utcStr) use ($appTz, $dateStr, $openTime, $closeTime, $intervalMinutes, &$slotCounts) {
+        $dt = new DateTime($utcStr, new DateTimeZone('UTC'));
+        $dt->setTimezone($appTz);
+
+        // Must fall on the target date
+        if ($dt->format('Y-m-d') !== $dateStr) {
+            return;
+        }
+        $time = $dt->format('H:i');
+        if ($time < $openTime || $time > $closeTime) {
+            return;
+        }
+
+        // Round down to nearest slot interval
+        $totalMin = (int)$dt->format('H') * 60 + (int)$dt->format('i');
+        $slotMin  = (int)(floor($totalMin / $intervalMinutes) * $intervalMinutes);
+        $slotKey  = sprintf('%02d:%02d', intdiv($slotMin, 60), $slotMin % 60);
+
+        if (isset($slotCounts[$slotKey])) {
+            $slotCounts[$slotKey]++;
+        }
+    };
+
+    // Bucket reservation starts and ends
+    foreach ($reservations as $r) {
+        $bucketEvent($r['start_datetime']);
+        $bucketEvent($r['end_datetime']);
+    }
+
+    // Bucket checkout starts and ends
+    foreach ($checkouts as $co) {
+        $bucketEvent($co['start_datetime']);
+        $bucketEvent($co['end_datetime']);
+    }
+
+    // Build slot response
     foreach ($slotTimes as $slotDt) {
         $timeLabel = $slotDt->format('H:i');
-        $slotUtc      = (clone $slotDt)->setTimezone(new DateTimeZone('UTC'));
-        $slotEndDt    = (clone $slotDt)->add($interval);
-        $slotEndUtc   = (clone $slotEndDt)->setTimezone(new DateTimeZone('UTC'));
-
-        $slotUtcStr    = $slotUtc->format('Y-m-d H:i:s');
-        $slotEndUtcStr = $slotEndUtc->format('Y-m-d H:i:s');
-
-        $booked = 0;
-
-        // Count reservations overlapping this slot
-        foreach ($reservations as $r) {
-            if ($r['start_datetime'] < $slotEndUtcStr && $r['end_datetime'] > $slotUtcStr) {
-                $booked++;
-            }
-        }
-
-        // Count active checkouts overlapping this slot
-        foreach ($checkouts as $co) {
-            if ($co['start_datetime'] < $slotEndUtcStr && $co['end_datetime'] > $slotUtcStr) {
-                $booked++;
-            }
-        }
+        $booked = $slotCounts[$timeLabel] ?? 0;
 
         if ($slotCapacity <= 0) {
             // Unlimited capacity
