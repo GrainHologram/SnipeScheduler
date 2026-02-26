@@ -117,8 +117,9 @@ if (!$reservation) {
 }
 
 if (!$isStaff) {
-    $reservationUserId = (string)($reservation['user_id'] ?? '');
-    if ($reservationUserId === '' || $reservationUserId !== $currentUserId) {
+    $currentSnipeId = (string)($currentUser['snipeit_user_id'] ?? '');
+    $resSnipeId     = (string)($reservation['snipeit_user_id'] ?? '');
+    if ($currentSnipeId === '' || $resSnipeId !== $currentSnipeId) {
         http_response_code(403);
         echo 'Access denied.';
         exit;
