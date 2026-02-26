@@ -616,6 +616,14 @@ if (!empty($basket)) {
                            <?= $isStaff ? '' : 'required' ?>>
                 </div>
 
+                <div class="mb-3">
+                    <label for="reservation-notes" class="form-label fw-semibold">
+                        Notes <span class="text-muted fw-normal">(optional)</span>
+                    </label>
+                    <textarea class="form-control" id="reservation-notes" name="reservation_notes"
+                              rows="2" placeholder="Any additional details about this reservation"></textarea>
+                </div>
+
                 <p class="mb-2 text-muted">
                     When you click <strong>Confirm booking</strong>, the system will re-check availability
                     and reject the booking if another user has taken items in the meantime.

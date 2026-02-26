@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS reservations (
     user_email VARCHAR(255) NOT NULL,
     snipeit_user_id INT UNSIGNED DEFAULT NULL, -- optional link to Snipe-IT user id
     name TEXT DEFAULT NULL,          -- user-entered label (e.g. "Studio A shoot")
+    notes TEXT DEFAULT NULL,         -- optional free-text notes for the reservation
 
     asset_id INT UNSIGNED NOT NULL DEFAULT 0,  -- optional: single-asset reservations
     start_datetime DATETIME NOT NULL,

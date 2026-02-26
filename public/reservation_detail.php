@@ -113,6 +113,11 @@ $active  = 'staff_reservations.php'; // Treat detail view as part of booking his
                     <strong>Status:</strong>
                     <?= layout_status_badge($reservation['status'] ?? '') ?><br>
 
+                    <?php if (!empty($reservation['notes'])): ?>
+                        <strong>Notes:</strong>
+                        <?= nl2br(h($reservation['notes'])) ?><br>
+                    <?php endif; ?>
+
                     <?php if (!empty($reservation['asset_name_cache'])): ?>
                         <strong>Checked-out assets:</strong>
                         <?= h($reservation['asset_name_cache']) ?><br>

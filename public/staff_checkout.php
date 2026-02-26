@@ -606,11 +606,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         INSERT INTO reservations (
                             user_name, user_email, user_id, snipeit_user_id,
                             asset_id, asset_name_cache,
-                            start_datetime, end_datetime, status, name
+                            start_datetime, end_datetime, status, name, notes
                         ) VALUES (
                             :user_name, :user_email, :user_id, :snipeit_user_id,
                             0, :asset_name_cache,
-                            :start_datetime, :end_datetime, 'confirmed', :name
+                            :start_datetime, :end_datetime, 'confirmed', :name, :notes
                         )
                     ");
                     $insertRes->execute([
@@ -622,6 +622,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':start_datetime'   => $selectedStart,
                         ':end_datetime'     => $selectedEnd,
                         ':name'             => $selectedReservation['name'] ?? null,
+                        ':notes'            => $selectedReservation['notes'] ?? null,
                     ]);
                     $newReservationId = (int)$pdo->lastInsertId();
 
@@ -1439,6 +1440,9 @@ $active  = basename($_SERVER['PHP_SELF']);
                             <div>Models &amp; quantities: <?= h(build_items_summary_text($selectedItems)) ?></div>
                         <?php else: ?>
                             <div>This reservation has no items recorded.</div>
+                        <?php endif; ?>
+                        <?php if (!empty($selectedReservation['notes'])): ?>
+                            <div><strong>Notes:</strong> <?= nl2br(h($selectedReservation['notes'])) ?></div>
                         <?php endif; ?>
                     </div>
                 <?php endif; ?>
