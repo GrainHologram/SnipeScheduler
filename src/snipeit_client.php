@@ -1543,6 +1543,10 @@ function prefetch_catalogue_model_stats(array $modelIds): array
     // Build lookup set for O(1) membership check
     $idSet = array_flip($ids);
 
+    // Read hide-from-catalogue field name from config
+    $config = load_config();
+    $hideFieldName = trim((string)($config['catalogue']['hide_field_name'] ?? ''));
+
     // Initialize results for all requested model IDs
     $results = [];
     foreach ($ids as $id) {
@@ -1558,9 +1562,10 @@ function prefetch_catalogue_model_stats(array $modelIds): array
     }
 
     // Single pass through all assets
-    $statusSets = []; // model_id => [name => true]
-    $certSets   = []; // model_id => [cert_value => true]
-    $accessSets = []; // model_id => [access_value => true]
+    $statusSets  = []; // model_id => [name => true]
+    $certSets    = []; // model_id => [cert_value => true]
+    $accessSets  = []; // model_id => [access_value => true]
+    $hiddenModels = []; // model_id => true
 
     foreach ($all as $asset) {
         $mid = (int)($asset['model']['id'] ?? 0);
@@ -1598,6 +1603,14 @@ function prefetch_catalogue_model_stats(array $modelIds): array
                 } elseif (stripos($fieldName, 'Certification Needed') !== false) {
                     $certSets[$mid][$value] = true;
                 }
+
+                // Hide-from-catalogue check
+                if ($hideFieldName !== '' && stripos($fieldName, $hideFieldName) !== false) {
+                    $lv = strtolower($value);
+                    if ($lv !== 'no' && $lv !== '0' && $lv !== 'false') {
+                        $hiddenModels[$mid] = true;
+                    }
+                }
             }
         }
     }
@@ -1612,6 +1625,9 @@ function prefetch_catalogue_model_stats(array $modelIds): array
         }
         if (!empty($accessSets[$id])) {
             $results[$id]['access_levels'] = array_keys($accessSets[$id]);
+        }
+        if (!empty($hiddenModels[$id])) {
+            $results[$id]['hidden'] = true;
         }
     }
 
