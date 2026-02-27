@@ -451,7 +451,10 @@ class SlotPicker {
             btn.type = 'button';
             btn.setAttribute('data-time', timeStr);
 
+            var isCooldown = !!slot.cooldown;
+
             var classes = ['sp-slot'];
+            if (isCooldown) classes.push('sp-slot-cooldown');
             if (isFull) {
                 classes.push('sp-slot-full');
                 if (this.bypassCapacity) {

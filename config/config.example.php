@@ -137,6 +137,7 @@ return [
         'quick_checkout_enabled' => true, // show the Quick Checkout tab for staff
         'slot_interval_minutes' => 15,  // time slot granularity (minutes)
         'slot_capacity'         => 0,   // max checkouts+returns per slot (0 = unlimited)
+        'cooldown_slots'        => 0,   // number of end-of-day slots with halved capacity (0 = disabled)
     ],
 
     'reservations' => [
