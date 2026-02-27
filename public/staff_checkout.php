@@ -756,16 +756,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($modelId <= 0) {
                     throw new Exception('Asset record missing model information.');
                 }
-                if (!$isRequestable) {
-                    throw new Exception('This asset is not requestable in Snipe-IT.');
-                }
-                if (!is_asset_deployable($asset)) {
-                    $statusName = is_array($asset['status_label'] ?? null)
-                        ? ($asset['status_label']['name'] ?? 'undeployable')
-                        : 'undeployable';
-                    throw new Exception("Asset is currently \"{$statusName}\" and cannot be checked out.");
-                }
-
                 // Duplicate check — scan all preset slots
                 $presets = $_SESSION['reservation_selected_assets'][$resId] ?? [];
                 foreach ($presets as $_mid => $slots) {
@@ -774,6 +764,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             throw new Exception("Asset {$assetTag} is already selected.");
                         }
                     }
+                }
+
+                // Scanned barcodes are allowed even if the asset isn't
+                // requestable, deployable, or already assigned — the worker
+                // physically has it. These conditions become warnings.
+                $scanWarnings = [];
+                if (!$isRequestable) {
+                    $scanWarnings[] = "not marked requestable";
+                }
+                if (!is_asset_deployable($asset)) {
+                    $statusName = is_array($asset['status_label'] ?? null)
+                        ? ($asset['status_label']['name'] ?? 'undeployable')
+                        : 'undeployable';
+                    $scanWarnings[] = "status \"{$statusName}\"";
+                }
+                $assignedTo = $asset['assigned_to'] ?? null;
+                if (!empty($assignedTo)) {
+                    $assignedName = is_array($assignedTo) ? ($assignedTo['name'] ?? 'someone') : 'someone';
+                    $scanWarnings[] = "assigned to {$assignedName}";
                 }
 
                 // Cert/access warning
@@ -876,7 +885,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $label = $modelName !== '' ? "{$assetTag} ({$modelName})" : $assetTag;
                 if ($scanWarning !== '') {
-                    $_SESSION['scan_flash'] = ['type' => 'warning', 'msg' => "Assigned {$label}. {$scanWarning}"];
+                    $scanWarnings[] = $scanWarning;
+                }
+                if (!empty($scanWarnings)) {
+                    $warningText = implode('; ', $scanWarnings);
+                    $_SESSION['scan_flash'] = ['type' => 'warning', 'msg' => "Assigned {$label}. Warning: {$warningText}."];
                 } else {
                     $_SESSION['scan_flash'] = ['type' => 'success', 'msg' => "Assigned {$label}."];
                 }
