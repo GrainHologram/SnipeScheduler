@@ -148,6 +148,7 @@ return [
         // Restrict which categories appear in the catalogue filter.
         // Leave empty to show all categories returned by Snipe-IT.
         'allowed_categories' => [],
+        'hide_field_name' => '',  // Snipe-IT custom field name; models with a truthy value are hidden from catalogue
     ],
 
     'checkout_limits' => [

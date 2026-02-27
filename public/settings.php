@@ -401,6 +401,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     $catalogue['allowed_categories'] = $allowedCategories;
+    $catalogue['hide_field_name'] = trim($post('catalogue_hide_field_name', ''));
 
     $allStatuses = ['pending', 'confirmed', 'fulfilled', 'cancelled', 'missed'];
     $reservations = $config['reservations'] ?? [];
@@ -1012,6 +1013,11 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                                 <label class="form-label">API cache TTL (seconds)</label>
                                 <input type="number" name="app_api_cache_ttl" class="form-control" min="0" value="<?= (int)$cfg(['app', 'api_cache_ttl_seconds'], 60) ?>">
                                 <div class="form-text">Cache Snipe-IT GET responses. Set 0 to disable.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Hide from catalogue field name</label>
+                                <input type="text" name="catalogue_hide_field_name" class="form-control" value="<?= h($cfg(['catalogue', 'hide_field_name'], '')) ?>">
+                                <div class="form-text">Snipe-IT custom field name. Models where any asset has this field set to a truthy value will be hidden from the catalogue but can still be scanned at checkout/checkin.</div>
                             </div>
                         </div>
                     </div>

@@ -1017,6 +1017,12 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 <?php foreach ($models as $model): ?>
                     <?php
                     $modelId    = (int)($model['id'] ?? 0);
+
+                    // Skip models hidden via custom field
+                    if (!empty($modelStats[$modelId]['hidden'])) {
+                        continue;
+                    }
+
                     $name       = $model['name'] ?? 'Model';
                     $manuName   = $model['manufacturer']['name'] ?? '';
                     $catName    = $model['category']['name'] ?? '';
