@@ -161,7 +161,12 @@ if (!empty($_GET['date'])) {
     $slots = [];
     $slotTimes = [];
     $cursor = clone $slotStart;
-    while ($cursor <= $slotEnd) {
+    while (true) {
+        $slotEndTime = clone $cursor;
+        $slotEndTime->add($interval);
+        if ($slotEndTime > $slotEnd) {
+            break;
+        }
         $slotTimes[] = clone $cursor;
         $cursor->add($interval);
     }
