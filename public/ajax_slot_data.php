@@ -19,6 +19,7 @@ $appTz   = app_get_timezone($config);
 
 $intervalMinutes = max(1, (int)($config['app']['slot_interval_minutes'] ?? 15));
 $slotCapacity    = max(0, (int)($config['app']['slot_capacity'] ?? 0)); // 0 = unlimited
+$cooldownSlots   = max(0, (int)($config['app']['cooldown_slots'] ?? 0));
 
 $bypassCapacity = !empty($_GET['bypass_capacity']) && $isStaff;
 $bypassClosed   = !empty($_GET['bypass_closed']) && $isAdmin;
@@ -160,7 +161,12 @@ if (!empty($_GET['date'])) {
     $slots = [];
     $slotTimes = [];
     $cursor = clone $slotStart;
-    while ($cursor <= $slotEnd) {
+    while (true) {
+        $slotEndTime = clone $cursor;
+        $slotEndTime->add($interval);
+        if ($slotEndTime > $slotEnd) {
+            break;
+        }
         $slotTimes[] = clone $cursor;
         $cursor->add($interval);
     }
@@ -260,25 +266,38 @@ if (!empty($_GET['date'])) {
     }
 
     // Build slot response
-    foreach ($slotTimes as $slotDt) {
+    $totalSlots = count($slotTimes);
+    $cooldownStart = ($cooldownSlots > 0 && $slotCapacity > 0)
+        ? max(0, $totalSlots - $cooldownSlots)
+        : $totalSlots; // no cooldown
+
+    foreach ($slotTimes as $slotIdx => $slotDt) {
         $timeLabel = $slotDt->format('H:i');
         $booked = $slotCounts[$timeLabel] ?? 0;
+        $isCooldown = ($slotIdx >= $cooldownStart);
+        $effectiveCapacity = $isCooldown
+            ? (int)ceil($slotCapacity / 2)
+            : $slotCapacity;
 
         if ($slotCapacity <= 0) {
             // Unlimited capacity
             $remaining = null;
         } elseif ($bypassCapacity) {
-            $remaining = $slotCapacity;
+            $remaining = $effectiveCapacity;
         } else {
-            $remaining = max(0, $slotCapacity - $booked);
+            $remaining = max(0, $effectiveCapacity - $booked);
         }
 
-        $slots[] = [
+        $slot = [
             'time'      => $timeLabel,
-            'capacity'  => $slotCapacity,
+            'capacity'  => $effectiveCapacity,
             'booked'    => $booked,
             'remaining' => $remaining,
         ];
+        if ($isCooldown) {
+            $slot['cooldown'] = true;
+        }
+        $slots[] = $slot;
     }
 
     echo json_encode(['date' => $dateStr, 'slots' => $slots, 'is_closed' => false]);

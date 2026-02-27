@@ -192,6 +192,15 @@
     text-decoration: line-through;
 }
 
+.sp-slot-cooldown {
+    border-color: rgba(var(--primary-rgb), 0.25);
+    opacity: 0.75;
+}
+
+.sp-slot-cooldown .sp-slot-remaining {
+    font-style: italic;
+}
+
 .sp-slot-selected {
     background: var(--primary);
     color: #ffffff;
