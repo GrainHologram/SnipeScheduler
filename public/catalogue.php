@@ -1950,7 +1950,7 @@ document.addEventListener('DOMContentLoaded', function () {
             hiddenInput: equipStartHidden,
             type: 'start',
             intervalMinutes: intervalMinutes,
-            onSelect: function (dt) { if (!equipEndManuallySet) autoSetEnd(equipEndPicker, dt); }
+            onSelect: function (dt) { if (!equipEndManuallySet) autoSetEnd(equipEndPicker, dt); if (equipEndHidden.value) submitWindowForm(equipForm); }
         }));
         if (equipStartHidden.value) equipStartPicker.setValue(equipStartHidden.value);
         if (equipEndHidden.value) { equipEndPicker.setValue(equipEndHidden.value); equipEndManuallySet = true; }
@@ -1975,7 +1975,7 @@ document.addEventListener('DOMContentLoaded', function () {
             hiddenInput: kitsStartHidden,
             type: 'start',
             intervalMinutes: intervalMinutes,
-            onSelect: function (dt) { if (!kitsEndManuallySet) autoSetEnd(kitsEndPicker, dt); }
+            onSelect: function (dt) { if (!kitsEndManuallySet) autoSetEnd(kitsEndPicker, dt); if (kitsEndHidden.value) submitWindowForm(kitsForm); }
         }));
         if (kitsStartHidden.value) kitsStartPicker.setValue(kitsStartHidden.value);
         if (kitsEndHidden.value) { kitsEndPicker.setValue(kitsEndHidden.value); kitsEndManuallySet = true; }
