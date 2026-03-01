@@ -407,7 +407,8 @@ function openModelHistory(modelId, modelName) {
                     html += '<tr>';
                     html += '<td>' + esc(a.asset_tag) + '</td>';
                     html += '<td>' + esc(a.asset_name) + '</td>';
-                    html += '<td' + statusClass + '>' + esc(a.status) + '</td>';
+                    var statusText = a.status_meta === 'deployed' ? 'Checked Out' : a.status;
+                    html += '<td' + statusClass + '>' + esc(statusText) + '</td>';
                     if (_modelDetailIsStaff) {
                         html += '<td>' + esc(a.assigned_to || '') + '</td>';
                         html += '<td><button type="button" class="btn btn-sm btn-outline-secondary" title="Add note" onclick="openModelDetailNote(' + a.asset_id + ', \'' + esc(a.asset_tag).replace(/'/g, "\\'") + '\')">&#9998;</button></td>';
