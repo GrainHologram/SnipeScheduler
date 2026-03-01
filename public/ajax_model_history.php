@@ -28,21 +28,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add_note') {
         $assetId = (int)($input['asset_id'] ?? 0);
         $note = trim($input['note'] ?? '');
+        $createMaint = !empty($input['create_maintenance']);
+        $pullRepair = !empty($input['pull_for_repair']);
 
         if ($assetId <= 0) {
             http_response_code(400);
             echo json_encode(['error' => 'Missing asset_id']);
             exit;
         }
-        if ($note === '') {
+        if ($note === '' && !$createMaint) {
             http_response_code(400);
             echo json_encode(['error' => 'Note text cannot be empty']);
             exit;
         }
 
+        $warnings = [];
+
         try {
-            add_asset_note($assetId, $note);
-            echo json_encode(['success' => true]);
+            // Add note to Snipe-IT
+            if ($note !== '') {
+                add_asset_note($assetId, $note);
+            }
+
+            // Create maintenance request
+            if ($createMaint) {
+                try {
+                    $maintTitle = $note !== '' ? $note : 'Maintenance request';
+                    create_asset_maintenance($assetId, $maintTitle, $note ?: 'Created from model detail view');
+                } catch (Throwable $e) {
+                    $warnings[] = 'Could not create maintenance request: ' . $e->getMessage();
+                }
+            }
+
+            // Pull for repair — change asset status
+            if ($pullRepair) {
+                try {
+                    $config = load_config();
+                    $repairStatusName = $config['snipeit']['repair_status_name'] ?? 'Pulled for Repair/Replace';
+                    $statusId = get_status_label_id_by_name($repairStatusName);
+                    if ($statusId !== null) {
+                        update_asset_status($assetId, $statusId);
+                    } else {
+                        $warnings[] = "Could not find status label \"{$repairStatusName}\".";
+                    }
+                } catch (Throwable $e) {
+                    $warnings[] = 'Could not update asset status: ' . $e->getMessage();
+                }
+            }
+
+            $result = ['success' => true];
+            if (!empty($warnings)) {
+                $result['warnings'] = $warnings;
+            }
+            echo json_encode($result);
         } catch (Throwable $e) {
             http_response_code(500);
             echo json_encode(['error' => 'Failed to add note: ' . $e->getMessage()]);

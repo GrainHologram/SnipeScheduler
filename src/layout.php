@@ -565,21 +565,44 @@ function openModelDetailNote(assetId, assetTag) {
     if (!form) return;
     form.style.display = 'block';
     form.innerHTML = '<h6 class="mb-2">Add Note to ' + esc(assetTag) + '</h6>'
-        + '<textarea id="modelDetailNoteText" class="form-control mb-2" rows="3" placeholder="Enter note..."></textarea>'
-        + '<div><button type="button" class="btn btn-sm btn-primary me-2" onclick="submitModelDetailNote()">Save Note</button>'
+        + '<textarea id="modelDetailNoteText" class="form-control mb-2" rows="3" placeholder="e.g. Lens scratched, missing cable..."></textarea>'
+        + '<div class="mb-2"><div class="form-check">'
+        + '<input class="form-check-input" type="checkbox" id="mdNoteCreateMaint" onchange="mdTogglePullCheckbox()">'
+        + '<label class="form-check-label" for="mdNoteCreateMaint">Create maintenance request (Repair)</label>'
+        + '</div></div>'
+        + '<div class="mb-3"><div class="form-check">'
+        + '<input class="form-check-input" type="checkbox" id="mdNotePullRepair" disabled>'
+        + '<label class="form-check-label text-muted" for="mdNotePullRepair" id="mdNotePullLabel">Change status to Pulled for Repair/Replace</label>'
+        + '</div></div>'
+        + '<div><button type="button" class="btn btn-sm btn-primary me-2" onclick="submitModelDetailNote()">Save</button>'
         + '<button type="button" class="btn btn-sm btn-secondary" onclick="closeModelDetailNote()">Cancel</button></div>'
         + '<div id="modelDetailNoteMsg" class="mt-2"></div>';
     form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     document.getElementById('modelDetailNoteText').focus();
 }
 
+function mdTogglePullCheckbox() {
+    var maint = document.getElementById('mdNoteCreateMaint');
+    var pull = document.getElementById('mdNotePullRepair');
+    var label = document.getElementById('mdNotePullLabel');
+    if (!maint || !pull) return;
+    pull.disabled = !maint.checked;
+    if (!maint.checked) pull.checked = false;
+    if (label) label.classList.toggle('text-muted', !maint.checked);
+}
+
 function submitModelDetailNote() {
     if (!_noteAssetId) return;
     var textarea = document.getElementById('modelDetailNoteText');
+    var maintCb = document.getElementById('mdNoteCreateMaint');
+    var pullCb = document.getElementById('mdNotePullRepair');
     var msg = document.getElementById('modelDetailNoteMsg');
     var note = (textarea ? textarea.value : '').trim();
-    if (!note) {
-        if (msg) msg.innerHTML = '<div class="alert alert-warning py-1 px-2 mb-0 small">Please enter a note.</div>';
+    var createMaint = maintCb ? maintCb.checked : false;
+    var pullRepair = pullCb ? pullCb.checked : false;
+
+    if (!note && !createMaint) {
+        if (msg) msg.innerHTML = '<div class="alert alert-warning py-1 px-2 mb-0 small">Please enter a note or select an action.</div>';
         return;
     }
     if (msg) msg.innerHTML = '<div class="text-muted small">Saving...</div>';
@@ -587,15 +610,31 @@ function submitModelDetailNote() {
     fetch('ajax_model_history.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'add_note', asset_id: _noteAssetId, note: note })
+        body: JSON.stringify({
+            action: 'add_note',
+            asset_id: _noteAssetId,
+            note: note,
+            create_maintenance: createMaint,
+            pull_for_repair: pullRepair
+        })
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
         if (data.success) {
-            if (msg) msg.innerHTML = '<div class="alert alert-success py-1 px-2 mb-0 small">Note saved successfully.</div>';
+            var successMsg = 'Saved successfully.';
+            if (data.warnings && data.warnings.length > 0) {
+                successMsg += ' Warnings: ' + data.warnings.join('; ');
+                if (msg) msg.innerHTML = '<div class="alert alert-warning py-1 px-2 mb-0 small">' + esc(successMsg) + '</div>';
+            } else {
+                if (msg) msg.innerHTML = '<div class="alert alert-success py-1 px-2 mb-0 small">' + esc(successMsg) + '</div>';
+            }
             if (textarea) textarea.value = '';
+            if (maintCb) maintCb.checked = false;
+            if (pullCb) { pullCb.checked = false; pullCb.disabled = true; }
+            var label = document.getElementById('mdNotePullLabel');
+            if (label) label.classList.add('text-muted');
         } else {
-            if (msg) msg.innerHTML = '<div class="alert alert-danger py-1 px-2 mb-0 small">' + esc(data.error || 'Failed to save note.') + '</div>';
+            if (msg) msg.innerHTML = '<div class="alert alert-danger py-1 px-2 mb-0 small">' + esc(data.error || 'Failed to save.') + '</div>';
         }
     })
     .catch(function() {
