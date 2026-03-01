@@ -972,7 +972,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     });
 })();
 </script>
-<?php layout_model_history_modal(); ?>
+<?php layout_model_history_modal(true); ?>
 <?php layout_footer(); ?>
 </body>
 </html>

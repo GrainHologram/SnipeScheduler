@@ -2129,7 +2129,7 @@ $active  = basename($_SERVER['PHP_SELF']);
 })();
 </script>
 <?php if (!$embedded): ?>
-<?php layout_model_history_modal(); ?>
+<?php layout_model_history_modal(true); ?>
 <?php layout_footer(); ?>
 </body>
 </html>

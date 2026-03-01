@@ -443,13 +443,13 @@ foreach ($checkouts as $co) {
 <?php if (!$embedded): ?>
     </div>
 </div>
-<?php if ($isStaff) { layout_model_history_modal(); } ?>
+<?php layout_model_history_modal($isStaff); ?>
 <?php layout_footer(); ?>
 </body>
 </html>
 <?php endif; ?>
 <?php if ($embedded): ?>
-<?php if ($isStaff) { layout_model_history_modal(); } ?>
+<?php layout_model_history_modal($isStaff); ?>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     var form = document.getElementById('checkout-history-filter-form');
