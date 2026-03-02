@@ -473,7 +473,18 @@ if (!empty($basket)) {
                             <td class="ps-4"><?= h($model['name'] ?? 'Model') ?></td>
                             <td><?= h($model['manufacturer']['name'] ?? '') ?></td>
                             <td><?= h($model['category']['name'] ?? '') ?></td>
-                            <td><?= $qty ?></td>
+                            <td>
+                                <form method="post" action="basket_update.php" class="d-flex align-items-center gap-1">
+                                    <input type="hidden" name="model_id" value="<?= $mid ?>">
+                                    <button type="submit" name="quantity" value="<?= max(1, $qty - 1) ?>"
+                                            class="btn btn-sm btn-outline-secondary" <?= $qty <= 1 ? 'disabled' : '' ?>>−</button>
+                                    <input type="number" name="quantity" value="<?= $qty ?>"
+                                           min="1" max="100" class="form-control form-control-sm text-center"
+                                           style="width: 3.5rem;" onchange="this.form.submit()">
+                                    <button type="submit" name="quantity" value="<?= $qty + 1 ?>"
+                                            class="btn btn-sm btn-outline-secondary">+</button>
+                                </form>
+                            </td>
                             <td class="<?= $warnClass ?>"><?= htmlspecialchars($availText) ?></td>
                             <td>
                                 <a href="basket_remove.php?model_id=<?= (int)$model['id'] ?>"
@@ -522,7 +533,18 @@ if (!empty($basket)) {
                             <td><?= h($model['name'] ?? 'Model') ?></td>
                             <td><?= h($model['manufacturer']['name'] ?? '') ?></td>
                             <td><?= h($model['category']['name'] ?? '') ?></td>
-                            <td><?= $qty ?></td>
+                            <td>
+                                <form method="post" action="basket_update.php" class="d-flex align-items-center gap-1">
+                                    <input type="hidden" name="model_id" value="<?= $mid ?>">
+                                    <button type="submit" name="quantity" value="<?= max(1, $qty - 1) ?>"
+                                            class="btn btn-sm btn-outline-secondary" <?= $qty <= 1 ? 'disabled' : '' ?>>−</button>
+                                    <input type="number" name="quantity" value="<?= $qty ?>"
+                                           min="1" max="100" class="form-control form-control-sm text-center"
+                                           style="width: 3.5rem;" onchange="this.form.submit()">
+                                    <button type="submit" name="quantity" value="<?= $qty + 1 ?>"
+                                            class="btn btn-sm btn-outline-secondary">+</button>
+                                </form>
+                            </td>
                             <td class="<?= $warnClass ?>"><?= htmlspecialchars($availText) ?></td>
                             <td>
                                 <a href="basket_remove.php?model_id=<?= (int)$model['id'] ?>"
