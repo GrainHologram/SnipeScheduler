@@ -349,6 +349,9 @@ if ($selectedReservationId) {
                 $normalizedSelections[$mid] = array_values($normalizedSelections[$mid]);
             }
             $presetSelections = $normalizedSelections;
+            if ($selectedReservationId) {
+                $_SESSION['reservation_selected_assets'][$selectedReservationId] = $normalizedSelections;
+            }
         } elseif (is_array($storedSelections)) {
             $presetSelections = $storedSelections;
         }
