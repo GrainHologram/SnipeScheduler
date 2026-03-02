@@ -601,7 +601,7 @@ if (!empty($basket)) {
             <?php endif; ?>
 
             <!-- Final checkout form (uses the same dates, if provided) -->
-            <form method="post" action="basket_checkout.php">
+            <form method="post" action="basket_checkout.php" data-loading="Confirming reservation...">
                 <input type="hidden" name="start_datetime" id="post-start-datetime"
                        value="<?= htmlspecialchars($previewStartRaw) ?>">
                 <input type="hidden" name="end_datetime" id="post-end-datetime"
@@ -739,6 +739,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 </script>
+<?php layout_checkout_loading_overlay(); ?>
 <?php layout_footer(); ?>
 </body>
 </html>

@@ -1598,7 +1598,7 @@ $active  = basename($_SERVER['PHP_SELF']);
                         Choose assets for each model in reservation #<?= (int)$selectedReservation['id'] ?>.
                     </p>
 
-                    <form method="post" action="<?= h($selfUrl) ?>">
+                    <form method="post" action="<?= h($selfUrl) ?>" data-loading="Processing checkout...">
                         <?php foreach ($baseQuery as $k => $v): ?>
                             <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
                         <?php endforeach; ?>
@@ -2152,6 +2152,7 @@ $active  = basename($_SERVER['PHP_SELF']);
 })();
 </script>
 <?php if (!$embedded): ?>
+<?php layout_checkout_loading_overlay(); ?>
 <?php layout_model_history_modal(true); ?>
 <?php layout_footer(); ?>
 </body>

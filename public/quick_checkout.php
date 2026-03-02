@@ -716,7 +716,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
                     <?php endif; ?>
 
-                    <form method="post" class="border-top pt-3">
+                    <form method="post" class="border-top pt-3" data-loading="Processing checkout...">
                         <input type="hidden" name="mode" value="checkout">
 
                         <div class="row g-3 mb-3">
@@ -984,6 +984,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     });
 })();
 </script>
+<?php layout_checkout_loading_overlay(); ?>
 <?php layout_model_history_modal(true); ?>
 <?php layout_footer(); ?>
 </body>

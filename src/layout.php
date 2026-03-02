@@ -306,6 +306,51 @@ if (!function_exists('layout_logo_tag')) {
     }
 }
 
+if (!function_exists('layout_checkout_loading_overlay')) {
+    /**
+     * Emit a loading overlay + JS that activates on forms with a data-loading attribute.
+     * The data-loading value is used as the overlay text (e.g. "Processing checkout...").
+     */
+    function layout_checkout_loading_overlay(): void
+    {
+        ?>
+<div id="checkoutLoadingOverlay" class="loading-overlay is-hidden">
+    <div class="loading-card">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="checkoutLoadingText">Processing checkout...</div>
+    </div>
+</div>
+<script>
+(function() {
+    document.addEventListener('submit', function(e) {
+        var form = e.target;
+        if (!form || !form.hasAttribute('data-loading')) return;
+
+        var overlay = document.getElementById('checkoutLoadingOverlay');
+        var textEl = document.getElementById('checkoutLoadingText');
+        if (!overlay) return;
+
+        var msg = form.getAttribute('data-loading') || 'Processing...';
+        if (textEl) textEl.textContent = msg;
+
+        overlay.classList.remove('is-hidden');
+
+        var buttons = form.querySelectorAll('button[type="submit"]');
+        for (var i = 0; i < buttons.length; i++) {
+            buttons[i].disabled = true;
+        }
+
+        window.addEventListener('beforeunload', function _warn(ev) {
+            ev.preventDefault();
+            ev.returnValue = '';
+        });
+    });
+})();
+</script>
+        <?php
+    }
+}
+
 if (!function_exists('layout_model_history_modal')) {
     /**
      * Output the model detail modal shell + JS. Call once per page.
