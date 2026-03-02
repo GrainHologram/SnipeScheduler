@@ -368,33 +368,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $errors[] = 'Some assets are reserved for this time. Review who reserved them below or tick "Override" to proceed anyway.';
                     }
 
+                    $checkedOutAssets = [];
                     if (empty($errors)) {
                         $expectedCheckinIso = $endDt->setTimezone($utc)->format('Y-m-d H:i:s');
 
+                        $checkedOutAssets = [];
+                        $apiFailures = [];
                         foreach ($checkoutAssets as $asset) {
                             $assetId  = (int)$asset['id'];
                             $assetTag = $asset['asset_tag'] ?? '';
                             try {
                                 checkout_asset_to_user($assetId, $userId, $note, $expectedCheckinIso);
+                                $checkedOutAssets[] = $asset;
                                 $messages[] = "Checked out asset {$assetTag} to {$userName}." . (!empty($reservationConflicts[$assetId]) ? ' (Override used)' : '');
                             } catch (Throwable $e) {
-                                $errors[] = "Failed to check out {$assetTag}: " . $e->getMessage();
+                                $apiFailures[] = "Failed to check out {$assetTag}: " . $e->getMessage();
+                            }
+                        }
+
+                        if (!empty($apiFailures)) {
+                            foreach ($apiFailures as $fail) {
+                                $errors[] = $fail;
                             }
                         }
                     }
 
-                    if (empty($errors)) {
+                    // Always create local DB records for assets that were successfully checked out,
+                    // even if some assets failed the API call
+                    if (!empty($checkedOutAssets)) {
                         $reservationStart = $startDt->setTimezone($utc)->format('Y-m-d H:i:s');
                         $reservationEnd   = $endDt->setTimezone($utc)->format('Y-m-d H:i:s');
                         $assetTags = array_map(function ($a) {
                             $tag   = $a['asset_tag'] ?? '';
                             $model = $a['model'] ?? '';
                             return $model !== '' ? "{$tag} ({$model})" : $tag;
-                        }, $checkoutAssets);
+                        }, $checkedOutAssets);
                         $assetsText = implode(', ', array_filter($assetTags));
                         $modelCounts = [];
                         $modelNames  = [];
-                        foreach ($checkoutAssets as $asset) {
+                        foreach ($checkedOutAssets as $asset) {
                             $modelId = (int)($asset['model_id'] ?? 0);
                             if ($modelId <= 0) {
                                 continue;
@@ -479,7 +491,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     :mid, :mname, NOW()
                                 )
                             ");
-                            foreach ($checkoutAssets as $asset) {
+                            foreach ($checkedOutAssets as $asset) {
                                 $ciInsert->execute([
                                     ':cid'   => $checkoutId,
                                     ':aid'   => (int)$asset['id'],
@@ -495,7 +507,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             if ($pdo->inTransaction()) {
                                 $pdo->rollBack();
                             }
-                            $errors[] = 'Quick checkout completed, but could not record checkout history: ' . $e->getMessage();
+                            $errors[] = 'Quick checkout completed in Snipe-IT, but could not record checkout history: ' . $e->getMessage();
                         }
 
                         activity_log_event('checkout_created', 'Quick checkout completed', [
@@ -704,7 +716,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
                     <?php endif; ?>
 
-                    <form method="post" class="border-top pt-3">
+                    <form method="post" class="border-top pt-3" data-loading="Processing checkout...">
                         <input type="hidden" name="mode" value="checkout">
 
                         <div class="row g-3 mb-3">
@@ -972,6 +984,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     });
 })();
 </script>
+<?php layout_checkout_loading_overlay(); ?>
 <?php layout_model_history_modal(true); ?>
 <?php layout_footer(); ?>
 </body>

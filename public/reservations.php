@@ -131,6 +131,8 @@ if (!$tabFile || !is_file($tabFile)) {
         </div>
     </div>
 </div>
+<?php layout_checkout_loading_overlay(); ?>
+<?php layout_model_history_modal(true); ?>
 <?php layout_footer(); ?>
 </body>
 </html>
