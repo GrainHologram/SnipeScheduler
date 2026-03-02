@@ -339,11 +339,6 @@ if (!function_exists('layout_checkout_loading_overlay')) {
         for (var i = 0; i < buttons.length; i++) {
             buttons[i].disabled = true;
         }
-
-        window.addEventListener('beforeunload', function _warn(ev) {
-            ev.preventDefault();
-            ev.returnValue = '';
-        });
     });
 })();
 </script>
