@@ -1116,78 +1116,101 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                         }
 
+                        // Call Snipe-IT API per-asset, tracking successes and failures
+                        $checkedOutAssets = [];
+                        $apiFailures = [];
                         foreach ($assetsToCheckout as $a) {
-                            checkout_asset_to_user((int)$a['asset_id'], $userId, $note, $checkoutExpectedEnd);
-                            $checkoutMessages[] = "Checked out asset {$a['asset_tag']} to {$userName}.";
-                        }
-                        if ($appendToActive) {
-                            $checkoutMessages[] = "Appended to existing checkout (expected check-in: " . display_datetime($checkoutExpectedEnd) . ").";
-                        }
-
-                        // Create checkout record and checkout_items
-                        $assetTags = array_map(function ($a) {
-                            $tag   = $a['asset_tag'] ?? '';
-                            $model = $a['model_name'] ?? '';
-                            return $model !== '' ? "{$tag} ({$model})" : $tag;
-                        }, $assetsToCheckout);
-                        $assetsText = implode(', ', array_filter($assetTags));
-
-                        // Determine parent checkout for single-active-checkout
-                        $parentCheckoutId = null;
-                        if ($appendToActive) {
-                            $activeCheckout = get_user_active_checkout($userId);
-                            if ($activeCheckout) {
-                                $parentCheckoutId = (int)$activeCheckout['id'];
+                            try {
+                                checkout_asset_to_user((int)$a['asset_id'], $userId, $note, $checkoutExpectedEnd);
+                                $checkedOutAssets[] = $a;
+                                $checkoutMessages[] = "Checked out asset {$a['asset_tag']} to {$userName}.";
+                            } catch (Throwable $e) {
+                                $apiFailures[] = "Failed to check out {$a['asset_tag']}: " . $e->getMessage();
                             }
                         }
 
-                        $coInsert = $pdo->prepare("
-                            INSERT INTO checkouts
-                                (reservation_id, parent_checkout_id, user_id, user_name, user_email, snipeit_user_id, start_datetime, end_datetime, status)
-                            VALUES
-                                (:rid, :parent, :uid, :uname, :uemail, :suid, :start, :end, 'open')
-                        ");
-                        $coInsert->execute([
-                            ':rid'    => $selectedReservationId,
-                            ':parent' => $parentCheckoutId,
-                            ':uid'    => $selectedReservation['user_id'] ?? '',
-                            ':uname'  => $userName,
-                            ':uemail' => $selectedReservation['user_email'] ?? '',
-                            ':suid'   => $userId,
-                            ':start'  => $selectedStart,
-                            ':end'    => $checkoutExpectedEnd,
-                        ]);
-                        $newCheckoutId = (int)$pdo->lastInsertId();
-
-                        $ciInsert = $pdo->prepare("
-                            INSERT INTO checkout_items
-                                (checkout_id, asset_id, asset_tag, asset_name, model_id, model_name, checked_out_at)
-                            VALUES
-                                (:cid, :aid, :atag, :aname, :mid, :mname, NOW())
-                        ");
-                        foreach ($assetsToCheckout as $a) {
-                            $ciInsert->execute([
-                                ':cid'   => $newCheckoutId,
-                                ':aid'   => (int)$a['asset_id'],
-                                ':atag'  => $a['asset_tag'] ?? '',
-                                ':aname' => $a['asset_tag'] ?? '',
-                                ':mid'   => (int)($a['model_id'] ?? 0),
-                                ':mname' => $a['model_name'] ?? '',
-                            ]);
+                        if (!empty($apiFailures)) {
+                            foreach ($apiFailures as $fail) {
+                                $checkoutWarnings[] = $fail;
+                            }
                         }
 
-                        // Mark reservation as fulfilled
-                        $upd = $pdo->prepare("
-                            UPDATE reservations
-                               SET status = 'fulfilled',
-                                   asset_name_cache = :assets_text
-                             WHERE id = :id
-                        ");
-                        $upd->execute([
-                            ':id'          => $selectedReservationId,
-                            ':assets_text' => $assetsText,
-                        ]);
-                        $checkoutMessages[] = 'Reservation fulfilled and checkout created.';
+                        // Always create local DB records for assets that were successfully checked out
+                        if (!empty($checkedOutAssets)) {
+                            if ($appendToActive) {
+                                $checkoutMessages[] = "Appended to existing checkout (expected check-in: " . display_datetime($checkoutExpectedEnd) . ").";
+                            }
+
+                            $assetTags = array_map(function ($a) {
+                                $tag   = $a['asset_tag'] ?? '';
+                                $model = $a['model_name'] ?? '';
+                                return $model !== '' ? "{$tag} ({$model})" : $tag;
+                            }, $checkedOutAssets);
+                            $assetsText = implode(', ', array_filter($assetTags));
+
+                            // Determine parent checkout for single-active-checkout
+                            $parentCheckoutId = null;
+                            if ($appendToActive) {
+                                $activeCheckout = get_user_active_checkout($userId);
+                                if ($activeCheckout) {
+                                    $parentCheckoutId = (int)$activeCheckout['id'];
+                                }
+                            }
+
+                            $coInsert = $pdo->prepare("
+                                INSERT INTO checkouts
+                                    (reservation_id, parent_checkout_id, user_id, user_name, user_email, snipeit_user_id, start_datetime, end_datetime, status)
+                                VALUES
+                                    (:rid, :parent, :uid, :uname, :uemail, :suid, :start, :end, 'open')
+                            ");
+                            $coInsert->execute([
+                                ':rid'    => $selectedReservationId,
+                                ':parent' => $parentCheckoutId,
+                                ':uid'    => $selectedReservation['user_id'] ?? '',
+                                ':uname'  => $userName,
+                                ':uemail' => $selectedReservation['user_email'] ?? '',
+                                ':suid'   => $userId,
+                                ':start'  => $selectedStart,
+                                ':end'    => $checkoutExpectedEnd,
+                            ]);
+                            $newCheckoutId = (int)$pdo->lastInsertId();
+
+                            $ciInsert = $pdo->prepare("
+                                INSERT INTO checkout_items
+                                    (checkout_id, asset_id, asset_tag, asset_name, model_id, model_name, checked_out_at)
+                                VALUES
+                                    (:cid, :aid, :atag, :aname, :mid, :mname, NOW())
+                            ");
+                            foreach ($checkedOutAssets as $a) {
+                                $ciInsert->execute([
+                                    ':cid'   => $newCheckoutId,
+                                    ':aid'   => (int)$a['asset_id'],
+                                    ':atag'  => $a['asset_tag'] ?? '',
+                                    ':aname' => $a['asset_tag'] ?? '',
+                                    ':mid'   => (int)($a['model_id'] ?? 0),
+                                    ':mname' => $a['model_name'] ?? '',
+                                ]);
+                            }
+
+                            // Mark reservation as fulfilled if all assets succeeded, otherwise leave as-is
+                            if (empty($apiFailures)) {
+                                $upd = $pdo->prepare("
+                                    UPDATE reservations
+                                       SET status = 'fulfilled',
+                                           asset_name_cache = :assets_text
+                                     WHERE id = :id
+                                ");
+                                $upd->execute([
+                                    ':id'          => $selectedReservationId,
+                                    ':assets_text' => $assetsText,
+                                ]);
+                                $checkoutMessages[] = 'Reservation fulfilled and checkout created.';
+                            } else {
+                                $checkoutMessages[] = 'Checkout created for successful assets. Some assets failed — reservation not marked fulfilled.';
+                            }
+                        } else {
+                            throw new Exception('All asset checkouts failed. ' . implode(' ', $apiFailures));
+                        }
                         if ($selectedReservationId) {
                             unset($_SESSION['reservation_selected_assets'][$selectedReservationId]);
                         }
