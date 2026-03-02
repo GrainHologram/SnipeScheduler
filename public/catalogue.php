@@ -1244,27 +1244,27 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         <div class="card h-100 model-card">
                             <?php if ($proxiedImage !== ''): ?>
                                 <div class="model-image-wrapper">
-                                    <img src="<?= htmlspecialchars($proxiedImage) ?>"
-                                         alt=""
-                                         class="model-image img-fluid">
+                                    <a href="#" onclick="openModelHistory(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
+                                        <img src="<?= htmlspecialchars($proxiedImage) ?>"
+                                             alt=""
+                                             class="model-image img-fluid">
+                                    </a>
                                 </div>
                             <?php else: ?>
                                 <div class="model-image-wrapper model-image-wrapper--placeholder">
-                                    <div class="model-image-placeholder">
-                                        No image
-                                    </div>
+                                    <a href="#" onclick="openModelHistory(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
+                                        <div class="model-image-placeholder">
+                                            No image
+                                        </div>
+                                    </a>
                                 </div>
                             <?php endif; ?>
 
                             <div class="card-body d-flex flex-column">
                                 <h5 class="card-title">
-                                    <?php if ($isStaff): ?>
-                                        <a href="#" class="model-history-link" onclick="openModelHistory(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
-                                            <?= label_safe($name) ?>
-                                        </a>
-                                    <?php else: ?>
+                                    <a href="#" class="model-history-link" onclick="openModelHistory(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
                                         <?= label_safe($name) ?>
-                                    <?php endif; ?>
+                                    </a>
                                 </h5>
                                 <p class="card-text small text-muted mb-2">
                                     <?php if ($manuName): ?>
@@ -2325,7 +2325,7 @@ function revertToLoggedIn(e) {
 }
 });
 </script>
-<?php if ($isStaff) { layout_model_history_modal(); } ?>
+<?php layout_model_history_modal($isStaff); ?>
 <?php layout_footer(); ?>
 </body>
 </html>

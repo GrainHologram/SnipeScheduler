@@ -919,7 +919,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     });
 })();
 </script>
-<?php layout_model_history_modal(); ?>
+<?php layout_model_history_modal(true); ?>
 
 <!-- Asset Note Modal -->
 <div id="assetNoteBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1060;" onclick="closeAssetNoteModal()"></div>
