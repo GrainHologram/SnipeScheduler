@@ -372,18 +372,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (empty($errors)) {
                         $expectedCheckinIso = $endDt->setTimezone($utc)->format('Y-m-d H:i:s');
 
-                        $checkedOutAssets = [];
+                        $batchResult = checkout_assets_to_user_batch($checkoutAssets, $userId, $note, $expectedCheckinIso);
+                        $checkedOutAssets = $batchResult['success'];
                         $apiFailures = [];
-                        foreach ($checkoutAssets as $asset) {
-                            $assetId  = (int)$asset['id'];
+                        foreach ($checkedOutAssets as $asset) {
                             $assetTag = $asset['asset_tag'] ?? '';
-                            try {
-                                checkout_asset_to_user($assetId, $userId, $note, $expectedCheckinIso);
-                                $checkedOutAssets[] = $asset;
-                                $messages[] = "Checked out asset {$assetTag} to {$userName}." . (!empty($reservationConflicts[$assetId]) ? ' (Override used)' : '');
-                            } catch (Throwable $e) {
-                                $apiFailures[] = "Failed to check out {$assetTag}: " . $e->getMessage();
-                            }
+                            $assetId = (int)($asset['id'] ?? 0);
+                            $messages[] = "Checked out asset {$assetTag} to {$userName}." . (!empty($reservationConflicts[$assetId]) ? ' (Override used)' : '');
+                        }
+                        foreach ($batchResult['failures'] as $tag => $errMsg) {
+                            $apiFailures[] = "Failed to check out {$tag}: {$errMsg}";
                         }
 
                         if (!empty($apiFailures)) {

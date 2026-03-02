@@ -41,6 +41,8 @@ return [
         'expected_checkin_custom_field' => '',  // DB column name for a Snipe-IT text custom field, e.g. '_snipeit_expected_return_datetime_5'
         'repair_status_name' => 'Pulled for Repair/Replace',  // Snipe-IT status label name used when pulling assets for repair
         'maintenance_supplier_id' => 0,  // Snipe-IT supplier ID for maintenance requests (0 = omit)
+        'api_request_timeout'   => 30,  // Per-request timeout in seconds for Snipe-IT API calls
+        'api_batch_concurrency' => 6,   // Max concurrent requests for batch checkout operations
     ],
 
     'ldap' => [

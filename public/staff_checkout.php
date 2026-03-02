@@ -1116,17 +1116,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                         }
 
-                        // Call Snipe-IT API per-asset, tracking successes and failures
-                        $checkedOutAssets = [];
+                        // Batch checkout via parallel API calls
+                        $batchResult = checkout_assets_to_user_batch($assetsToCheckout, $userId, $note, $checkoutExpectedEnd);
+                        $checkedOutAssets = $batchResult['success'];
                         $apiFailures = [];
-                        foreach ($assetsToCheckout as $a) {
-                            try {
-                                checkout_asset_to_user((int)$a['asset_id'], $userId, $note, $checkoutExpectedEnd);
-                                $checkedOutAssets[] = $a;
-                                $checkoutMessages[] = "Checked out asset {$a['asset_tag']} to {$userName}.";
-                            } catch (Throwable $e) {
-                                $apiFailures[] = "Failed to check out {$a['asset_tag']}: " . $e->getMessage();
-                            }
+                        foreach ($checkedOutAssets as $a) {
+                            $checkoutMessages[] = "Checked out asset {$a['asset_tag']} to {$userName}.";
+                        }
+                        foreach ($batchResult['failures'] as $tag => $errMsg) {
+                            $apiFailures[] = "Failed to check out {$tag}: {$errMsg}";
                         }
 
                         if (!empty($apiFailures)) {
