@@ -105,6 +105,9 @@ function snipeit_request(string $method, string $endpoint, array $params = []): 
         $headers[] = 'Content-Type: application/json';
     }
 
+    $config = load_config();
+    $timeout = max(5, (int)($config['snipeit']['api_request_timeout'] ?? 30));
+
     curl_setopt_array($ch, [
         CURLOPT_URL            => $url,
         CURLOPT_RETURNTRANSFER => true,
@@ -112,6 +115,8 @@ function snipeit_request(string $method, string $endpoint, array $params = []): 
         CURLOPT_HTTPHEADER     => $headers,
         CURLOPT_SSL_VERIFYPEER => $snipeVerifySsl,
         CURLOPT_SSL_VERIFYHOST => $snipeVerifySsl ? 2 : 0,
+        CURLOPT_TIMEOUT        => $timeout,
+        CURLOPT_CONNECTTIMEOUT => min(10, $timeout),
     ]);
 
     $raw = curl_exec($ch);
@@ -1763,4 +1768,298 @@ if (!function_exists('get_status_label_id_by_name')) {
         $cache[$key] = null;
         return null;
     }
+}
+
+/**
+ * Fire multiple Snipe-IT API requests in parallel using curl_multi.
+ *
+ * Uses a rolling window of up to $concurrency handles at once.
+ *
+ * @param array $requests  Array of ['method'=>string, 'endpoint'=>string, 'params'=>array, 'key'=>string]
+ * @param int   $concurrency  Max concurrent requests
+ * @param int   $timeout      Per-request timeout in seconds
+ * @return array  Keyed by request 'key': ['success'=>bool, 'data'=>?array, 'error'=>?string, 'http_code'=>int]
+ */
+function snipeit_request_batch(array $requests, int $concurrency = 6, int $timeout = 30): array
+{
+    global $snipeBaseUrl, $snipeApiToken, $snipeVerifySsl;
+
+    if (empty($requests)) {
+        return [];
+    }
+
+    if ($snipeBaseUrl === '' || $snipeApiToken === '') {
+        $results = [];
+        foreach ($requests as $req) {
+            $results[$req['key']] = [
+                'success'   => false,
+                'data'      => null,
+                'error'     => 'Snipe-IT API is not configured.',
+                'http_code' => 0,
+            ];
+        }
+        return $results;
+    }
+
+    $mh = curl_multi_init();
+    $results = [];
+    // Maps spl_object_id => request key (PHP 8: curl handles are objects)
+    $handleMap = [];
+    $queue = $requests;
+    $active = 0;
+
+    // Helper: create a curl handle for a request descriptor
+    $createHandle = function (array $req) use ($snipeBaseUrl, $snipeApiToken, $snipeVerifySsl, $timeout): \CurlHandle {
+        $method = strtoupper($req['method']);
+        $url = $snipeBaseUrl . '/api/v1/' . ltrim($req['endpoint'], '/');
+        $params = $req['params'] ?? [];
+
+        $headers = [
+            'Accept: application/json',
+            'Authorization: Bearer ' . $snipeApiToken,
+        ];
+
+        $ch = curl_init();
+
+        if ($method === 'GET') {
+            if (!empty($params)) {
+                $url .= '?' . http_build_query($params);
+            }
+        } else {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($params));
+            $headers[] = 'Content-Type: application/json';
+        }
+
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST  => $method,
+            CURLOPT_HTTPHEADER     => $headers,
+            CURLOPT_SSL_VERIFYPEER => $snipeVerifySsl,
+            CURLOPT_SSL_VERIFYHOST => $snipeVerifySsl ? 2 : 0,
+            CURLOPT_TIMEOUT        => $timeout,
+            CURLOPT_CONNECTTIMEOUT => min(10, $timeout),
+        ]);
+
+        return $ch;
+    };
+
+    // Seed the initial window
+    while (!empty($queue) && $active < $concurrency) {
+        $req = array_shift($queue);
+        $ch = $createHandle($req);
+        $handleMap[spl_object_id($ch)] = $req['key'];
+        curl_multi_add_handle($mh, $ch);
+        $active++;
+    }
+
+    // Process handles as they complete
+    do {
+        $status = curl_multi_exec($mh, $running);
+
+        // Read completed handles
+        while ($info = curl_multi_info_read($mh)) {
+            $ch = $info['handle'];
+            $key = $handleMap[spl_object_id($ch)] ?? null;
+
+            if ($key !== null) {
+                $raw = curl_multi_getcontent($ch);
+                $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $curlError = curl_error($ch);
+
+                if ($raw === false || $raw === null || $curlError !== '') {
+                    $results[$key] = [
+                        'success'   => false,
+                        'data'      => null,
+                        'error'     => 'cURL error: ' . ($curlError ?: 'empty response'),
+                        'http_code' => $httpCode,
+                    ];
+                } else {
+                    $decoded = json_decode($raw, true);
+                    if ($httpCode >= 400) {
+                        $msg = is_array($decoded) ? ($decoded['message'] ?? $raw) : $raw;
+                        $results[$key] = [
+                            'success'   => false,
+                            'data'      => $decoded,
+                            'error'     => 'HTTP ' . $httpCode . ': ' . $msg,
+                            'http_code' => $httpCode,
+                        ];
+                    } elseif (!is_array($decoded)) {
+                        $results[$key] = [
+                            'success'   => false,
+                            'data'      => null,
+                            'error'     => 'Invalid JSON response',
+                            'http_code' => $httpCode,
+                        ];
+                    } else {
+                        $results[$key] = [
+                            'success'   => true,
+                            'data'      => $decoded,
+                            'error'     => null,
+                            'http_code' => $httpCode,
+                        ];
+                    }
+                }
+
+                unset($handleMap[spl_object_id($ch)]);
+            }
+
+            curl_multi_remove_handle($mh, $ch);
+            curl_close($ch);
+            $active--;
+
+            // Add next request from queue
+            if (!empty($queue)) {
+                $req = array_shift($queue);
+                $ch = $createHandle($req);
+                $handleMap[spl_object_id($ch)] = $req['key'];
+                curl_multi_add_handle($mh, $ch);
+                $active++;
+            }
+        }
+
+        // Wait for activity (avoid busy-loop)
+        if ($running > 0) {
+            if (curl_multi_select($mh, 1.0) === -1) {
+                usleep(100000);
+            }
+        }
+    } while ($running > 0 || !empty($queue));
+
+    curl_multi_close($mh);
+    return $results;
+}
+
+/**
+ * Bulk checkout multiple assets to a user in parallel.
+ *
+ * Two-phase approach:
+ *  1. POST checkout requests for all assets via curl_multi
+ *  2. PUT custom field (expected checkin) for successful checkouts
+ *
+ * @param array       $assets           Array of asset records (must have 'asset_id' or 'id', and 'asset_tag')
+ * @param int         $userId           Snipe-IT user ID
+ * @param string      $note             Checkout note
+ * @param string|null $expectedCheckin  ISO datetime string (UTC) for expected checkin
+ * @return array  ['success' => [asset, ...], 'failures' => ['asset_tag' => 'error message', ...]]
+ */
+function checkout_assets_to_user_batch(array $assets, int $userId, string $note = '', ?string $expectedCheckin = null): array
+{
+    if (empty($assets) || $userId <= 0) {
+        return ['success' => [], 'failures' => []];
+    }
+
+    $config = load_config();
+    $concurrency = max(1, (int)($config['snipeit']['api_batch_concurrency'] ?? 6));
+    $timeout = max(5, (int)($config['snipeit']['api_request_timeout'] ?? 30));
+
+    // Pre-compute expected checkin in snipe_tz (shared across all assets)
+    $snipeDateTime = null;
+    if (!empty($expectedCheckin)) {
+        $snipeTz = snipe_get_timezone();
+        try {
+            $dt = new DateTime($expectedCheckin, new DateTimeZone('UTC'));
+            $dt->setTimezone($snipeTz);
+            $snipeDateTime = $dt->format('Y-m-d H:i:s');
+        } catch (Throwable $e) {
+            $snipeDateTime = $expectedCheckin;
+        }
+    }
+
+    // --- Phase 1: POST checkout requests ---
+    $postRequests = [];
+    $assetMap = []; // key => asset record
+    foreach ($assets as $asset) {
+        $assetId = (int)($asset['asset_id'] ?? $asset['id'] ?? 0);
+        $assetTag = $asset['asset_tag'] ?? ('id:' . $assetId);
+        if ($assetId <= 0) {
+            continue;
+        }
+
+        $payload = [
+            'checkout_to_type' => 'user',
+            'checkout_to_id'   => $userId,
+            'assigned_user'    => $userId,
+        ];
+        if ($note !== '') {
+            $payload['note'] = $note;
+        }
+        if ($snipeDateTime !== null) {
+            $payload['expected_checkin'] = $snipeDateTime;
+        }
+
+        $key = 'post_' . $assetId;
+        $postRequests[] = [
+            'method'   => 'POST',
+            'endpoint' => 'hardware/' . $assetId . '/checkout',
+            'params'   => $payload,
+            'key'      => $key,
+        ];
+        $assetMap[$key] = $asset;
+    }
+
+    $postResults = snipeit_request_batch($postRequests, $concurrency, $timeout);
+
+    // Parse POST results using the same validation logic as checkout_asset_to_user()
+    $successAssets = [];
+    $failures = [];
+    $putCandidates = []; // asset IDs that need the custom field PUT
+
+    foreach ($postResults as $key => $result) {
+        $asset = $assetMap[$key] ?? null;
+        if ($asset === null) {
+            continue;
+        }
+        $assetId = (int)($asset['asset_id'] ?? $asset['id'] ?? 0);
+        $assetTag = $asset['asset_tag'] ?? ('id:' . $assetId);
+
+        if (!$result['success']) {
+            $failures[$assetTag] = $result['error'] ?? 'Unknown error';
+            continue;
+        }
+
+        $resp = $result['data'];
+        $status = $resp['status'] ?? 'success';
+
+        // Flatten messages
+        $messagesField = $resp['messages'] ?? ($resp['message'] ?? '');
+        $flatMessages = [];
+        if (is_array($messagesField)) {
+            array_walk_recursive($messagesField, function ($val) use (&$flatMessages) {
+                if (is_string($val) && trim($val) !== '') {
+                    $flatMessages[] = $val;
+                }
+            });
+        } elseif (is_string($messagesField) && trim($messagesField) !== '') {
+            $flatMessages[] = $messagesField;
+        }
+        $message = $flatMessages ? implode('; ', $flatMessages) : 'Unknown API response';
+
+        $hasExplicitError = is_array($messagesField) && isset($messagesField['error']);
+
+        if ($status !== 'success' || $hasExplicitError) {
+            $failures[$assetTag] = $message;
+        } else {
+            $successAssets[] = $asset;
+            $putCandidates[] = $assetId;
+        }
+    }
+
+    // --- Phase 2: PUT custom field for expected checkin ---
+    $customField = snipe_get_expected_checkin_custom_field();
+    if ($snipeDateTime !== null && $customField !== null && !empty($putCandidates)) {
+        $putRequests = [];
+        foreach ($putCandidates as $assetId) {
+            $putRequests[] = [
+                'method'   => 'PUT',
+                'endpoint' => 'hardware/' . $assetId,
+                'params'   => [$customField => $snipeDateTime],
+                'key'      => 'put_' . $assetId,
+            ];
+        }
+        // PUT failures are warnings only — checkout already succeeded in Snipe-IT
+        snipeit_request_batch($putRequests, $concurrency, $timeout);
+    }
+
+    return ['success' => $successAssets, 'failures' => $failures];
 }
