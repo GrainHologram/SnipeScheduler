@@ -377,6 +377,16 @@ input[type="checkbox"] {
     overflow: hidden;
 }
 
+/* Link wrapper inside image area must not overflow the flex container */
+.model-image-wrapper > a,
+.model-image-wrapper--placeholder > a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 100%;
+    max-height: 100%;
+}
+
 /* Actual images: scale down to fit, never crop */
 .model-image {
     max-width: 100%;
