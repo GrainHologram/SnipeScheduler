@@ -335,6 +335,16 @@ if (!function_exists('layout_checkout_loading_overlay')) {
 
         overlay.classList.remove('is-hidden');
 
+        // Preserve name/value of the clicked submit button before disabling
+        var clicked = e.submitter;
+        if (clicked && clicked.name) {
+            var hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = clicked.name;
+            hidden.value = clicked.value;
+            form.appendChild(hidden);
+        }
+
         var buttons = form.querySelectorAll('button[type="submit"]');
         for (var i = 0; i < buttons.length; i++) {
             buttons[i].disabled = true;
