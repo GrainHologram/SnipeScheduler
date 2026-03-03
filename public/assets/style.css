@@ -1448,13 +1448,18 @@ form .form-select {
         -webkit-print-color-adjust: exact;
     }
 
-    /* Avoid breaking rows or user groups across pages */
+    /* Avoid breaking rows across pages */
     .overdue-report-table tr {
         page-break-inside: avoid;
     }
 
+    /* Each user group starts on a new page (except the first) */
     .overdue-user-group {
         page-break-inside: avoid;
+    }
+
+    .overdue-user-group-break {
+        page-break-before: always;
     }
 
     /* Landscape orientation for wide tables */

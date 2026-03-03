@@ -19,6 +19,7 @@ if (!$isStaff) {
 $config      = load_config();
 $appName     = $config['app']['name'] ?? 'SnipeScheduler';
 $groupByUser = ($_GET['group'] ?? '') === 'user';
+$userFilter  = trim($_GET['user'] ?? '');
 $error       = '';
 $rows        = [];
 
@@ -29,8 +30,25 @@ try {
     $error = $e->getMessage();
 }
 
+// Per-user filter: limit rows to a single user (for per-user PDF)
+$filteredUserName = '';
+if ($userFilter !== '' && !empty($rows)) {
+    $rows = array_values(array_filter($rows, static function (array $r) use ($userFilter): bool {
+        return ($r['assigned_to_email'] === $userFilter) || ($r['assigned_to_name'] === $userFilter);
+    }));
+    if (!empty($rows)) {
+        $filteredUserName = $rows[0]['assigned_to_name'];
+        if ($rows[0]['assigned_to_email'] && $rows[0]['assigned_to_email'] !== $filteredUserName) {
+            $filteredUserName .= ' (' . $rows[0]['assigned_to_email'] . ')';
+        }
+    }
+}
+
 $totalCount = count($rows);
 $generated  = app_format_datetime_local(date('Y-m-d H:i:s'));
+
+// When viewing a single user, force group mode off (nothing to group)
+$effectiveGroup = ($userFilter !== '') ? false : $groupByUser;
 ?>
 <!DOCTYPE html>
 <html>
@@ -50,7 +68,11 @@ $generated  = app_format_datetime_local(date('Y-m-d H:i:s'));
         <div class="page-header">
             <h1>Overdue Asset Report</h1>
             <div class="page-subtitle">
-                Assets past their expected return date.
+                <?php if ($filteredUserName !== ''): ?>
+                    Overdue items for <?= htmlspecialchars($filteredUserName, ENT_QUOTES, 'UTF-8') ?>
+                <?php else: ?>
+                    Assets past their expected return date.
+                <?php endif; ?>
             </div>
         </div>
 
@@ -60,7 +82,11 @@ $generated  = app_format_datetime_local(date('Y-m-d H:i:s'));
     <!-- Print-only header -->
     <div class="print-only print-report-header">
         <h1><?= htmlspecialchars($appName, ENT_QUOTES, 'UTF-8') ?></h1>
-        <h2>Overdue Asset Report</h2>
+        <?php if ($filteredUserName !== ''): ?>
+            <h2>Overdue Items — <?= htmlspecialchars($filteredUserName, ENT_QUOTES, 'UTF-8') ?></h2>
+        <?php else: ?>
+            <h2>Overdue Asset Report</h2>
+        <?php endif; ?>
         <p>Generated: <?= htmlspecialchars($generated, ENT_QUOTES, 'UTF-8') ?> | Total: <?= $totalCount ?> overdue item<?= $totalCount !== 1 ? 's' : '' ?></p>
     </div>
 
@@ -69,13 +95,19 @@ $generated  = app_format_datetime_local(date('Y-m-d H:i:s'));
         <button type="button" class="btn btn-primary btn-sm" onclick="window.print()">
             Print / Save PDF
         </button>
-        <?php
-            $toggleUrl = 'overdue_report.php' . ($groupByUser ? '' : '?group=user');
-            $toggleLabel = $groupByUser ? 'Flat view' : 'Group by user';
-        ?>
-        <a href="<?= htmlspecialchars($toggleUrl, ENT_QUOTES, 'UTF-8') ?>" class="btn btn-outline-secondary btn-sm">
-            <?= htmlspecialchars($toggleLabel, ENT_QUOTES, 'UTF-8') ?>
-        </a>
+        <?php if ($userFilter !== ''): ?>
+            <a href="overdue_report.php?group=user" class="btn btn-outline-secondary btn-sm">
+                Back to full report
+            </a>
+        <?php else: ?>
+            <?php
+                $toggleUrl = 'overdue_report.php' . ($groupByUser ? '' : '?group=user');
+                $toggleLabel = $groupByUser ? 'Flat view' : 'Group by user';
+            ?>
+            <a href="<?= htmlspecialchars($toggleUrl, ENT_QUOTES, 'UTF-8') ?>" class="btn btn-outline-secondary btn-sm">
+                <?= htmlspecialchars($toggleLabel, ENT_QUOTES, 'UTF-8') ?>
+            </a>
+        <?php endif; ?>
         <span class="text-muted small ms-auto">
             <?= $totalCount ?> overdue item<?= $totalCount !== 1 ? 's' : '' ?>
             | Generated <?= htmlspecialchars($generated, ENT_QUOTES, 'UTF-8') ?>
@@ -85,12 +117,13 @@ $generated  = app_format_datetime_local(date('Y-m-d H:i:s'));
     <?php if ($error): ?>
         <div class="alert alert-danger"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
     <?php elseif (empty($rows)): ?>
-        <div class="alert alert-success">No overdue items. All assets are within their expected return dates.</div>
+        <div class="alert alert-success">No overdue items<?= $filteredUserName !== '' ? ' for this user' : '' ?>. All assets are within their expected return dates.</div>
     <?php else: ?>
         <div class="overdue-report-body">
             <?= render_overdue_report_html($rows, [
-                'context'       => 'web',
-                'group_by_user' => $groupByUser,
+                'context'          => 'web',
+                'group_by_user'    => $effectiveGroup,
+                'user_print_links' => $effectiveGroup,
             ]) ?>
         </div>
     <?php endif; ?>

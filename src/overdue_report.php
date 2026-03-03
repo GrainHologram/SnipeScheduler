@@ -8,13 +8,21 @@ if (!function_exists('build_overdue_report_rows')) {
     /**
      * Normalize raw overdue asset data into flat report rows.
      *
+     * Expected return is sourced from the scheduler_expected_checkin custom field
+     * (stored in checked_out_asset_cache.expected_checkin by the sync cron when
+     * snipeit.expected_checkin_custom_field is configured).
+     *
      * @param array $assets Output of list_checked_out_assets(true)
      * @return array Sorted rows with display-ready fields
      */
     function build_overdue_report_rows(array $assets): array
     {
-        $snipeTz = snipe_get_timezone();
-        $rows = [];
+        $cfg     = load_config();
+        $snipeTz = snipe_get_timezone($cfg);
+        $appTz   = app_get_timezone($cfg);
+        $dateFmt = app_get_date_format($cfg);
+        $timeFmt = app_get_time_format($cfg);
+        $rows    = [];
 
         foreach ($assets as $a) {
             $tag   = $a['asset_tag'] ?? '';
@@ -33,18 +41,41 @@ if (!function_exists('build_overdue_report_rows')) {
                 $userName = $assigned;
             }
 
+            // Expected return — full datetime from custom field (via cache)
             $expRaw = $a['_expected_checkin_norm'] ?? ($a['expected_checkin'] ?? '');
-            try {
-                $dtExp = $expRaw ? new DateTime($expRaw, $snipeTz) : null;
-                $expTs = $dtExp ? $dtExp->getTimestamp() : null;
-            } catch (Throwable $e) {
-                $expTs = null;
+            $expDate = '';
+            $expTime = '';
+            $expTs   = null;
+            if ($expRaw !== '') {
+                try {
+                    $dtExp = new DateTime($expRaw, $snipeTz);
+                    if ($appTz && $snipeTz && $snipeTz->getName() !== $appTz->getName()) {
+                        $dtExp->setTimezone($appTz);
+                    }
+                    $expTs   = $dtExp->getTimestamp();
+                    $expDate = $dtExp->format($dateFmt);
+                    $expTime = $dtExp->format($timeFmt);
+                } catch (Throwable $e) {
+                    $expDate = $expRaw;
+                }
             }
 
-            $expectedDisplay = $expRaw ? app_format_date_local($expRaw, null, $snipeTz) : 'unknown';
-
-            $lastCheckout = $a['_last_checkout_norm'] ?? ($a['last_checkout'] ?? '');
-            $lastCheckoutDisplay = $lastCheckout ? app_format_datetime_local($lastCheckout, null, $snipeTz) : '';
+            // Last checkout — full datetime
+            $coRaw  = $a['_last_checkout_norm'] ?? ($a['last_checkout'] ?? '');
+            $coDate = '';
+            $coTime = '';
+            if ($coRaw !== '') {
+                try {
+                    $dtCo = new DateTime($coRaw, $snipeTz);
+                    if ($appTz && $snipeTz && $snipeTz->getName() !== $appTz->getName()) {
+                        $dtCo->setTimezone($appTz);
+                    }
+                    $coDate = $dtCo->format($dateFmt);
+                    $coTime = $dtCo->format($timeFmt);
+                } catch (Throwable $e) {
+                    $coDate = $coRaw;
+                }
+            }
 
             $daysOverdue = $expTs ? max(1, (int)floor((time() - $expTs) / 86400)) : 1;
 
@@ -55,8 +86,12 @@ if (!function_exists('build_overdue_report_rows')) {
                 'assigned_to_name'        => $userName,
                 'assigned_to_email'       => $userEmail,
                 'assigned_to_id'          => $userId,
-                'expected_checkin_display' => $expectedDisplay,
-                'last_checkout_display'   => $lastCheckoutDisplay,
+                'expected_checkin_date'    => $expDate,
+                'expected_checkin_time'    => $expTime,
+                'expected_checkin_display' => trim($expDate . ' ' . $expTime) ?: 'unknown',
+                'last_checkout_date'      => $coDate,
+                'last_checkout_time'      => $coTime,
+                'last_checkout_display'   => trim($coDate . ' ' . $coTime),
                 'days_overdue'            => $daysOverdue,
             ];
         }
@@ -77,13 +112,15 @@ if (!function_exists('render_overdue_report_html')) {
      * Render an HTML table from overdue report rows.
      *
      * @param array $rows     Output of build_overdue_report_rows()
-     * @param array $options  'context' => 'web'|'email', 'group_by_user' => bool
+     * @param array $options  'context' => 'web'|'email', 'group_by_user' => bool,
+     *                        'user_print_links' => bool (add per-user print link)
      * @return string HTML table string (no wrapper)
      */
     function render_overdue_report_html(array $rows, array $options = []): string
     {
-        $context     = $options['context'] ?? 'web';
-        $groupByUser = !empty($options['group_by_user']);
+        $context        = $options['context'] ?? 'web';
+        $groupByUser    = !empty($options['group_by_user']);
+        $userPrintLinks = !empty($options['user_print_links']);
 
         $esc = function (string $s): string {
             return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
@@ -94,6 +131,22 @@ if (!function_exists('render_overdue_report_html')) {
                 return $days >= 2 ? 'background:#f8d7da;' : 'background:#fff3cd;';
             }
             return $days >= 2 ? 'overdue-row-danger' : 'overdue-row-warning';
+        };
+
+        // Format a date/time pair with a linebreak between date and time
+        $formatDatetime = function (array $r, string $prefix) use ($context, $esc): string {
+            $date = $r[$prefix . '_date'] ?? '';
+            $time = $r[$prefix . '_time'] ?? '';
+            if ($date === '' && $time === '') {
+                return '';
+            }
+            if ($time === '') {
+                return $esc($date);
+            }
+            if ($context === 'email') {
+                return $esc($date) . '<br style="mso-data-placement:same-cell;">' . $esc($time);
+            }
+            return $esc($date) . '<br>' . '<span class="text-muted small">' . $esc($time) . '</span>';
         };
 
         $columns = ['Asset Tag', 'Asset Name', 'Model', 'Assigned To', 'Last Checkout', 'Expected Return', 'Days Overdue'];
@@ -112,6 +165,7 @@ if (!function_exists('render_overdue_report_html')) {
                 $grouped[$key][] = $row;
             }
 
+            $isFirst = true;
             foreach ($grouped as $userKey => $userRows) {
                 $userName = $userRows[0]['assigned_to_name'] ?: $userKey;
                 $userLabel = $esc($userName);
@@ -120,20 +174,32 @@ if (!function_exists('render_overdue_report_html')) {
                 }
 
                 if ($context === 'web') {
-                    $html .= '<div class="overdue-user-group mb-3">';
-                    $html .= '<h6 class="fw-semibold mb-2">' . $userLabel . ' <span class="badge bg-secondary">' . count($userRows) . ' item' . (count($userRows) !== 1 ? 's' : '') . '</span></h6>';
+                    $groupClass = 'overdue-user-group mb-3';
+                    if (!$isFirst) {
+                        $groupClass .= ' overdue-user-group-break';
+                    }
+                    $html .= '<div class="' . $groupClass . '">';
+                    $html .= '<h6 class="fw-semibold mb-2">' . $userLabel
+                        . ' <span class="badge bg-secondary">' . count($userRows) . ' item' . (count($userRows) !== 1 ? 's' : '') . '</span>';
+                    if ($userPrintLinks) {
+                        $printUrl = 'overdue_report.php?group=user&user=' . urlencode($userKey);
+                        $html .= ' <a href="' . $esc($printUrl) . '" class="btn btn-sm btn-outline-secondary ms-2 no-print" title="Print this user\'s report">Print</a>';
+                    }
+                    $html .= '</h6>';
                 } else {
                     $html .= '<h3 style="font-size:15px;margin:16px 0 8px 0;">' . $userLabel . ' (' . count($userRows) . ' item' . (count($userRows) !== 1 ? 's' : '') . ')</h3>';
                 }
 
-                $html .= _render_overdue_table($userRows, $columns, $tableClass, $tableStyle, $thStyle, $context, $esc, $severityClass, true);
+                $html .= _render_overdue_table($userRows, $columns, $tableClass, $tableStyle, $thStyle, $context, $esc, $severityClass, $formatDatetime, true);
 
                 if ($context === 'web') {
                     $html .= '</div>';
                 }
+
+                $isFirst = false;
             }
         } else {
-            $html .= _render_overdue_table($rows, $columns, $tableClass, $tableStyle, $thStyle, $context, $esc, $severityClass, false);
+            $html .= _render_overdue_table($rows, $columns, $tableClass, $tableStyle, $thStyle, $context, $esc, $severityClass, $formatDatetime, false);
         }
 
         return $html;
@@ -142,7 +208,7 @@ if (!function_exists('render_overdue_report_html')) {
     /**
      * @internal Render a single overdue table.
      */
-    function _render_overdue_table(array $rows, array $columns, string $tableClass, string $tableStyle, string $thStyle, string $context, callable $esc, callable $severityClass, bool $skipUserColumn): string
+    function _render_overdue_table(array $rows, array $columns, string $tableClass, string $tableStyle, string $thStyle, string $context, callable $esc, callable $severityClass, callable $formatDatetime, bool $skipUserColumn): string
     {
         $html = '<table' . ($tableClass ? ' class="' . $tableClass . '"' : '') . ($tableStyle ? ' style="' . $tableStyle . '"' : '') . '>';
         $html .= '<thead><tr>';
@@ -174,8 +240,8 @@ if (!function_exists('render_overdue_report_html')) {
                 }
                 $html .= '<td' . ($tdStyle ? ' style="' . $tdStyle . '"' : '') . '>' . $esc($userDisplay ?: 'Unknown') . '</td>';
             }
-            $html .= '<td' . ($tdStyle ? ' style="' . $tdStyle . '"' : '') . '>' . $esc($r['last_checkout_display']) . '</td>';
-            $html .= '<td' . ($tdStyle ? ' style="' . $tdStyle . '"' : '') . '>' . $esc($r['expected_checkin_display']) . '</td>';
+            $html .= '<td' . ($tdStyle ? ' style="' . $tdStyle . '"' : '') . '>' . $formatDatetime($r, 'last_checkout') . '</td>';
+            $html .= '<td' . ($tdStyle ? ' style="' . $tdStyle . '"' : '') . '>' . $formatDatetime($r, 'expected_checkin') . '</td>';
 
             $daysAlign = $context === 'email' ? $tdStyle . 'text-align:center;' : '';
             $html .= '<td' . ($daysAlign ? ' style="' . $daysAlign . '"' : ' class="text-center"') . '>' . (int)$r['days_overdue'] . '</td>';
