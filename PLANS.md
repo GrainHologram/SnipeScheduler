@@ -72,11 +72,29 @@ This issue may already be closeable if the current `Cert - *` pattern meets the 
 
 ### Approach
 
-Add a new "Calendar" page accessible to staff, showing reservations and checkouts as colored blocks on a monthly/weekly/daily calendar. Use [FullCalendar](https://fullcalendar.io/) v6 via CDN (no build step needed, aligns with the project's no-bundler approach).
+Add a new "Calendar" page accessible to staff, showing reservations and checkouts as colored blocks on a monthly/weekly/daily calendar. Use [Event Calendar](https://github.com/vkurko/calendar) (vkurko/calendar) via CDN — a lightweight (35kb), zero-dependency, MIT-licensed alternative to FullCalendar that includes resource and timeline views for free.
+
+### Why Event Calendar over FullCalendar
+
+- **Free timeline/resource views** — FullCalendar charges ~$500/yr for the premium scheduler plugin; Event Calendar includes `resourceTimelineDay`, `resourceTimelineWeek`, and `resourceTimelineMonth` views under MIT license
+- **Lightweight** — 35kb (Brotli) vs ~43kb, zero dependencies
+- **API-compatible** — intentionally mirrors FullCalendar's option names, so most examples translate directly
+- **CDN available** — fits the project's no-bundler approach
+- **Actively maintained** — used on 70k+ sites (via Bookly plugin)
+
+### CDN Packages
+
+```html
+<!-- Core + plugins -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@event-calendar/build/event-calendar.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@event-calendar/build/event-calendar.min.js"></script>
+```
+
+The `@event-calendar/build` bundle includes all views (dayGrid, timeGrid, list, resourceTimeline) in a single file.
 
 ### Files to Create/Modify
 
-1. **`public/calendar.php`** — New page with FullCalendar rendering
+1. **`public/calendar.php`** — New page with Event Calendar rendering
 2. **`public/calendar_events.php`** — JSON API endpoint returning events for a date range
 3. **`src/layout.php`** — Add "Calendar" link to staff nav
 
@@ -85,7 +103,7 @@ Add a new "Calendar" page accessible to staff, showing reservations and checkout
 - Accepts `?start=YYYY-MM-DD&end=YYYY-MM-DD&type=all|reservations|checkouts`
 - Queries `reservations` table for non-cancelled reservations overlapping the range
 - Queries `checkouts` table for checkouts overlapping the range
-- Returns FullCalendar-compatible JSON array:
+- Returns Event Calendar-compatible JSON array:
   ```json
   [
     {
@@ -94,7 +112,7 @@ Add a new "Calendar" page accessible to staff, showing reservations and checkout
       "start": "2026-02-18T09:00:00",
       "end": "2026-02-19T17:00:00",
       "url": "reservation_detail.php?id=42",
-      "color": "#0d6efd",
+      "backgroundColor": "#0d6efd",
       "extendedProps": { "type": "reservation", "status": "confirmed" }
     },
     {
@@ -103,7 +121,7 @@ Add a new "Calendar" page accessible to staff, showing reservations and checkout
       "start": "2026-02-17T10:00:00",
       "end": "2026-02-20T10:00:00",
       "url": "reservation_detail.php?id=8",
-      "color": "#198754",
+      "backgroundColor": "#198754",
       "extendedProps": { "type": "checkout", "status": "open" }
     }
   ]
@@ -112,22 +130,23 @@ Add a new "Calendar" page accessible to staff, showing reservations and checkout
 ### `calendar.php` — Calendar Page
 
 - Standard page shell (nav, top bar, etc.)
-- FullCalendar initialized with:
-  - `dayGridMonth`, `timeGridWeek`, `timeGridDay`, `listWeek` views
-  - Event source pointing to `calendar_events.php`
+- Event Calendar initialized with:
+  - Views: `dayGridMonth`, `timeGridWeek`, `timeGridDay`, `listWeek`, `resourceTimelineWeek`
+  - Event source pointing to `calendar_events.php` via `eventSources` option
   - Color coding: blue = reservation (pending/confirmed), green = checkout (open), orange = partial return, gray = closed/fulfilled
-  - Click event → navigate to `reservation_detail.php` or checkout detail
+  - Click event → navigate to `reservation_detail.php` or checkout detail via `eventClick` callback
+  - Resource timeline view can group by user for a "who has what" overview
 - Filter toggles: show/hide reservations, show/hide checkouts
 - Status legend
 
 ### Conventions
-- FullCalendar CSS+JS loaded from CDN (same pattern as Bootstrap)
+- Event Calendar CSS+JS loaded from CDN (same pattern as Bootstrap/Flatpickr)
 - No new DB tables
 - Datetimes converted to app timezone for display
 - Staff/admin access only
 
 ### Estimated Scope
-- ~200 lines for `calendar.php` (page shell + FullCalendar init)
+- ~200 lines for `calendar.php` (page shell + Event Calendar init)
 - ~100 lines for `calendar_events.php` (queries + JSON output)
 - ~5 lines for nav addition in `layout.php`
 
