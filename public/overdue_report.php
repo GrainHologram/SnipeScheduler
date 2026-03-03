@@ -45,7 +45,7 @@ if ($userFilter !== '' && !empty($rows)) {
 }
 
 $totalCount = count($rows);
-$generated  = app_format_datetime_local(date('Y-m-d H:i:s'));
+$generated  = app_format_datetime_local(date('Y-m-d H:i:s'), null, new DateTimeZone('UTC'));
 
 // When viewing a single user, force group mode off (nothing to group)
 $effectiveGroup = ($userFilter !== '') ? false : $groupByUser;
