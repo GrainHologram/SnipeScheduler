@@ -634,6 +634,12 @@ function layout_checked_out_url(string $base, array $params): string
         </form>
         </div>
 
+        <?php if ($view === 'overdue'): ?>
+            <div class="mb-2">
+                <a href="overdue_report.php" class="btn btn-sm btn-outline-primary">Print Report</a>
+            </div>
+        <?php endif; ?>
+
         <?php if ($error): ?>
             <div class="alert alert-danger">
                 <?= htmlspecialchars($error) ?>
