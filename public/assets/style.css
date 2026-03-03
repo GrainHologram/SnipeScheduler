@@ -1335,3 +1335,131 @@ form .form-select {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     border-bottom: 2px solid var(--primary-strong);
 }
+
+/* --------------------------------------------------
+   Overdue report — severity rows
+-------------------------------------------------- */
+
+.overdue-row-danger {
+    background-color: #f8d7da !important;
+}
+
+.overdue-row-warning {
+    background-color: #fff3cd !important;
+}
+
+.overdue-report-table {
+    width: 100%;
+}
+
+/* --------------------------------------------------
+   Print utilities
+-------------------------------------------------- */
+
+.print-only {
+    display: none;
+}
+
+.print-report-header {
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.print-report-header h1 {
+    font-size: 16pt;
+    margin: 0;
+}
+
+.print-report-header h2 {
+    font-size: 13pt;
+    margin: 2pt 0;
+    font-weight: 400;
+}
+
+.print-report-header p {
+    font-size: 9pt;
+    color: #555;
+    margin: 4pt 0 0 0;
+}
+
+@media print {
+    /* Show/hide utilities */
+    .print-only {
+        display: block !important;
+    }
+
+    .no-print,
+    .app-nav,
+    .app-nav-shell,
+    .app-logo,
+    .top-bar,
+    footer,
+    .page-shell::after {
+        display: none !important;
+    }
+
+    /* Reset backgrounds/shadows for clean printing */
+    body {
+        background: #fff !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .page-shell {
+        background: #fff !important;
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
+        border-radius: 0 !important;
+    }
+
+    .container {
+        max-width: 100% !important;
+        padding: 0 !important;
+    }
+
+    /* Table styling */
+    .overdue-report-table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        font-size: 10pt;
+    }
+
+    .overdue-report-table th,
+    .overdue-report-table td {
+        border: 1px solid #ccc !important;
+        padding: 4px 6px !important;
+    }
+
+    .overdue-report-table th {
+        background: #f1f1f1 !important;
+    }
+
+    /* Force severity background colors in print */
+    .overdue-row-danger {
+        background-color: #f8d7da !important;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+    }
+
+    .overdue-row-warning {
+        background-color: #fff3cd !important;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+    }
+
+    /* Avoid breaking rows or user groups across pages */
+    .overdue-report-table tr {
+        page-break-inside: avoid;
+    }
+
+    .overdue-user-group {
+        page-break-inside: avoid;
+    }
+
+    /* Landscape orientation for wide tables */
+    @page {
+        margin: 1.5cm;
+        size: landscape;
+    }
+}

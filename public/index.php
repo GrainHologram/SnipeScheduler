@@ -387,6 +387,11 @@ if ($isStaff) {
                             <?php endforeach; ?>
                         </div>
                     <?php endif; ?>
+                    <?php if ($overdueCount > 0): ?>
+                        <div class="card-footer text-center">
+                            <a href="overdue_report.php" class="btn btn-sm btn-outline-danger">View Full Report</a>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
