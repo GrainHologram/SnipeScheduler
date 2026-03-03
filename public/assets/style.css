@@ -168,6 +168,21 @@ input[type="checkbox"] {
     box-shadow: 0 10px 20px rgba(var(--primary-rgb), 0.25);
 }
 
+.app-nav-link.app-nav-feedback {
+    background: linear-gradient(120deg, var(--accent-warm), #fb923c);
+    color: #ffffff;
+    border-color: rgba(249, 115, 22, 0.4);
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.25);
+    font-weight: 600;
+}
+
+.app-nav-link.app-nav-feedback:hover {
+    background: linear-gradient(120deg, #ea580c, var(--accent-warm));
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(249, 115, 22, 0.35);
+}
+
 .app-nav-toggle {
     display: none;
     width: 100%;

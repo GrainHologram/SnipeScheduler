@@ -147,7 +147,7 @@ if (!function_exists('layout_render_nav')) {
             ['href' => 'quick_checkout.php', 'label' => 'Quick Checkout',      'staff' => true, 'enabled' => $quickCheckoutEnabled],
             ['href' => 'quick_checkin.php',  'label' => 'Quick Checkin',       'staff' => true],
             ['href' => 'activity_log.php',   'label' => 'Admin',               'staff' => false, 'admin_only' => true],
-            ['href' => '#', 'label' => 'Feedback', 'staff' => true, 'onclick' => 'openFeedbackModal(); return false;'],
+            ['href' => '#', 'label' => 'Feedback', 'staff' => true, 'onclick' => 'openFeedbackModal(); return false;', 'class' => 'app-nav-feedback'],
             ['href' => 'my_bookings.php',    'label' => 'My Reservations',     'staff' => false, 'right' => true],
         ];
 
@@ -166,7 +166,7 @@ if (!function_exists('layout_render_nav')) {
 
             $href    = htmlspecialchars($link['href'], ENT_QUOTES, 'UTF-8');
             $label   = htmlspecialchars($link['label'], ENT_QUOTES, 'UTF-8');
-            $classes = 'app-nav-link' . ($active === $link['href'] ? ' active' : '');
+            $classes = 'app-nav-link' . ($active === $link['href'] ? ' active' : '') . (!empty($link['class']) ? ' ' . $link['class'] : '');
             $style  = !empty($link['right']) ? ' style="margin-left:auto"' : '';
 
             $onclick = !empty($link['onclick']) ? ' onclick="' . htmlspecialchars($link['onclick'], ENT_QUOTES, 'UTF-8') . '"' : '';
