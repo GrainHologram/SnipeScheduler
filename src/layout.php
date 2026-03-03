@@ -258,6 +258,20 @@ if (!function_exists('layout_footer')) {
         echo '<script src="assets/nav.js"></script>';
         echo '<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>';
         echo '<script src="assets/datetime-picker.js"></script>';
+
+        // QZ Tray receipt printing (staff only)
+        $qzConfig = load_config()['qz_tray'] ?? [];
+        if (!empty($qzConfig['enabled']) && (!empty($_SESSION['user']['is_staff']) || !empty($_SESSION['user']['is_admin']))) {
+            echo '<script src="https://cdn.jsdelivr.net/npm/qz-tray@2/qz-tray.js"></script>';
+            echo '<script src="https://cdn.jsdelivr.net/npm/receipt-printer-encoder@3/dist/receipt-printer-encoder.umd.js"></script>';
+            echo '<script src="assets/qz-print.js"></script>';
+            echo '<script>SnipePrint.init(' . json_encode([
+                'printerName' => $qzConfig['printer_name'] ?? '',
+                'certUrl'     => 'ajax_qz_cert.php',
+                'paperWidth'  => (int)($qzConfig['paper_width'] ?? 48),
+            ]) . ');</script>';
+        }
+
         echo '<footer class="text-center text-muted mt-4 small">'
             . 'SnipeScheduler Version ' . $versionEsc . $commitSuffix . ' - Created by '
             . '<a href="https://www.linkedin.com/in/ben-pirozzolo-76212a88" target="_blank" rel="noopener noreferrer">Ben Pirozzolo</a>'

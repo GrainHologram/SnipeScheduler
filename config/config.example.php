@@ -125,6 +125,7 @@ return [
     ],
 
     'app' => [
+        'name'     => 'SnipeScheduler',  // Display name used in receipts, emails, page titles
         'timezone' => 'Europe/Jersey',
         'debug'    => true,
         'logo_url' => '', // optional: full URL or relative path to logo image
@@ -169,6 +170,15 @@ return [
         ],
         'single_active_checkout' => false,  // true = enforce one active checkout per user
         'staff_date_override' => true,  // true = staff can edit start/end dates during checkout
+    ],
+
+    'qz_tray' => [
+        'enabled'              => false,
+        'printer_name'         => '',       // OS printer name (e.g. 'EPSON TM-T88V')
+        'cert_path'            => '',       // Absolute path to public cert PEM (outside web root)
+        'private_key_path'     => '',       // Absolute path to private key PEM (outside web root)
+        'paper_width'          => 48,       // Chars per line: 48 for 80mm, 32 for 58mm
+        'auto_print_checkout'  => false,    // Auto-print receipt on successful checkout
     ],
 
     'smtp' => [
