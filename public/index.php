@@ -573,8 +573,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     clearBtn.addEventListener('click', clearUser);
 
-    // Auto-refresh every 60 seconds
-    setTimeout(function() { window.location.reload(); }, 60000);
+    // Auto-refresh every 60 seconds (skip if feedback modal is open)
+    setInterval(function() {
+        var modal = document.getElementById('feedbackModal');
+        if (!modal || modal.style.display !== 'block') {
+            window.location.reload();
+        }
+    }, 60000);
 });
 </script>
 <?php endif; ?>

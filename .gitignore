@@ -18,6 +18,9 @@ tmp/
 .DS_Store
 Thumbs.db
 
+# Uploaded files
+config/uploads/
+
 # IDE
 .vscode/
 .idea/

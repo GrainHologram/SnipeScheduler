@@ -232,6 +232,9 @@ if ($editOverrideId > 0) {
             <li class="nav-item">
                 <a class="nav-link active" href="opening_hours.php">Opening Hours</a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link" href="feedback.php">Feedback</a>
+            </li>
         </ul>
 
         <?php if ($flashMessage): ?>
