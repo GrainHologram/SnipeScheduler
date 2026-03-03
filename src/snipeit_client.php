@@ -1609,11 +1609,14 @@ function prefetch_catalogue_model_stats(array $modelIds): array
                     $certSets[$mid][$value] = true;
                 }
 
-                // Hide-from-catalogue check
-                if ($hideFieldName !== '' && stripos($fieldName, $hideFieldName) !== false) {
-                    $lv = strtolower($value);
-                    if ($lv !== 'no' && $lv !== '0' && $lv !== 'false') {
-                        $hiddenModels[$mid] = true;
+                // Hide-from-catalogue check (match display name OR db column name)
+                if ($hideFieldName !== '' && !isset($hiddenModels[$mid])) {
+                    $dbColumn = (string)($cf['field'] ?? '');
+                    if (stripos($fieldName, $hideFieldName) !== false || ($dbColumn !== '' && stripos($dbColumn, $hideFieldName) !== false)) {
+                        $lv = strtolower($value);
+                        if ($lv !== 'no' && $lv !== '0' && $lv !== 'false') {
+                            $hiddenModels[$mid] = true;
+                        }
                     }
                 }
             }
