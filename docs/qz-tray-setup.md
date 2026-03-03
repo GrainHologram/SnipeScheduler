@@ -58,7 +58,7 @@ Alternatively, for enterprise deployments, you can pre-install the certificate v
 2. Find the **QZ Tray (receipt printing)** card
 3. Configure:
    - **Enable QZ Tray receipt printing**: Check to enable
-   - **Printer name**: The exact OS printer name (see "Finding Your Printer Name" below)
+   - **Connection type**: Choose between Direct USB or OS printer name (see below)
    - **Paper width**: 80mm (48 chars) or 58mm (32 chars) depending on your printer
    - **Certificate path**: Absolute path, e.g. `/etc/qz-tray/digital-certificate.txt`
    - **Private key path**: Absolute path, e.g. `/etc/qz-tray/private-key.pem`
@@ -67,9 +67,55 @@ Alternatively, for enterprise deployments, you can pre-install the certificate v
 5. Click **Test Print** to send a test receipt to the printer (requires QZ Tray running on your machine)
 6. Click **Save settings**
 
-## 4. Finding Your Printer Name
+### Connection Types
 
-The printer name must exactly match what the operating system reports.
+#### Direct USB (recommended)
+
+Sends raw ESC/POS commands directly to the USB device, bypassing the OS printer driver. This is the most reliable method for receipt printers.
+
+- Set **Connection type** to **Direct USB (raw)**
+- Enter the **USB Vendor ID** and **USB Product ID** in hex format (e.g., `0x04B8` and `0x0202`)
+- See "Finding USB Vendor/Product IDs" below
+
+#### OS Printer Name
+
+Uses the operating system's installed printer driver. This may work if the printer is shared over a network or the USB IDs are not accessible.
+
+- Set **Connection type** to **OS printer name**
+- Enter the exact printer name as it appears in system settings
+- See "Finding Your Printer Name" below
+
+## 4. Finding USB Vendor/Product IDs
+
+### Windows
+1. Open **Device Manager**
+2. Expand **Universal Serial Bus controllers** or **Printers**
+3. Right-click the printer device > **Properties** > **Details** tab
+4. Select **Hardware Ids** from the dropdown
+5. Look for `VID_XXXX&PID_YYYY` — the vendor ID is `0xXXXX`, product ID is `0xYYYY`
+
+Alternatively, from PowerShell:
+```powershell
+Get-PnpDevice -Class Printer | Get-PnpDeviceProperty -KeyName DEVPKEY_Device_HardwareIds
+```
+
+### macOS
+```bash
+system_profiler SPUSBDataType | grep -A5 -i receipt
+```
+Look for **Vendor ID** and **Product ID** in the output.
+
+### Linux
+```bash
+lsusb | grep -i receipt
+# or list all USB devices:
+lsusb
+```
+Output format: `Bus 001 Device 005: ID 04b8:0202 Seiko Epson Corp.` — vendor is `0x04B8`, product is `0x0202`.
+
+## 5. Finding Your Printer Name
+
+Only needed if using the **OS printer name** connection type.
 
 ### Windows
 1. Open **Settings > Bluetooth & devices > Printers & scanners**
@@ -85,7 +131,7 @@ lpstat -p -d
 ```
 The name is the value after `printer` (e.g., `EPSON-TM-T88V`).
 
-## 5. Usage
+## 6. Usage
 
 Once configured, printing features appear on checkout pages for staff:
 
@@ -105,10 +151,16 @@ Both print the same information (checkout details, item list, signature lines) w
 - The certificate has not been imported into QZ Tray's Site Manager on this machine
 - Re-import the certificate following step 2 above
 
-### "Printer not found"
+### "Printer not found" (OS printer mode)
 - The printer name in settings does not match the OS printer name exactly
 - Check for extra spaces, different capitalization, or encoding differences
 - Verify the printer is installed and powered on
+- Consider switching to Direct USB mode instead
+
+### USB device not found (Direct USB mode)
+- Verify the vendor/product IDs are correct (see section 4)
+- Ensure the printer is plugged in and powered on
+- On Linux, the user running QZ Tray may need permission to access USB devices (`udev` rules)
 
 ### "Private key not found" or "Certificate not found"
 - The file paths in settings are incorrect

@@ -2,19 +2,29 @@
  * qz-print.js
  * Client-side QZ Tray integration for receipt printing.
  * IIFE module exposing window.SnipePrint.
+ *
+ * Supports two connection modes:
+ *   - 'printer_name': uses the OS printer driver by name
+ *   - 'usb': direct raw USB printing via vendor/product hex IDs
  */
 var SnipePrint = (function () {
     'use strict';
 
     var _cfg = {
+        connectionType: 'usb',
         printerName: '',
+        usbVendorId: '',
+        usbProductId: '',
         certUrl: 'ajax_qz_cert.php',
         paperWidth: 48
     };
     var _connected = false;
 
     function init(cfg) {
+        if (cfg.connectionType) _cfg.connectionType = cfg.connectionType;
         if (cfg.printerName) _cfg.printerName = cfg.printerName;
+        if (cfg.usbVendorId) _cfg.usbVendorId = cfg.usbVendorId;
+        if (cfg.usbProductId) _cfg.usbProductId = cfg.usbProductId;
         if (cfg.certUrl) _cfg.certUrl = cfg.certUrl;
         if (cfg.paperWidth) _cfg.paperWidth = parseInt(cfg.paperWidth, 10) || 48;
     }
@@ -62,6 +72,28 @@ var SnipePrint = (function () {
                 }
                 throw err;
             });
+    }
+
+    /**
+     * Create a QZ printer config based on the connection type.
+     * - 'usb': direct raw USB via vendor/product IDs
+     * - 'printer_name': OS printer driver by name
+     */
+    function createPrinterConfig() {
+        if (_cfg.connectionType === 'usb' && _cfg.usbVendorId && _cfg.usbProductId) {
+            return qz.configs.create({
+                vendor: _cfg.usbVendorId,
+                product: _cfg.usbProductId
+            });
+        }
+        return qz.configs.create(_cfg.printerName, { encoding: 'UTF-8' });
+    }
+
+    function printerLabel() {
+        if (_cfg.connectionType === 'usb' && _cfg.usbVendorId && _cfg.usbProductId) {
+            return 'USB ' + _cfg.usbVendorId + ':' + _cfg.usbProductId;
+        }
+        return _cfg.printerName || '(default)';
     }
 
     function buildReceiptData(data, title) {
@@ -127,8 +159,7 @@ var SnipePrint = (function () {
             if (data.error) throw new Error(data.error);
 
             var raw = buildReceiptData(data, title);
-
-            var config = qz.configs.create(_cfg.printerName, { encoding: 'UTF-8' });
+            var config = createPrinterConfig();
             var printData = [{ type: 'raw', format: 'command', data: raw, options: { language: 'ESCPOS' } }];
 
             return qz.print(config, printData);
@@ -163,7 +194,8 @@ var SnipePrint = (function () {
                 .bold(false)
                 .align('left')
                 .line(divider)
-                .line('Printer: ' + (_cfg.printerName || '(default)'))
+                .line('Printer: ' + printerLabel())
+                .line('Mode: ' + _cfg.connectionType)
                 .line('Paper width: ' + w + ' chars')
                 .line('Time: ' + new Date().toLocaleString())
                 .line(divider)
@@ -172,7 +204,7 @@ var SnipePrint = (function () {
                 .cut();
 
             var raw = encoder.encode();
-            var config = qz.configs.create(_cfg.printerName, { encoding: 'UTF-8' });
+            var config = createPrinterConfig();
             var printData = [{ type: 'raw', format: 'command', data: raw, options: { language: 'ESCPOS' } }];
 
             return qz.print(config, printData);

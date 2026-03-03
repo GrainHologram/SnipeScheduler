@@ -457,7 +457,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // QZ Tray
     $qzTray = $config['qz_tray'] ?? [];
     $qzTray['enabled']             = isset($_POST['qz_enabled']);
+    $ctRaw = $post('qz_connection_type', $qzTray['connection_type'] ?? 'usb');
+    $qzTray['connection_type']     = in_array($ctRaw, ['usb', 'printer_name'], true) ? $ctRaw : 'usb';
     $qzTray['printer_name']        = $post('qz_printer_name', $qzTray['printer_name'] ?? '');
+    $qzTray['usb_vendor_id']       = $post('qz_usb_vendor_id', $qzTray['usb_vendor_id'] ?? '');
+    $qzTray['usb_product_id']      = $post('qz_usb_product_id', $qzTray['usb_product_id'] ?? '');
     $qzTray['cert_path']           = $post('qz_cert_path', $qzTray['cert_path'] ?? '');
     $qzTray['private_key_path']    = $post('qz_private_key_path', $qzTray['private_key_path'] ?? '');
     $pwRaw = $post('qz_paper_width', $qzTray['paper_width'] ?? 48);
@@ -1043,6 +1047,7 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                 $qzEnabled   = (bool)$cfg(['qz_tray', 'enabled'], false);
                 $qzAutoPrint = (bool)$cfg(['qz_tray', 'auto_print_checkout'], false);
                 $qzPaperWidth = (int)$cfg(['qz_tray', 'paper_width'], 48);
+                $qzConnType  = $cfg(['qz_tray', 'connection_type'], 'usb');
             ?>
             <div class="col-12">
                 <div class="card">
@@ -1056,7 +1061,25 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                                     <label class="form-check-label fw-semibold" for="qz_enabled">Enable QZ Tray receipt printing</label>
                                 </div>
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-4">
+                                <label class="form-label">Connection type</label>
+                                <select name="qz_connection_type" id="qz_connection_type" class="form-select" onchange="qzToggleConnFields()">
+                                    <option value="usb" <?= $qzConnType === 'usb' ? 'selected' : '' ?>>Direct USB (raw)</option>
+                                    <option value="printer_name" <?= $qzConnType === 'printer_name' ? 'selected' : '' ?>>OS printer name</option>
+                                </select>
+                                <div class="form-text">Direct USB sends raw ESC/POS commands. OS printer uses the installed driver.</div>
+                            </div>
+                            <div class="col-md-4 qz-field-usb" <?= $qzConnType !== 'usb' ? 'style="display:none"' : '' ?>>
+                                <label class="form-label">USB Vendor ID</label>
+                                <input type="text" name="qz_usb_vendor_id" class="form-control" value="<?= h($cfg(['qz_tray', 'usb_vendor_id'], '')) ?>" placeholder="e.g. 0x04B8">
+                                <div class="form-text">Hex vendor ID from the USB device.</div>
+                            </div>
+                            <div class="col-md-4 qz-field-usb" <?= $qzConnType !== 'usb' ? 'style="display:none"' : '' ?>>
+                                <label class="form-label">USB Product ID</label>
+                                <input type="text" name="qz_usb_product_id" class="form-control" value="<?= h($cfg(['qz_tray', 'usb_product_id'], '')) ?>" placeholder="e.g. 0x0202">
+                                <div class="form-text">Hex product ID from the USB device.</div>
+                            </div>
+                            <div class="col-md-6 qz-field-name" <?= $qzConnType !== 'printer_name' ? 'style="display:none"' : '' ?>>
                                 <label class="form-label">Printer name</label>
                                 <input type="text" name="qz_printer_name" class="form-control" value="<?= h($cfg(['qz_tray', 'printer_name'], '')) ?>" placeholder="e.g. EPSON TM-T88V">
                                 <div class="form-text">OS printer name exactly as it appears in system settings.</div>
@@ -1536,6 +1559,14 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
         });
     });
 })();
+
+function qzToggleConnFields() {
+    var sel = document.getElementById('qz_connection_type');
+    if (!sel) return;
+    var isUsb = sel.value === 'usb';
+    document.querySelectorAll('.qz-field-usb').forEach(function (el) { el.style.display = isUsb ? '' : 'none'; });
+    document.querySelectorAll('.qz-field-name').forEach(function (el) { el.style.display = isUsb ? 'none' : ''; });
+}
 
 function qzTestPrint(btn) {
     if (typeof SnipePrint === 'undefined') {

@@ -266,9 +266,12 @@ if (!function_exists('layout_footer')) {
             echo '<script src="https://cdn.jsdelivr.net/npm/receipt-printer-encoder@3/dist/receipt-printer-encoder.umd.js"></script>';
             echo '<script src="assets/qz-print.js"></script>';
             echo '<script>SnipePrint.init(' . json_encode([
-                'printerName' => $qzConfig['printer_name'] ?? '',
-                'certUrl'     => 'ajax_qz_cert.php',
-                'paperWidth'  => (int)($qzConfig['paper_width'] ?? 48),
+                'connectionType' => $qzConfig['connection_type'] ?? 'usb',
+                'printerName'    => $qzConfig['printer_name'] ?? '',
+                'usbVendorId'    => $qzConfig['usb_vendor_id'] ?? '',
+                'usbProductId'   => $qzConfig['usb_product_id'] ?? '',
+                'certUrl'        => 'ajax_qz_cert.php',
+                'paperWidth'     => (int)($qzConfig['paper_width'] ?? 48),
             ]) . ');</script>';
         }
 

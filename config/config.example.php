@@ -174,7 +174,10 @@ return [
 
     'qz_tray' => [
         'enabled'              => false,
-        'printer_name'         => '',       // OS printer name (e.g. 'EPSON TM-T88V')
+        'printer_name'         => '',       // OS printer name (e.g. 'EPSON TM-T88V') — used when connection_type is 'printer_name'
+        'usb_vendor_id'        => '',       // USB vendor hex ID (e.g. '0x04B8') — used when connection_type is 'usb'
+        'usb_product_id'       => '',       // USB product hex ID (e.g. '0x0202') — used when connection_type is 'usb'
+        'connection_type'      => 'usb',    // 'printer_name' = OS driver, 'usb' = direct USB raw
         'cert_path'            => '',       // Absolute path to public cert PEM (outside web root)
         'private_key_path'     => '',       // Absolute path to private key PEM (outside web root)
         'paper_width'          => 48,       // Chars per line: 48 for 80mm, 32 for 58mm
