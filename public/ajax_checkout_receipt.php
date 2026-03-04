@@ -78,6 +78,7 @@ if ($reservationId > 0) {
     echo json_encode([
         'type'           => 'reservation',
         'reservation_id' => $reservationId,
+        'name'           => $reservation['name'] ?? '',
         'user_name'      => $reservation['user_name'] ?? '',
         'user_email'     => $reservation['user_email'] ?? '',
         'start_datetime' => app_format_datetime($reservation['start_datetime'] ?? ''),
@@ -107,6 +108,15 @@ if (!$checkout) {
     exit;
 }
 
+// Fetch linked reservation name (if any)
+$reservationName = '';
+$resId = (int)($checkout['reservation_id'] ?? 0);
+if ($resId > 0) {
+    $resStmt = $pdo->prepare("SELECT name FROM reservations WHERE id = :id");
+    $resStmt->execute([':id' => $resId]);
+    $reservationName = $resStmt->fetchColumn() ?: '';
+}
+
 // Fetch checkout items
 $items = get_checkout_items($pdo, $checkoutId);
 
@@ -122,6 +132,7 @@ foreach ($items as $item) {
 echo json_encode([
     'type'           => 'checkout',
     'checkout_id'    => $checkoutId,
+    'name'           => $reservationName,
     'user_name'      => $checkout['user_name'] ?? '',
     'user_email'     => $checkout['user_email'] ?? '',
     'start_datetime' => app_format_datetime($checkout['start_datetime'] ?? ''),

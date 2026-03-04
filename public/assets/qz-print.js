@@ -117,10 +117,15 @@ var SnipePrint = (function () {
     }
 
     /**
-     * Build receipt header (app name, title, user, dates).
+     * Build receipt header (app name, title, user, id + name, dates).
      */
-    function buildHeader(parts, data, title, idLabel) {
+    function buildHeader(parts, data, title, idPrefix, id) {
         var d = divider();
+        var idLine = '#' + id;
+        if (data.name) {
+            idLine += ' ' + data.name;
+        }
+
         parts.push(CMD.INIT);
         parts.push(CMD.ALIGN_CTR);
         parts.push(CMD.BOLD_ON);
@@ -129,8 +134,8 @@ var SnipePrint = (function () {
         parts.push(CMD.BOLD_OFF);
         parts.push(CMD.ALIGN_LEFT);
         parts.push(d + CMD.LF);
-        parts.push(truncate(idLabel) + CMD.LF);
         parts.push(truncate('User: ' + (data.user_name || data.user_email || 'Unknown')) + CMD.LF);
+        parts.push(truncate(idPrefix + idLine) + CMD.LF);
         parts.push(truncate('Date: ' + data.start_datetime) + CMD.LF);
         parts.push(truncate('Return by: ' + data.end_datetime) + CMD.LF);
         parts.push(d + CMD.LF);
@@ -156,7 +161,7 @@ var SnipePrint = (function () {
      */
     function buildCheckoutData(data, title) {
         var parts = [];
-        buildHeader(parts, data, title, 'Checkout #' + data.checkout_id);
+        buildHeader(parts, data, title, 'Checkout ', data.checkout_id);
 
         parts.push(CMD.BOLD_ON);
         parts.push('ITEMS' + CMD.LF);
@@ -179,7 +184,7 @@ var SnipePrint = (function () {
      */
     function buildReservationData(data) {
         var parts = [];
-        buildHeader(parts, data, 'PICK LIST', 'Reservation #' + data.reservation_id);
+        buildHeader(parts, data, 'PICK LIST', 'Reservation ', data.reservation_id);
 
         var categories = data.categories || {};
         var catNames = Object.keys(categories);
