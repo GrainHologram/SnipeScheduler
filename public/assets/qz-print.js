@@ -174,23 +174,36 @@ var SnipePrint = (function () {
     }
 
     /**
-     * Build ESC/POS data for a reservation pick sheet (model names + quantities).
+     * Build ESC/POS data for a reservation pick sheet grouped by category.
      */
     function buildReservationData(data) {
         var parts = [];
         buildHeader(parts, data, 'PICK LIST', 'Reservation #' + data.reservation_id);
 
-        parts.push(CMD.BOLD_ON);
-        parts.push('ITEMS TO COLLECT' + CMD.LF);
-        parts.push(CMD.BOLD_OFF);
-
-        var items = data.items || [];
+        var categories = data.categories || {};
+        var catNames = Object.keys(categories);
         var totalQty = 0;
-        for (var j = 0; j < items.length; j++) {
-            var item = items[j];
-            var qty = item.quantity || 1;
-            totalQty += qty;
-            parts.push(truncate(qty + 'x ' + (item.model_name || '')) + CMD.LF);
+
+        for (var i = 0; i < catNames.length; i++) {
+            var catName = catNames[i];
+            var items = categories[catName] || [];
+
+            // Category heading
+            parts.push(CMD.BOLD_ON);
+            parts.push(truncate(catName) + CMD.LF);
+            parts.push(CMD.BOLD_OFF);
+
+            for (var j = 0; j < items.length; j++) {
+                var item = items[j];
+                var qty = item.quantity || 1;
+                totalQty += qty;
+                parts.push(truncate('  ' + qty + 'x ' + (item.model_name || '')) + CMD.LF);
+            }
+
+            // Blank line between categories (but not after the last one)
+            if (i < catNames.length - 1) {
+                parts.push(CMD.LF);
+            }
         }
 
         buildFooter(parts, 'Total items: ' + totalQty);

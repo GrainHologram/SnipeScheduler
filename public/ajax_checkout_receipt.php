@@ -37,14 +37,43 @@ if ($reservationId > 0) {
         exit;
     }
 
-    $items = get_reservation_items_with_names($pdo, $reservationId);
-    $formattedItems = [];
-    foreach ($items as $item) {
-        $formattedItems[] = [
-            'model_name' => $item['name'] ?? '',
-            'quantity'   => (int)($item['qty'] ?? 1),
+    // Fetch reservation items with model details (including category)
+    $stmt = $pdo->prepare("
+        SELECT model_id, quantity
+        FROM reservation_items
+        WHERE reservation_id = :rid AND deleted_at IS NULL
+        ORDER BY model_id
+    ");
+    $stmt->execute([':rid' => $reservationId]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Build items grouped by category
+    $categories = []; // categoryName => [items]
+    foreach ($rows as $row) {
+        $modelId = (int)($row['model_id'] ?? 0);
+        $qty     = (int)($row['quantity'] ?? 0);
+        if ($modelId <= 0 || $qty <= 0) continue;
+
+        try {
+            $model = get_model($modelId);
+        } catch (Exception $e) {
+            $model = null;
+        }
+
+        $catName   = $model['category']['name'] ?? 'Other';
+        $modelName = $model['name'] ?? ('Model #' . $modelId);
+
+        if (!isset($categories[$catName])) {
+            $categories[$catName] = [];
+        }
+        $categories[$catName][] = [
+            'model_name' => $modelName,
+            'quantity'   => $qty,
         ];
     }
+
+    // Sort categories alphabetically
+    ksort($categories);
 
     echo json_encode([
         'type'           => 'reservation',
@@ -54,7 +83,7 @@ if ($reservationId > 0) {
         'start_datetime' => app_format_datetime($reservation['start_datetime'] ?? ''),
         'end_datetime'   => app_format_datetime($reservation['end_datetime'] ?? ''),
         'status'         => $reservation['status'] ?? '',
-        'items'          => $formattedItems,
+        'categories'     => $categories,
         'app_name'       => $appName,
     ]);
     exit;
