@@ -280,10 +280,10 @@ if ($isStaff) {
                                                     $qzConfig = load_config()['qz_tray'] ?? [];
                                                     if (!empty($qzConfig['enabled'])):
                                                 ?>
-                                                <button type="button" class="btn btn-sm btn-outline-dark mt-1"
+                                                <button type="button" class="btn btn-sm btn-link text-muted p-0 mt-1"
                                                         data-reservation-id="<?= (int)$pickup['id'] ?>"
                                                         onclick="qzPrintReservationPickList(this)">
-                                                    Pick List
+                                                    <small>Pick List</small>
                                                 </button>
                                                 <?php endif; ?>
                                             </td>
