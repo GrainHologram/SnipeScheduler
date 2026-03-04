@@ -125,6 +125,7 @@ return [
     ],
 
     'app' => [
+        'name'     => 'SnipeScheduler',  // Display name used in receipts, emails, page titles
         'timezone' => 'Europe/Jersey',
         'debug'    => true,
         'logo_url' => '', // optional: full URL or relative path to logo image
@@ -169,6 +170,20 @@ return [
         ],
         'single_active_checkout' => false,  // true = enforce one active checkout per user
         'staff_date_override' => true,  // true = staff can edit start/end dates during checkout
+    ],
+
+    'qz_tray' => [
+        'enabled'              => false,
+        'printer_name'         => '',       // OS printer name (e.g. 'EPSON TM-T88V') — used when connection_type is 'printer_name'
+        'usb_vendor_id'        => '',       // USB vendor hex ID (e.g. '0x04B8') — used when connection_type is 'usb'
+        'usb_product_id'       => '',       // USB product hex ID (e.g. '0x0202') — used when connection_type is 'usb'
+        'usb_interface'        => '0x00',   // USB interface (usually 0x00 for receipt printers)
+        'usb_endpoint'         => '0x01',   // USB OUT endpoint (usually 0x01 for receipt printers)
+        'connection_type'      => 'usb',    // 'printer_name' = OS driver, 'usb' = direct USB raw
+        'cert_path'            => '',       // Absolute path to public cert PEM (outside web root)
+        'private_key_path'     => '',       // Absolute path to private key PEM (outside web root)
+        'paper_width'          => 42,       // Chars per line: 42 for 80mm, 30 for 58mm
+        'auto_print_checkout'  => false,    // Auto-print receipt on successful checkout
     ],
 
     'smtp' => [

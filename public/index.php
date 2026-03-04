@@ -276,6 +276,16 @@ if ($isStaff) {
                                                 <a href="reservations.php?tab=today&res=<?= (int)$pickup['id'] ?>" class="btn btn-sm btn-outline-primary">
                                                     Process
                                                 </a>
+                                                <?php
+                                                    $qzConfig = load_config()['qz_tray'] ?? [];
+                                                    if (!empty($qzConfig['enabled'])):
+                                                ?>
+                                                <button type="button" class="btn btn-sm btn-link text-muted p-0 mt-1"
+                                                        data-reservation-id="<?= (int)$pickup['id'] ?>"
+                                                        onclick="qzPrintReservationPickList(this)">
+                                                    <small>Pick List</small>
+                                                </button>
+                                                <?php endif; ?>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>

@@ -454,6 +454,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $smtp['from_email'] = $post('smtp_from_email', $smtp['from_email'] ?? '');
     $smtp['from_name']  = $post('smtp_from_name', $smtp['from_name'] ?? 'SnipeScheduler');
 
+    // QZ Tray
+    $qzTray = $config['qz_tray'] ?? [];
+    $qzTray['enabled']             = isset($_POST['qz_enabled']);
+    $ctRaw = $post('qz_connection_type', $qzTray['connection_type'] ?? 'usb');
+    $qzTray['connection_type']     = in_array($ctRaw, ['usb', 'printer_name'], true) ? $ctRaw : 'usb';
+    $qzTray['printer_name']        = $post('qz_printer_name', $qzTray['printer_name'] ?? '');
+    $qzTray['usb_vendor_id']       = $post('qz_usb_vendor_id', $qzTray['usb_vendor_id'] ?? '');
+    $qzTray['usb_product_id']      = $post('qz_usb_product_id', $qzTray['usb_product_id'] ?? '');
+    $qzTray['usb_interface']       = $post('qz_usb_interface', $qzTray['usb_interface'] ?? '0x00');
+    $qzTray['usb_endpoint']        = $post('qz_usb_endpoint', $qzTray['usb_endpoint'] ?? '0x01');
+    $qzTray['cert_path']           = $post('qz_cert_path', $qzTray['cert_path'] ?? '');
+    $qzTray['private_key_path']    = $post('qz_private_key_path', $qzTray['private_key_path'] ?? '');
+    $pwRaw = $post('qz_paper_width', $qzTray['paper_width'] ?? 42);
+    $qzTray['paper_width']         = in_array((int)$pwRaw, [30, 42], true) ? (int)$pwRaw : 42;
+    $qzTray['auto_print_checkout'] = isset($_POST['qz_auto_print']);
+
     $newConfig = $config;
     $newConfig['db_booking'] = $db;
     $newConfig['ldap']       = $ldap;
@@ -465,6 +481,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $newConfig['catalogue']     = $catalogue;
     $newConfig['reservations']  = $reservations;
     $newConfig['checkout_limits'] = $checkoutLimits;
+    $newConfig['qz_tray']        = $qzTray;
     $newConfig['smtp']          = $smtp;
 
     // Keep posted values in the form
@@ -525,6 +542,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } catch (Throwable $e) {
             $errors[] = 'SMTP test failed: ' . $e->getMessage();
+        }
+    } elseif ($action === 'test_qz_cert') {
+        try {
+            $certPath = $qzTray['cert_path'] ?? '';
+            $keyPath  = $qzTray['private_key_path'] ?? '';
+            if ($certPath === '' || $keyPath === '') {
+                throw new Exception('Certificate and private key paths are required.');
+            }
+            if (!is_file($certPath) || !is_readable($certPath)) {
+                throw new Exception('Certificate file not found or not readable: ' . $certPath);
+            }
+            if (!is_file($keyPath) || !is_readable($keyPath)) {
+                throw new Exception('Private key file not found or not readable: ' . $keyPath);
+            }
+            $keyContents = file_get_contents($keyPath);
+            $key = openssl_pkey_get_private($keyContents);
+            if ($key === false) {
+                throw new Exception('Could not parse private key. Ensure it is a valid PEM file.');
+            }
+            $testData = 'qz-tray-test-' . time();
+            $sig = '';
+            if (!openssl_sign($testData, $sig, $key, OPENSSL_ALGO_SHA512)) {
+                throw new Exception('Test signing failed. Check that the key is RSA.');
+            }
+            $messages[] = 'Certificate and private key verified. Test signing succeeded.';
+        } catch (Throwable $e) {
+            $errors[] = 'QZ Tray cert test failed: ' . $e->getMessage();
         }
     } else {
         $content = layout_build_config_file($newConfig, [
@@ -1001,6 +1045,93 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                 </div>
             </div>
 
+            <?php
+                $qzEnabled   = (bool)$cfg(['qz_tray', 'enabled'], false);
+                $qzAutoPrint = (bool)$cfg(['qz_tray', 'auto_print_checkout'], false);
+                $qzPaperWidth = (int)$cfg(['qz_tray', 'paper_width'], 42);
+                $qzConnType  = $cfg(['qz_tray', 'connection_type'], 'usb');
+            ?>
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-1">QZ Tray (receipt printing)</h5>
+                        <p class="text-muted small mb-3">Connect to a local USB receipt printer via <a href="https://qz.io" target="_blank" rel="noopener">QZ Tray</a>. Requires QZ Tray running on client machines. See <code>docs/qz-tray-setup.md</code> for full setup instructions.</p>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="qz_enabled" id="qz_enabled" <?= $qzEnabled ? 'checked' : '' ?>>
+                                    <label class="form-check-label fw-semibold" for="qz_enabled">Enable QZ Tray receipt printing</label>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Connection type</label>
+                                <select name="qz_connection_type" id="qz_connection_type" class="form-select" onchange="qzToggleConnFields()">
+                                    <option value="usb" <?= $qzConnType === 'usb' ? 'selected' : '' ?>>Direct USB (raw)</option>
+                                    <option value="printer_name" <?= $qzConnType === 'printer_name' ? 'selected' : '' ?>>OS printer name</option>
+                                </select>
+                                <div class="form-text">Direct USB sends raw ESC/POS commands. OS printer uses the installed driver.</div>
+                            </div>
+                            <div class="col-md-4 qz-field-usb" <?= $qzConnType !== 'usb' ? 'style="display:none"' : '' ?>>
+                                <label class="form-label">USB Vendor ID</label>
+                                <input type="text" name="qz_usb_vendor_id" class="form-control" value="<?= h($cfg(['qz_tray', 'usb_vendor_id'], '')) ?>" placeholder="e.g. 0x04B8">
+                                <div class="form-text">Hex vendor ID from the USB device.</div>
+                            </div>
+                            <div class="col-md-4 qz-field-usb" <?= $qzConnType !== 'usb' ? 'style="display:none"' : '' ?>>
+                                <label class="form-label">USB Product ID</label>
+                                <input type="text" name="qz_usb_product_id" class="form-control" value="<?= h($cfg(['qz_tray', 'usb_product_id'], '')) ?>" placeholder="e.g. 0x0202">
+                                <div class="form-text">Hex product ID from the USB device.</div>
+                            </div>
+                            <div class="col-md-4 qz-field-usb" <?= $qzConnType !== 'usb' ? 'style="display:none"' : '' ?>>
+                                <label class="form-label">USB Interface</label>
+                                <input type="text" name="qz_usb_interface" class="form-control" value="<?= h($cfg(['qz_tray', 'usb_interface'], '0x00')) ?>" placeholder="0x00">
+                                <div class="form-text">Usually <code>0x00</code> for receipt printers.</div>
+                            </div>
+                            <div class="col-md-4 qz-field-usb" <?= $qzConnType !== 'usb' ? 'style="display:none"' : '' ?>>
+                                <label class="form-label">USB Endpoint (OUT)</label>
+                                <input type="text" name="qz_usb_endpoint" class="form-control" value="<?= h($cfg(['qz_tray', 'usb_endpoint'], '0x01')) ?>" placeholder="0x01">
+                                <div class="form-text">OUT endpoint, usually <code>0x01</code>. Find via <code>lsusb -v</code> on Linux.</div>
+                            </div>
+                            <div class="col-md-6 qz-field-name" <?= $qzConnType !== 'printer_name' ? 'style="display:none"' : '' ?>>
+                                <label class="form-label">Printer name</label>
+                                <input type="text" name="qz_printer_name" class="form-control" value="<?= h($cfg(['qz_tray', 'printer_name'], '')) ?>" placeholder="e.g. EPSON TM-T88V">
+                                <div class="form-text">OS printer name exactly as it appears in system settings.</div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Paper width</label>
+                                <select name="qz_paper_width" class="form-select">
+                                    <option value="42" <?= $qzPaperWidth === 42 ? 'selected' : '' ?>>80mm (42 chars)</option>
+                                    <option value="30" <?= $qzPaperWidth === 30 ? 'selected' : '' ?>>58mm (30 chars)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Certificate path (PEM)</label>
+                                <input type="text" name="qz_cert_path" class="form-control" value="<?= h($cfg(['qz_tray', 'cert_path'], '')) ?>" placeholder="/etc/qz-tray/digital-certificate.txt">
+                                <div class="form-text">Absolute path to the public certificate. Keep outside web root.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Private key path (PEM)</label>
+                                <input type="text" name="qz_private_key_path" class="form-control" value="<?= h($cfg(['qz_tray', 'private_key_path'], '')) ?>" placeholder="/etc/qz-tray/private-key.pem">
+                                <div class="form-text">Absolute path to the RSA private key. Keep outside web root.</div>
+                            </div>
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="qz_auto_print" id="qz_auto_print" <?= $qzAutoPrint ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="qz_auto_print">Auto-print checkout receipt on successful checkout</label>
+                                </div>
+                                <div class="form-text mt-1">When enabled, a receipt prints automatically after each checkout in staff checkout and quick checkout.</div>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <div class="small text-muted" id="qz-test-result"></div>
+                            <div>
+                                <button type="button" class="btn btn-outline-primary btn-sm" data-test-action="test_qz_cert" data-target="qz-test-result">Verify Certificate</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm ms-2" id="qz-test-print" onclick="qzTestPrint(this)">Test Print</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="col-12">
                 <div class="card">
                     <div class="card-body">
@@ -1440,6 +1571,48 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
         });
     });
 })();
+
+function qzToggleConnFields() {
+    var sel = document.getElementById('qz_connection_type');
+    if (!sel) return;
+    var isUsb = sel.value === 'usb';
+    document.querySelectorAll('.qz-field-usb').forEach(function (el) { el.style.display = isUsb ? '' : 'none'; });
+    document.querySelectorAll('.qz-field-name').forEach(function (el) { el.style.display = isUsb ? 'none' : ''; });
+}
+
+function qzTestPrint(btn) {
+    if (typeof SnipePrint === 'undefined') {
+        var target = document.getElementById('qz-test-result');
+        if (target) {
+            target.textContent = 'QZ Tray is not enabled. Save settings with QZ Tray enabled first.';
+            target.classList.remove('text-muted', 'text-success');
+            target.classList.add('text-danger');
+        }
+        return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Printing...';
+    var target = document.getElementById('qz-test-result');
+    SnipePrint.printTest()
+        .then(function () {
+            btn.textContent = 'Test Print';
+            btn.disabled = false;
+            if (target) {
+                target.textContent = 'Test receipt sent to printer.';
+                target.classList.remove('text-muted', 'text-danger');
+                target.classList.add('text-success');
+            }
+        })
+        .catch(function (err) {
+            btn.textContent = 'Test Print';
+            btn.disabled = false;
+            if (target) {
+                target.textContent = err.message || 'Print test failed.';
+                target.classList.remove('text-muted', 'text-success');
+                target.classList.add('text-danger');
+            }
+        });
+}
 </script>
 </body>
 </html>

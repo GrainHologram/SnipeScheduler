@@ -1468,6 +1468,17 @@ $active  = basename($_SERVER['PHP_SELF']);
                         <?php if (!empty($selectedReservation['notes'])): ?>
                             <div><strong>Notes:</strong> <?= nl2br(h($selectedReservation['notes'])) ?></div>
                         <?php endif; ?>
+                        <?php
+                            $qzConfig = load_config()['qz_tray'] ?? [];
+                            if (!empty($qzConfig['enabled']) && !empty($selectedItems)):
+                        ?>
+                            <hr class="my-2">
+                            <button type="button" class="btn btn-sm btn-outline-dark"
+                                    data-reservation-id="<?= (int)$selectedReservation['id'] ?>"
+                                    onclick="qzPrintReservationPickList(this)">
+                                Print Pick List
+                            </button>
+                        <?php endif; ?>
                     </div>
                 <?php endif; ?>
             </div>
@@ -1513,6 +1524,25 @@ $active  = basename($_SERVER['PHP_SELF']);
                         <li><?= h($m) ?></li>
                     <?php endforeach; ?>
                 </ul>
+                <?php
+                    $qzConfig = load_config()['qz_tray'] ?? [];
+                    if (isset($newCheckoutId) && $newCheckoutId > 0 && !empty($qzConfig['enabled'])):
+                ?>
+                    <hr class="my-2">
+                    <button type="button" class="btn btn-sm btn-outline-dark"
+                            data-checkout-id="<?= (int)$newCheckoutId ?>"
+                            onclick="qzPrintPickSheet(this)">
+                        Print Pick Sheet
+                    </button>
+                    <?php if (!empty($qzConfig['auto_print_checkout'])): ?>
+                    <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        SnipePrint.printCheckoutReceipt(<?= (int)$newCheckoutId ?>)
+                            .catch(function(err) { console.error('Auto-print failed:', err); });
+                    });
+                    </script>
+                    <?php endif; ?>
+                <?php endif; ?>
             </div>
         <?php endif; ?>
 
