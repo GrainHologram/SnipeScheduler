@@ -123,7 +123,7 @@ var SnipePrint = (function () {
         var d = divider();
         var idLine = '#' + id;
         if (data.name) {
-            idLine += ' ' + data.name;
+            idLine += ': ' + data.name;
         }
 
         parts.push(CMD.INIT);
