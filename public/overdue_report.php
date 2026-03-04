@@ -130,5 +130,8 @@ $effectiveGroup = ($userFilter !== '') ? false : $groupByUser;
 </div>
 
 <?php layout_footer(); ?>
+<?php if (!empty($_GET['print'])): ?>
+<script>window.addEventListener('DOMContentLoaded', function() { window.print(); });</script>
+<?php endif; ?>
 </body>
 </html>

@@ -182,8 +182,8 @@ if (!function_exists('render_overdue_report_html')) {
                     $html .= '<h6 class="fw-semibold mb-2">' . $userLabel
                         . ' <span class="badge bg-secondary">' . count($userRows) . ' item' . (count($userRows) !== 1 ? 's' : '') . '</span>';
                     if ($userPrintLinks) {
-                        $printUrl = 'overdue_report.php?group=user&user=' . urlencode($userKey);
-                        $html .= ' <a href="' . $esc($printUrl) . '" class="btn btn-sm btn-outline-secondary ms-2 no-print" title="Print this user\'s report">Print</a>';
+                        $printUrl = 'overdue_report.php?group=user&user=' . urlencode($userKey) . '&print=1';
+                        $html .= ' <a href="' . $esc($printUrl) . '" target="_blank" class="btn btn-sm btn-outline-secondary ms-2 no-print" title="Print this user\'s report">Print</a>';
                     }
                     $html .= '</h6>';
                 } else {
