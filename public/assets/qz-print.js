@@ -137,15 +137,16 @@ var SnipePrint = (function () {
     }
 
     /**
-     * Build receipt footer (total, signature lines, cut).
+     * Build receipt footer (total, optional signature line, cut).
      */
-    function buildFooter(parts, totalLabel) {
+    function buildFooter(parts, totalLabel, showSignature) {
         var d = divider();
         parts.push(d + CMD.LF);
         parts.push(truncate(totalLabel) + CMD.LF);
-        parts.push(CMD.LF);
-        parts.push(truncate('Staff signature: _______________') + CMD.LF);
-        parts.push(truncate('User signature:  _______________') + CMD.LF);
+        if (showSignature) {
+            parts.push(CMD.LF);
+            parts.push(truncate('User signature:  _______________') + CMD.LF);
+        }
         parts.push(CMD.LF);
         parts.push(CMD.CUT);
     }
@@ -169,7 +170,7 @@ var SnipePrint = (function () {
             parts.push(truncate(tag + ' - ' + model) + CMD.LF);
         }
 
-        buildFooter(parts, 'Total items: ' + items.length);
+        buildFooter(parts, 'Total items: ' + items.length, true);
         return parts;
     }
 
