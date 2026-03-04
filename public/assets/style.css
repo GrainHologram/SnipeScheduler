@@ -1394,7 +1394,9 @@ form .form-select {
     .app-logo,
     .top-bar,
     footer,
-    .page-shell::after {
+    .page-shell::after,
+    #feedbackBackdrop,
+    #feedbackModal {
         display: none !important;
     }
 
