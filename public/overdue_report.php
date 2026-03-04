@@ -49,6 +49,52 @@ $generated  = app_format_datetime_local(date('Y-m-d H:i:s'), null, new DateTimeZ
 
 // When viewing a single user, force group mode off (nothing to group)
 $effectiveGroup = ($userFilter !== '') ? false : $groupByUser;
+
+// PDF download via wkhtmltopdf
+if (($_GET['format'] ?? '') === 'pdf') {
+    $which = trim(shell_exec('which wkhtmltopdf 2>/dev/null') ?: '');
+    if ($which === '') {
+        http_response_code(500);
+        echo 'wkhtmltopdf is not installed on this server.';
+        exit;
+    }
+
+    $html = render_overdue_pdf_html($rows, $appName, $filteredUserName, $generated, $effectiveGroup);
+
+    $cmd = escapeshellcmd($which) . ' --orientation Landscape --page-size Letter --quiet - -';
+    $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
+    $proc = proc_open($cmd, $descriptors, $pipes);
+
+    if (!is_resource($proc)) {
+        http_response_code(500);
+        echo 'Failed to start wkhtmltopdf.';
+        exit;
+    }
+
+    fwrite($pipes[0], $html);
+    fclose($pipes[0]);
+
+    $pdf = stream_get_contents($pipes[1]);
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+    $exitCode = proc_close($proc);
+
+    if ($exitCode !== 0 || $pdf === '' || $pdf === false) {
+        http_response_code(500);
+        echo 'PDF generation failed.';
+        exit;
+    }
+
+    $filename = $filteredUserName !== ''
+        ? 'overdue-report-' . preg_replace('/[^a-zA-Z0-9-]/', '-', $filteredUserName) . '.pdf'
+        : 'overdue-report.pdf';
+
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Content-Length: ' . strlen($pdf));
+    echo $pdf;
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html>
@@ -95,6 +141,14 @@ $effectiveGroup = ($userFilter !== '') ? false : $groupByUser;
         <button type="button" class="btn btn-primary btn-sm" onclick="window.print()">
             Print / Save PDF
         </button>
+        <?php
+            $pdfParams = $_GET;
+            $pdfParams['format'] = 'pdf';
+            $pdfUrl = 'overdue_report.php?' . http_build_query($pdfParams);
+        ?>
+        <a href="<?= htmlspecialchars($pdfUrl, ENT_QUOTES, 'UTF-8') ?>" class="btn btn-outline-primary btn-sm">
+            Download PDF
+        </a>
         <?php if ($userFilter !== ''): ?>
             <a href="overdue_report.php?group=user" class="btn btn-outline-secondary btn-sm">
                 Back to full report
