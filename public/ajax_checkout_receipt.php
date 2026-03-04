@@ -41,8 +41,8 @@ if ($reservationId > 0) {
     $formattedItems = [];
     foreach ($items as $item) {
         $formattedItems[] = [
-            'model_name' => $item['model_name'] ?? '',
-            'quantity'   => (int)($item['quantity'] ?? 1),
+            'model_name' => $item['name'] ?? '',
+            'quantity'   => (int)($item['qty'] ?? 1),
         ];
     }
 
