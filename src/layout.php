@@ -269,6 +269,8 @@ if (!function_exists('layout_footer')) {
                 'printerName'    => $qzConfig['printer_name'] ?? '',
                 'usbVendorId'    => $qzConfig['usb_vendor_id'] ?? '',
                 'usbProductId'   => $qzConfig['usb_product_id'] ?? '',
+                'usbInterface'   => $qzConfig['usb_interface'] ?? '0x00',
+                'usbEndpoint'    => $qzConfig['usb_endpoint'] ?? '0x01',
                 'certUrl'        => 'ajax_qz_cert.php',
                 'paperWidth'     => (int)($qzConfig['paper_width'] ?? 48),
             ]) . ');</script>';

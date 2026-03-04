@@ -6,8 +6,8 @@
  * Builds raw ESC/POS commands directly — no external encoder library needed.
  *
  * Supports two connection modes:
- *   - 'usb': direct raw USB printing via vendor/product hex IDs
- *   - 'printer_name': uses the OS printer driver by name
+ *   - 'usb': direct raw USB printing via qz.usb.* API (vendor/product/interface/endpoint)
+ *   - 'printer_name': uses the OS printer driver via qz.print() API
  */
 var SnipePrint = (function () {
     'use strict';
@@ -17,6 +17,8 @@ var SnipePrint = (function () {
         printerName: '',
         usbVendorId: '',
         usbProductId: '',
+        usbInterface: '0x00',
+        usbEndpoint: '0x01',
         certUrl: 'ajax_qz_cert.php',
         paperWidth: 48
     };
@@ -40,6 +42,8 @@ var SnipePrint = (function () {
         if (cfg.printerName) _cfg.printerName = cfg.printerName;
         if (cfg.usbVendorId) _cfg.usbVendorId = cfg.usbVendorId;
         if (cfg.usbProductId) _cfg.usbProductId = cfg.usbProductId;
+        if (cfg.usbInterface) _cfg.usbInterface = cfg.usbInterface;
+        if (cfg.usbEndpoint) _cfg.usbEndpoint = cfg.usbEndpoint;
         if (cfg.certUrl) _cfg.certUrl = cfg.certUrl;
         if (cfg.paperWidth) _cfg.paperWidth = parseInt(cfg.paperWidth, 10) || 48;
     }
@@ -89,25 +93,6 @@ var SnipePrint = (function () {
             });
     }
 
-    /**
-     * Find and create a QZ printer config based on the connection type.
-     * Returns a Promise that resolves to a qz config object.
-     *
-     * USB mode: uses qz.printers.find() to locate the device by vendor/product ID,
-     * then creates a config from the found printer name.
-     */
-    function createPrinterConfig() {
-        if (_cfg.connectionType === 'usb' && _cfg.usbVendorId && _cfg.usbProductId) {
-            return qz.printers.find({
-                vendor: _cfg.usbVendorId,
-                product: _cfg.usbProductId
-            }).then(function (found) {
-                return qz.configs.create(found);
-            });
-        }
-        return Promise.resolve(qz.configs.create(_cfg.printerName, { encoding: 'UTF-8' }));
-    }
-
     function printerLabel() {
         if (_cfg.connectionType === 'usb' && _cfg.usbVendorId && _cfg.usbProductId) {
             return 'USB ' + _cfg.usbVendorId + ':' + _cfg.usbProductId;
@@ -132,47 +117,82 @@ var SnipePrint = (function () {
     }
 
     /**
-     * Build raw ESC/POS data array for a receipt.
-     * Each element is a string that QZ Tray sends as raw bytes.
+     * Build raw ESC/POS data as a single concatenated string.
      */
-    function buildReceiptCommands(data, title) {
+    function buildReceiptData(data, title) {
         var d = divider();
-        var cmds = [];
+        var parts = [];
 
-        cmds.push(CMD.INIT);
-        cmds.push(CMD.ALIGN_CTR);
-        cmds.push(CMD.BOLD_ON);
-        cmds.push((data.app_name || 'SnipeScheduler') + CMD.LF);
-        cmds.push(title + CMD.LF);
-        cmds.push(CMD.BOLD_OFF);
-        cmds.push(CMD.ALIGN_LEFT);
-        cmds.push(d + CMD.LF);
-        cmds.push('Checkout #' + data.checkout_id + CMD.LF);
-        cmds.push('User: ' + (data.user_name || data.user_email || 'Unknown') + CMD.LF);
-        cmds.push('Date: ' + data.start_datetime + CMD.LF);
-        cmds.push('Return by: ' + data.end_datetime + CMD.LF);
-        cmds.push(d + CMD.LF);
-        cmds.push(CMD.BOLD_ON);
-        cmds.push('ITEMS' + CMD.LF);
-        cmds.push(CMD.BOLD_OFF);
+        parts.push(CMD.INIT);
+        parts.push(CMD.ALIGN_CTR);
+        parts.push(CMD.BOLD_ON);
+        parts.push((data.app_name || 'SnipeScheduler') + CMD.LF);
+        parts.push(title + CMD.LF);
+        parts.push(CMD.BOLD_OFF);
+        parts.push(CMD.ALIGN_LEFT);
+        parts.push(d + CMD.LF);
+        parts.push('Checkout #' + data.checkout_id + CMD.LF);
+        parts.push('User: ' + (data.user_name || data.user_email || 'Unknown') + CMD.LF);
+        parts.push('Date: ' + data.start_datetime + CMD.LF);
+        parts.push('Return by: ' + data.end_datetime + CMD.LF);
+        parts.push(d + CMD.LF);
+        parts.push(CMD.BOLD_ON);
+        parts.push('ITEMS' + CMD.LF);
+        parts.push(CMD.BOLD_OFF);
 
         var items = data.items || [];
         for (var j = 0; j < items.length; j++) {
             var item = items[j];
             var tag = item.asset_tag || '';
             var model = item.model_name || '';
-            cmds.push(truncate(tag + ' - ' + model) + CMD.LF);
+            parts.push(truncate(tag + ' - ' + model) + CMD.LF);
         }
 
-        cmds.push(d + CMD.LF);
-        cmds.push('Total items: ' + items.length + CMD.LF);
-        cmds.push(CMD.LF);
-        cmds.push('Staff signature: _______________' + CMD.LF);
-        cmds.push('User signature:  _______________' + CMD.LF);
-        cmds.push(CMD.LF);
-        cmds.push(CMD.CUT);
+        parts.push(d + CMD.LF);
+        parts.push('Total items: ' + items.length + CMD.LF);
+        parts.push(CMD.LF);
+        parts.push('Staff signature: _______________' + CMD.LF);
+        parts.push('User signature:  _______________' + CMD.LF);
+        parts.push(CMD.LF);
+        parts.push(CMD.CUT);
 
-        return cmds;
+        return parts;
+    }
+
+    /**
+     * Send ESC/POS data to the printer.
+     *
+     * USB mode: claim device → send raw data → release device (qz.usb.* API)
+     * Printer name mode: create config → qz.print() (OS driver API)
+     */
+    function sendToPrinter(parts) {
+        if (_cfg.connectionType === 'usb' && _cfg.usbVendorId && _cfg.usbProductId) {
+            var vendorId  = _cfg.usbVendorId;
+            var productId = _cfg.usbProductId;
+            var iface     = _cfg.usbInterface || '0x00';
+            var endpoint  = _cfg.usbEndpoint  || '0x01';
+
+            // Concatenate all parts into one payload for sendData
+            var payload = parts.join('');
+
+            return qz.usb.claimDevice(vendorId, productId, iface)
+                .then(function () {
+                    return qz.usb.sendData(vendorId, productId, endpoint, payload);
+                })
+                .then(function () {
+                    return qz.usb.releaseDevice(vendorId, productId);
+                })
+                .catch(function (err) {
+                    // Always try to release on error
+                    return qz.usb.releaseDevice(vendorId, productId)
+                        .catch(function () { /* ignore release error */ })
+                        .then(function () { throw err; });
+                });
+        }
+
+        // Printer name mode: use qz.print() with OS driver
+        var config = qz.configs.create(_cfg.printerName, { encoding: 'UTF-8' });
+        return qz.print(config, parts);
     }
 
     function printReceipt(checkoutId, title) {
@@ -185,11 +205,8 @@ var SnipePrint = (function () {
             return r.json();
         }).then(function (data) {
             if (data.error) throw new Error(data.error);
-
-            var cmds = buildReceiptCommands(data, title);
-            return createPrinterConfig().then(function (config) {
-                return qz.print(config, cmds);
-            });
+            var parts = buildReceiptData(data, title);
+            return sendToPrinter(parts);
         });
     }
 
@@ -204,27 +221,25 @@ var SnipePrint = (function () {
     function printTest() {
         return connect().then(function () {
             var d = divider();
-            var cmds = [];
+            var parts = [];
 
-            cmds.push(CMD.INIT);
-            cmds.push(CMD.ALIGN_CTR);
-            cmds.push(CMD.BOLD_ON);
-            cmds.push('QZ TRAY TEST' + CMD.LF);
-            cmds.push(CMD.BOLD_OFF);
-            cmds.push(CMD.ALIGN_LEFT);
-            cmds.push(d + CMD.LF);
-            cmds.push('Printer: ' + printerLabel() + CMD.LF);
-            cmds.push('Mode: ' + _cfg.connectionType + CMD.LF);
-            cmds.push('Paper width: ' + _cfg.paperWidth + ' chars' + CMD.LF);
-            cmds.push('Time: ' + new Date().toLocaleString() + CMD.LF);
-            cmds.push(d + CMD.LF);
-            cmds.push('If you can read this, printing works!' + CMD.LF);
-            cmds.push(CMD.LF);
-            cmds.push(CMD.CUT);
+            parts.push(CMD.INIT);
+            parts.push(CMD.ALIGN_CTR);
+            parts.push(CMD.BOLD_ON);
+            parts.push('QZ TRAY TEST' + CMD.LF);
+            parts.push(CMD.BOLD_OFF);
+            parts.push(CMD.ALIGN_LEFT);
+            parts.push(d + CMD.LF);
+            parts.push('Printer: ' + printerLabel() + CMD.LF);
+            parts.push('Mode: ' + _cfg.connectionType + CMD.LF);
+            parts.push('Paper width: ' + _cfg.paperWidth + ' chars' + CMD.LF);
+            parts.push('Time: ' + new Date().toLocaleString() + CMD.LF);
+            parts.push(d + CMD.LF);
+            parts.push('If you can read this, printing works!' + CMD.LF);
+            parts.push(CMD.LF);
+            parts.push(CMD.CUT);
 
-            return createPrinterConfig().then(function (config) {
-                return qz.print(config, cmds);
-            });
+            return sendToPrinter(parts);
         });
     }
 

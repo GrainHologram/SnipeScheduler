@@ -75,6 +75,7 @@ Sends raw ESC/POS commands directly to the USB device, bypassing the OS printer 
 
 - Set **Connection type** to **Direct USB (raw)**
 - Enter the **USB Vendor ID** and **USB Product ID** in hex format (e.g., `0x04B8` and `0x0202`)
+- **USB Interface** and **USB Endpoint** default to `0x00` and `0x01` respectively, which work for most receipt printers. Only change these if your printer uses non-standard values.
 - See "Finding USB Vendor/Product IDs" below
 
 #### OS Printer Name
@@ -161,6 +162,12 @@ Both print the same information (checkout details, item list, signature lines) w
 - Verify the vendor/product IDs are correct (see section 4)
 - Ensure the printer is plugged in and powered on
 - On Linux, the user running QZ Tray may need permission to access USB devices (`udev` rules)
+
+### "USB claim failed" or "Interface not found" (Direct USB mode)
+- The USB interface or endpoint values may not match your printer
+- Most receipt printers use interface `0x00` and endpoint `0x01` (the defaults)
+- If those don't work, check your printer's USB descriptor using `lsusb -v` (Linux) or USB Prober (macOS)
+- On Windows, another driver may have exclusive access to the USB device — try closing other printer management software
 
 ### "Private key not found" or "Certificate not found"
 - The file paths in settings are incorrect

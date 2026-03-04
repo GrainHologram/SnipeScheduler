@@ -462,6 +462,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $qzTray['printer_name']        = $post('qz_printer_name', $qzTray['printer_name'] ?? '');
     $qzTray['usb_vendor_id']       = $post('qz_usb_vendor_id', $qzTray['usb_vendor_id'] ?? '');
     $qzTray['usb_product_id']      = $post('qz_usb_product_id', $qzTray['usb_product_id'] ?? '');
+    $qzTray['usb_interface']       = $post('qz_usb_interface', $qzTray['usb_interface'] ?? '0x00');
+    $qzTray['usb_endpoint']        = $post('qz_usb_endpoint', $qzTray['usb_endpoint'] ?? '0x01');
     $qzTray['cert_path']           = $post('qz_cert_path', $qzTray['cert_path'] ?? '');
     $qzTray['private_key_path']    = $post('qz_private_key_path', $qzTray['private_key_path'] ?? '');
     $pwRaw = $post('qz_paper_width', $qzTray['paper_width'] ?? 48);
@@ -1078,6 +1080,16 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                                 <label class="form-label">USB Product ID</label>
                                 <input type="text" name="qz_usb_product_id" class="form-control" value="<?= h($cfg(['qz_tray', 'usb_product_id'], '')) ?>" placeholder="e.g. 0x0202">
                                 <div class="form-text">Hex product ID from the USB device.</div>
+                            </div>
+                            <div class="col-md-4 qz-field-usb" <?= $qzConnType !== 'usb' ? 'style="display:none"' : '' ?>>
+                                <label class="form-label">USB Interface</label>
+                                <input type="text" name="qz_usb_interface" class="form-control" value="<?= h($cfg(['qz_tray', 'usb_interface'], '0x00')) ?>" placeholder="0x00">
+                                <div class="form-text">Usually <code>0x00</code> for receipt printers.</div>
+                            </div>
+                            <div class="col-md-4 qz-field-usb" <?= $qzConnType !== 'usb' ? 'style="display:none"' : '' ?>>
+                                <label class="form-label">USB Endpoint (OUT)</label>
+                                <input type="text" name="qz_usb_endpoint" class="form-control" value="<?= h($cfg(['qz_tray', 'usb_endpoint'], '0x01')) ?>" placeholder="0x01">
+                                <div class="form-text">OUT endpoint, usually <code>0x01</code>. Find via <code>lsusb -v</code> on Linux.</div>
                             </div>
                             <div class="col-md-6 qz-field-name" <?= $qzConnType !== 'printer_name' ? 'style="display:none"' : '' ?>>
                                 <label class="form-label">Printer name</label>

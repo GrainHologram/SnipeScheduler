@@ -177,6 +177,8 @@ return [
         'printer_name'         => '',       // OS printer name (e.g. 'EPSON TM-T88V') — used when connection_type is 'printer_name'
         'usb_vendor_id'        => '',       // USB vendor hex ID (e.g. '0x04B8') — used when connection_type is 'usb'
         'usb_product_id'       => '',       // USB product hex ID (e.g. '0x0202') — used when connection_type is 'usb'
+        'usb_interface'        => '0x00',   // USB interface (usually 0x00 for receipt printers)
+        'usb_endpoint'         => '0x01',   // USB OUT endpoint (usually 0x01 for receipt printers)
         'connection_type'      => 'usb',    // 'printer_name' = OS driver, 'usb' = direct USB raw
         'cert_path'            => '',       // Absolute path to public cert PEM (outside web root)
         'private_key_path'     => '',       // Absolute path to private key PEM (outside web root)
