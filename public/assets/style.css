@@ -1462,6 +1462,20 @@ form .form-select {
         page-break-before: always;
     }
 
+    /* Eliminate trailing space that causes blank second page */
+    .overdue-report-body {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+
+    .overdue-report-body .mb-3:last-child {
+        margin-bottom: 0 !important;
+    }
+
+    .overdue-report-table {
+        margin-bottom: 0 !important;
+    }
+
     /* Landscape orientation for wide tables */
     @page {
         margin: 1.5cm;
