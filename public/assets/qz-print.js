@@ -90,16 +90,22 @@ var SnipePrint = (function () {
     }
 
     /**
-     * Create a QZ printer config based on the connection type.
+     * Find and create a QZ printer config based on the connection type.
+     * Returns a Promise that resolves to a qz config object.
+     *
+     * USB mode: uses qz.printers.find() to locate the device by vendor/product ID,
+     * then creates a config from the found printer name.
      */
     function createPrinterConfig() {
         if (_cfg.connectionType === 'usb' && _cfg.usbVendorId && _cfg.usbProductId) {
-            return qz.configs.create({
+            return qz.printers.find({
                 vendor: _cfg.usbVendorId,
                 product: _cfg.usbProductId
+            }).then(function (found) {
+                return qz.configs.create(found);
             });
         }
-        return qz.configs.create(_cfg.printerName, { encoding: 'UTF-8' });
+        return Promise.resolve(qz.configs.create(_cfg.printerName, { encoding: 'UTF-8' }));
     }
 
     function printerLabel() {
@@ -181,9 +187,9 @@ var SnipePrint = (function () {
             if (data.error) throw new Error(data.error);
 
             var cmds = buildReceiptCommands(data, title);
-            var config = createPrinterConfig();
-
-            return qz.print(config, cmds);
+            return createPrinterConfig().then(function (config) {
+                return qz.print(config, cmds);
+            });
         });
     }
 
@@ -216,8 +222,9 @@ var SnipePrint = (function () {
             cmds.push(CMD.LF);
             cmds.push(CMD.CUT);
 
-            var config = createPrinterConfig();
-            return qz.print(config, cmds);
+            return createPrinterConfig().then(function (config) {
+                return qz.print(config, cmds);
+            });
         });
     }
 
