@@ -1468,6 +1468,17 @@ $active  = basename($_SERVER['PHP_SELF']);
                         <?php if (!empty($selectedReservation['notes'])): ?>
                             <div><strong>Notes:</strong> <?= nl2br(h($selectedReservation['notes'])) ?></div>
                         <?php endif; ?>
+                        <?php
+                            $qzConfig = load_config()['qz_tray'] ?? [];
+                            if (!empty($qzConfig['enabled']) && !empty($selectedItems)):
+                        ?>
+                            <hr class="my-2">
+                            <button type="button" class="btn btn-sm btn-outline-dark"
+                                    data-reservation-id="<?= (int)$selectedReservation['id'] ?>"
+                                    onclick="qzPrintReservationPickList(this)">
+                                Print Pick List
+                            </button>
+                        <?php endif; ?>
                     </div>
                 <?php endif; ?>
             </div>

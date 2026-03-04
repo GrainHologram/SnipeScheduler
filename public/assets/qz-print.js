@@ -117,12 +117,10 @@ var SnipePrint = (function () {
     }
 
     /**
-     * Build raw ESC/POS data as a single concatenated string.
+     * Build receipt header (app name, title, user, dates).
      */
-    function buildReceiptData(data, title) {
+    function buildHeader(parts, data, title, idLabel) {
         var d = divider();
-        var parts = [];
-
         parts.push(CMD.INIT);
         parts.push(CMD.ALIGN_CTR);
         parts.push(CMD.BOLD_ON);
@@ -131,11 +129,34 @@ var SnipePrint = (function () {
         parts.push(CMD.BOLD_OFF);
         parts.push(CMD.ALIGN_LEFT);
         parts.push(d + CMD.LF);
-        parts.push('Checkout #' + data.checkout_id + CMD.LF);
+        parts.push(idLabel + CMD.LF);
         parts.push('User: ' + (data.user_name || data.user_email || 'Unknown') + CMD.LF);
         parts.push('Date: ' + data.start_datetime + CMD.LF);
         parts.push('Return by: ' + data.end_datetime + CMD.LF);
         parts.push(d + CMD.LF);
+    }
+
+    /**
+     * Build receipt footer (total, signature lines, cut).
+     */
+    function buildFooter(parts, totalLabel) {
+        var d = divider();
+        parts.push(d + CMD.LF);
+        parts.push(totalLabel + CMD.LF);
+        parts.push(CMD.LF);
+        parts.push('Staff signature: _______________' + CMD.LF);
+        parts.push('User signature:  _______________' + CMD.LF);
+        parts.push(CMD.LF);
+        parts.push(CMD.CUT);
+    }
+
+    /**
+     * Build ESC/POS data for a checkout receipt (asset tags + model names).
+     */
+    function buildCheckoutData(data, title) {
+        var parts = [];
+        buildHeader(parts, data, title, 'Checkout #' + data.checkout_id);
+
         parts.push(CMD.BOLD_ON);
         parts.push('ITEMS' + CMD.LF);
         parts.push(CMD.BOLD_OFF);
@@ -148,14 +169,31 @@ var SnipePrint = (function () {
             parts.push(truncate(tag + ' - ' + model) + CMD.LF);
         }
 
-        parts.push(d + CMD.LF);
-        parts.push('Total items: ' + items.length + CMD.LF);
-        parts.push(CMD.LF);
-        parts.push('Staff signature: _______________' + CMD.LF);
-        parts.push('User signature:  _______________' + CMD.LF);
-        parts.push(CMD.LF);
-        parts.push(CMD.CUT);
+        buildFooter(parts, 'Total items: ' + items.length);
+        return parts;
+    }
 
+    /**
+     * Build ESC/POS data for a reservation pick sheet (model names + quantities).
+     */
+    function buildReservationData(data) {
+        var parts = [];
+        buildHeader(parts, data, 'PICK LIST', 'Reservation #' + data.reservation_id);
+
+        parts.push(CMD.BOLD_ON);
+        parts.push('ITEMS TO COLLECT' + CMD.LF);
+        parts.push(CMD.BOLD_OFF);
+
+        var items = data.items || [];
+        var totalQty = 0;
+        for (var j = 0; j < items.length; j++) {
+            var item = items[j];
+            var qty = item.quantity || 1;
+            totalQty += qty;
+            parts.push(truncate(qty + 'x ' + (item.model_name || '')) + CMD.LF);
+        }
+
+        buildFooter(parts, 'Total items: ' + totalQty);
         return parts;
     }
 
@@ -205,7 +243,22 @@ var SnipePrint = (function () {
             return r.json();
         }).then(function (data) {
             if (data.error) throw new Error(data.error);
-            var parts = buildReceiptData(data, title);
+            var parts = buildCheckoutData(data, title);
+            return sendToPrinter(parts);
+        });
+    }
+
+    function printReservationPickSheet(reservationId) {
+        return connect().then(function () {
+            return fetch('ajax_checkout_receipt.php?reservation_id=' + encodeURIComponent(reservationId), {
+                credentials: 'same-origin'
+            });
+        }).then(function (r) {
+            if (!r.ok) throw new Error('Failed to load reservation data (HTTP ' + r.status + ')');
+            return r.json();
+        }).then(function (data) {
+            if (data.error) throw new Error(data.error);
+            var parts = buildReservationData(data);
             return sendToPrinter(parts);
         });
     }
@@ -247,12 +300,13 @@ var SnipePrint = (function () {
         init: init,
         connect: connect,
         printPickSheet: printPickSheet,
+        printReservationPickSheet: printReservationPickSheet,
         printCheckoutReceipt: printCheckoutReceipt,
         printTest: printTest
     };
 })();
 
-// Global helper for pick sheet buttons
+// Global helper for checkout pick sheet buttons
 function qzPrintPickSheet(btn) {
     var id = btn.getAttribute('data-checkout-id');
     btn.disabled = true;
@@ -263,5 +317,19 @@ function qzPrintPickSheet(btn) {
             alert('Print failed: ' + (err.message || err));
             btn.disabled = false;
             btn.textContent = 'Print Pick Sheet';
+        });
+}
+
+// Global helper for reservation pick list buttons
+function qzPrintReservationPickList(btn) {
+    var id = btn.getAttribute('data-reservation-id');
+    btn.disabled = true;
+    btn.textContent = 'Printing...';
+    SnipePrint.printReservationPickSheet(id)
+        .then(function () { btn.textContent = 'Printed!'; })
+        .catch(function (err) {
+            alert('Print failed: ' + (err.message || err));
+            btn.disabled = false;
+            btn.textContent = 'Print Pick List';
         });
 }
