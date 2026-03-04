@@ -183,7 +183,9 @@ if (!function_exists('render_overdue_report_html')) {
                         . ' <span class="badge bg-secondary">' . count($userRows) . ' item' . (count($userRows) !== 1 ? 's' : '') . '</span>';
                     if ($userPrintLinks) {
                         $printUrl = 'overdue_report.php?group=user&user=' . urlencode($userKey) . '&print=1';
+                        $pdfUrl   = 'overdue_report.php?user=' . urlencode($userKey) . '&format=pdf';
                         $html .= ' <a href="' . $esc($printUrl) . '" target="_blank" class="btn btn-sm btn-outline-secondary ms-2 no-print" title="Print this user\'s report">Print</a>';
+                        $html .= ' <a href="' . $esc($pdfUrl) . '" class="btn btn-sm btn-outline-primary ms-1 no-print" title="Download PDF for this user">PDF</a>';
                     }
                     $html .= '</h6>';
                 } else {
@@ -250,6 +252,68 @@ if (!function_exists('render_overdue_report_html')) {
         }
 
         $html .= '</tbody></table>';
+        return $html;
+    }
+}
+
+if (!function_exists('render_overdue_pdf_html')) {
+    /**
+     * Build a standalone HTML document suitable for wkhtmltopdf.
+     *
+     * All styles are inlined so there are no external dependencies.
+     */
+    function render_overdue_pdf_html(array $rows, string $appName, string $filteredUserName, string $generated, bool $groupByUser): string
+    {
+        $esc = function (string $s): string {
+            return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+        };
+
+        $totalCount = count($rows);
+        $tableHtml  = render_overdue_report_html($rows, [
+            'context'       => 'web',
+            'group_by_user' => $groupByUser,
+        ]);
+
+        $subtitle = $filteredUserName !== ''
+            ? 'Overdue Items — ' . $esc($filteredUserName)
+            : 'Overdue Asset Report';
+
+        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8">';
+        $html .= '<style>';
+        $html .= '@page { size: landscape; margin: 1.5cm; }';
+        $html .= 'body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; margin: 0; padding: 0; }';
+        $html .= '.print-report-header { text-align: center; margin-bottom: 1rem; }';
+        $html .= '.print-report-header h1 { font-size: 16pt; margin: 0; }';
+        $html .= '.print-report-header h2 { font-size: 13pt; margin: 2pt 0; font-weight: 400; }';
+        $html .= '.print-report-header p { font-size: 9pt; color: #555; margin: 4pt 0 0 0; }';
+        $html .= 'table { width: 100%; border-collapse: collapse; font-size: 10pt; }';
+        $html .= 'th, td { border: 1px solid #ccc; padding: 4px 6px; }';
+        $html .= 'th { background: #f1f1f1; text-align: left; }';
+        $html .= '.overdue-row-danger { background-color: #f8d7da; }';
+        $html .= '.overdue-row-warning { background-color: #fff3cd; }';
+        $html .= 'tr { page-break-inside: avoid; }';
+        $html .= '.text-center { text-align: center; }';
+        $html .= '.text-muted { color: #6c757d; }';
+        $html .= '.small { font-size: 0.875em; }';
+        $html .= '.fw-semibold { font-weight: 600; }';
+        $html .= '.badge { display: inline-block; padding: 0.25em 0.5em; font-size: 0.75em; font-weight: 700; border-radius: 0.375rem; }';
+        $html .= '.bg-secondary { background-color: #6c757d; color: #fff; }';
+        $html .= '.mb-2 { margin-bottom: 0.5rem; }';
+        $html .= '.mb-3 { margin-bottom: 1rem; }';
+        $html .= '.overdue-user-group-break { page-break-before: always; }';
+        $html .= '.overdue-user-group { page-break-inside: avoid; }';
+        $html .= '.no-print { display: none; }';
+        $html .= '</style></head><body>';
+
+        $html .= '<div class="print-report-header">';
+        $html .= '<h1>' . $esc($appName) . '</h1>';
+        $html .= '<h2>' . $subtitle . '</h2>';
+        $html .= '<p>Generated: ' . $esc($generated) . ' | Total: ' . $totalCount . ' overdue item' . ($totalCount !== 1 ? 's' : '') . '</p>';
+        $html .= '</div>';
+
+        $html .= $tableHtml;
+
+        $html .= '</body></html>';
         return $html;
     }
 }
