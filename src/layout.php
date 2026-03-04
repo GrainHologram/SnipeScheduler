@@ -263,7 +263,6 @@ if (!function_exists('layout_footer')) {
         $qzConfig = load_config()['qz_tray'] ?? [];
         if (!empty($qzConfig['enabled']) && (!empty($_SESSION['user']['is_staff']) || !empty($_SESSION['user']['is_admin']))) {
             echo '<script src="https://cdn.jsdelivr.net/npm/qz-tray@2/qz-tray.js"></script>';
-            echo '<script src="https://cdn.jsdelivr.net/npm/receipt-printer-encoder@3/dist/receipt-printer-encoder.umd.js"></script>';
             echo '<script src="assets/qz-print.js"></script>';
             echo '<script>SnipePrint.init(' . json_encode([
                 'connectionType' => $qzConfig['connection_type'] ?? 'usb',

@@ -3,9 +3,11 @@
  * Client-side QZ Tray integration for receipt printing.
  * IIFE module exposing window.SnipePrint.
  *
+ * Builds raw ESC/POS commands directly — no external encoder library needed.
+ *
  * Supports two connection modes:
- *   - 'printer_name': uses the OS printer driver by name
  *   - 'usb': direct raw USB printing via vendor/product hex IDs
+ *   - 'printer_name': uses the OS printer driver by name
  */
 var SnipePrint = (function () {
     'use strict';
@@ -19,6 +21,19 @@ var SnipePrint = (function () {
         paperWidth: 48
     };
     var _connected = false;
+
+    // ESC/POS command constants (hex)
+    var ESC = '\x1B';
+    var GS  = '\x1D';
+    var CMD = {
+        INIT:       ESC + '@',            // Initialize printer
+        BOLD_ON:    ESC + 'E' + '\x01',   // Bold on
+        BOLD_OFF:   ESC + 'E' + '\x00',   // Bold off
+        ALIGN_LEFT: ESC + 'a' + '\x00',   // Left align
+        ALIGN_CTR:  ESC + 'a' + '\x01',   // Center align
+        CUT:        GS  + 'V' + '\x41' + '\x03', // Partial cut with feed
+        LF:         '\x0A'               // Line feed
+    };
 
     function init(cfg) {
         if (cfg.connectionType) _cfg.connectionType = cfg.connectionType;
@@ -76,8 +91,6 @@ var SnipePrint = (function () {
 
     /**
      * Create a QZ printer config based on the connection type.
-     * - 'usb': direct raw USB via vendor/product IDs
-     * - 'printer_name': OS printer driver by name
      */
     function createPrinterConfig() {
         if (_cfg.connectionType === 'usb' && _cfg.usbVendorId && _cfg.usbProductId) {
@@ -96,55 +109,64 @@ var SnipePrint = (function () {
         return _cfg.printerName || '(default)';
     }
 
-    function buildReceiptData(data, title) {
-        var w = _cfg.paperWidth;
-        var divider = '';
-        for (var i = 0; i < w; i++) divider += '\u2500';
+    /**
+     * Build a divider line of the configured width.
+     */
+    function divider() {
+        var s = '';
+        for (var i = 0; i < _cfg.paperWidth; i++) s += '-';
+        return s;
+    }
 
-        var encoder = new ReceiptPrinterEncoder({
-            columns: w,
-            newline: '\n'
-        });
+    /**
+     * Truncate a string to fit the paper width.
+     */
+    function truncate(s) {
+        return s.length > _cfg.paperWidth ? s.substring(0, _cfg.paperWidth) : s;
+    }
 
-        encoder
-            .initialize()
-            .codepage('auto')
-            .align('center')
-            .bold(true)
-            .line(data.app_name || 'SnipeScheduler')
-            .line(title)
-            .bold(false)
-            .align('left')
-            .line(divider)
-            .line('Checkout #' + data.checkout_id)
-            .line('User: ' + (data.user_name || data.user_email || 'Unknown'))
-            .line('Date: ' + data.start_datetime)
-            .line('Return by: ' + data.end_datetime)
-            .line(divider)
-            .bold(true)
-            .line('ITEMS')
-            .bold(false);
+    /**
+     * Build raw ESC/POS data array for a receipt.
+     * Each element is a string that QZ Tray sends as raw bytes.
+     */
+    function buildReceiptCommands(data, title) {
+        var d = divider();
+        var cmds = [];
+
+        cmds.push(CMD.INIT);
+        cmds.push(CMD.ALIGN_CTR);
+        cmds.push(CMD.BOLD_ON);
+        cmds.push((data.app_name || 'SnipeScheduler') + CMD.LF);
+        cmds.push(title + CMD.LF);
+        cmds.push(CMD.BOLD_OFF);
+        cmds.push(CMD.ALIGN_LEFT);
+        cmds.push(d + CMD.LF);
+        cmds.push('Checkout #' + data.checkout_id + CMD.LF);
+        cmds.push('User: ' + (data.user_name || data.user_email || 'Unknown') + CMD.LF);
+        cmds.push('Date: ' + data.start_datetime + CMD.LF);
+        cmds.push('Return by: ' + data.end_datetime + CMD.LF);
+        cmds.push(d + CMD.LF);
+        cmds.push(CMD.BOLD_ON);
+        cmds.push('ITEMS' + CMD.LF);
+        cmds.push(CMD.BOLD_OFF);
 
         var items = data.items || [];
         for (var j = 0; j < items.length; j++) {
             var item = items[j];
             var tag = item.asset_tag || '';
             var model = item.model_name || '';
-            var line = tag + ' - ' + model;
-            if (line.length > w) line = line.substring(0, w);
-            encoder.line(line);
+            cmds.push(truncate(tag + ' - ' + model) + CMD.LF);
         }
 
-        encoder
-            .line(divider)
-            .line('Total items: ' + items.length)
-            .newline()
-            .line('Staff signature: _______________')
-            .line('User signature:  _______________')
-            .newline()
-            .cut();
+        cmds.push(d + CMD.LF);
+        cmds.push('Total items: ' + items.length + CMD.LF);
+        cmds.push(CMD.LF);
+        cmds.push('Staff signature: _______________' + CMD.LF);
+        cmds.push('User signature:  _______________' + CMD.LF);
+        cmds.push(CMD.LF);
+        cmds.push(CMD.CUT);
 
-        return encoder.encode();
+        return cmds;
     }
 
     function printReceipt(checkoutId, title) {
@@ -158,11 +180,10 @@ var SnipePrint = (function () {
         }).then(function (data) {
             if (data.error) throw new Error(data.error);
 
-            var raw = buildReceiptData(data, title);
+            var cmds = buildReceiptCommands(data, title);
             var config = createPrinterConfig();
-            var printData = [{ type: 'raw', format: 'command', data: raw, options: { language: 'ESCPOS' } }];
 
-            return qz.print(config, printData);
+            return qz.print(config, cmds);
         });
     }
 
@@ -176,38 +197,27 @@ var SnipePrint = (function () {
 
     function printTest() {
         return connect().then(function () {
-            var w = _cfg.paperWidth;
-            var divider = '';
-            for (var i = 0; i < w; i++) divider += '\u2500';
+            var d = divider();
+            var cmds = [];
 
-            var encoder = new ReceiptPrinterEncoder({
-                columns: w,
-                newline: '\n'
-            });
+            cmds.push(CMD.INIT);
+            cmds.push(CMD.ALIGN_CTR);
+            cmds.push(CMD.BOLD_ON);
+            cmds.push('QZ TRAY TEST' + CMD.LF);
+            cmds.push(CMD.BOLD_OFF);
+            cmds.push(CMD.ALIGN_LEFT);
+            cmds.push(d + CMD.LF);
+            cmds.push('Printer: ' + printerLabel() + CMD.LF);
+            cmds.push('Mode: ' + _cfg.connectionType + CMD.LF);
+            cmds.push('Paper width: ' + _cfg.paperWidth + ' chars' + CMD.LF);
+            cmds.push('Time: ' + new Date().toLocaleString() + CMD.LF);
+            cmds.push(d + CMD.LF);
+            cmds.push('If you can read this, printing works!' + CMD.LF);
+            cmds.push(CMD.LF);
+            cmds.push(CMD.CUT);
 
-            encoder
-                .initialize()
-                .codepage('auto')
-                .align('center')
-                .bold(true)
-                .line('QZ TRAY TEST')
-                .bold(false)
-                .align('left')
-                .line(divider)
-                .line('Printer: ' + printerLabel())
-                .line('Mode: ' + _cfg.connectionType)
-                .line('Paper width: ' + w + ' chars')
-                .line('Time: ' + new Date().toLocaleString())
-                .line(divider)
-                .line('If you can read this, printing works!')
-                .newline()
-                .cut();
-
-            var raw = encoder.encode();
             var config = createPrinterConfig();
-            var printData = [{ type: 'raw', format: 'command', data: raw, options: { language: 'ESCPOS' } }];
-
-            return qz.print(config, printData);
+            return qz.print(config, cmds);
         });
     }
 
