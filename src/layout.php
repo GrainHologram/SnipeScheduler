@@ -272,7 +272,7 @@ if (!function_exists('layout_footer')) {
                 'usbInterface'   => $qzConfig['usb_interface'] ?? '0x00',
                 'usbEndpoint'    => $qzConfig['usb_endpoint'] ?? '0x01',
                 'certUrl'        => 'ajax_qz_cert.php',
-                'paperWidth'     => (int)($qzConfig['paper_width'] ?? 48),
+                'paperWidth'     => (int)($qzConfig['paper_width'] ?? 42),
             ]) . ');</script>';
         }
 

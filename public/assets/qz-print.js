@@ -20,7 +20,7 @@ var SnipePrint = (function () {
         usbInterface: '0x00',
         usbEndpoint: '0x01',
         certUrl: 'ajax_qz_cert.php',
-        paperWidth: 48
+        paperWidth: 42
     };
     var _connected = false;
 

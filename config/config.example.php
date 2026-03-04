@@ -182,7 +182,7 @@ return [
         'connection_type'      => 'usb',    // 'printer_name' = OS driver, 'usb' = direct USB raw
         'cert_path'            => '',       // Absolute path to public cert PEM (outside web root)
         'private_key_path'     => '',       // Absolute path to private key PEM (outside web root)
-        'paper_width'          => 48,       // Chars per line: 48 for 80mm, 32 for 58mm
+        'paper_width'          => 42,       // Chars per line: 42 for 80mm, 30 for 58mm
         'auto_print_checkout'  => false,    // Auto-print receipt on successful checkout
     ],
 

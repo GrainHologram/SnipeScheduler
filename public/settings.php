@@ -466,8 +466,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $qzTray['usb_endpoint']        = $post('qz_usb_endpoint', $qzTray['usb_endpoint'] ?? '0x01');
     $qzTray['cert_path']           = $post('qz_cert_path', $qzTray['cert_path'] ?? '');
     $qzTray['private_key_path']    = $post('qz_private_key_path', $qzTray['private_key_path'] ?? '');
-    $pwRaw = $post('qz_paper_width', $qzTray['paper_width'] ?? 48);
-    $qzTray['paper_width']         = in_array((int)$pwRaw, [32, 48], true) ? (int)$pwRaw : 48;
+    $pwRaw = $post('qz_paper_width', $qzTray['paper_width'] ?? 42);
+    $qzTray['paper_width']         = in_array((int)$pwRaw, [30, 42], true) ? (int)$pwRaw : 42;
     $qzTray['auto_print_checkout'] = isset($_POST['qz_auto_print']);
 
     $newConfig = $config;
@@ -1048,7 +1048,7 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
             <?php
                 $qzEnabled   = (bool)$cfg(['qz_tray', 'enabled'], false);
                 $qzAutoPrint = (bool)$cfg(['qz_tray', 'auto_print_checkout'], false);
-                $qzPaperWidth = (int)$cfg(['qz_tray', 'paper_width'], 48);
+                $qzPaperWidth = (int)$cfg(['qz_tray', 'paper_width'], 42);
                 $qzConnType  = $cfg(['qz_tray', 'connection_type'], 'usb');
             ?>
             <div class="col-12">
@@ -1099,8 +1099,8 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                             <div class="col-md-3">
                                 <label class="form-label">Paper width</label>
                                 <select name="qz_paper_width" class="form-select">
-                                    <option value="48" <?= $qzPaperWidth === 48 ? 'selected' : '' ?>>80mm (48 chars)</option>
-                                    <option value="32" <?= $qzPaperWidth === 32 ? 'selected' : '' ?>>58mm (32 chars)</option>
+                                    <option value="42" <?= $qzPaperWidth === 42 ? 'selected' : '' ?>>80mm (42 chars)</option>
+                                    <option value="30" <?= $qzPaperWidth === 30 ? 'selected' : '' ?>>58mm (30 chars)</option>
                                 </select>
                             </div>
                             <div class="col-md-6">

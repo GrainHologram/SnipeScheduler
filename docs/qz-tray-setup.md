@@ -59,7 +59,7 @@ Alternatively, for enterprise deployments, you can pre-install the certificate v
 3. Configure:
    - **Enable QZ Tray receipt printing**: Check to enable
    - **Connection type**: Choose between Direct USB or OS printer name (see below)
-   - **Paper width**: 80mm (48 chars) or 58mm (32 chars) depending on your printer
+   - **Paper width**: 80mm (42 chars) or 58mm (30 chars) depending on your printer
    - **Certificate path**: Absolute path, e.g. `/etc/qz-tray/digital-certificate.txt`
    - **Private key path**: Absolute path, e.g. `/etc/qz-tray/private-key.pem`
    - **Auto-print checkout receipt**: Optionally auto-print on successful checkout
@@ -181,6 +181,6 @@ Both print the same information (checkout details, item list, signature lines) w
 
 ### Prints are garbled or wrong width
 - Paper width setting does not match the actual printer paper
-- 80mm paper = 48 characters per line
-- 58mm paper = 32 characters per line
+- 80mm paper = 42 characters per line (Font A standard)
+- 58mm paper = 30 characters per line (Font A standard)
 - Update the paper width setting and test again
