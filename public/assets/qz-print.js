@@ -124,15 +124,15 @@ var SnipePrint = (function () {
         parts.push(CMD.INIT);
         parts.push(CMD.ALIGN_CTR);
         parts.push(CMD.BOLD_ON);
-        parts.push((data.app_name || 'SnipeScheduler') + CMD.LF);
-        parts.push(title + CMD.LF);
+        parts.push(truncate(data.app_name || 'SnipeScheduler') + CMD.LF);
+        parts.push(truncate(title) + CMD.LF);
         parts.push(CMD.BOLD_OFF);
         parts.push(CMD.ALIGN_LEFT);
         parts.push(d + CMD.LF);
-        parts.push(idLabel + CMD.LF);
-        parts.push('User: ' + (data.user_name || data.user_email || 'Unknown') + CMD.LF);
-        parts.push('Date: ' + data.start_datetime + CMD.LF);
-        parts.push('Return by: ' + data.end_datetime + CMD.LF);
+        parts.push(truncate(idLabel) + CMD.LF);
+        parts.push(truncate('User: ' + (data.user_name || data.user_email || 'Unknown')) + CMD.LF);
+        parts.push(truncate('Date: ' + data.start_datetime) + CMD.LF);
+        parts.push(truncate('Return by: ' + data.end_datetime) + CMD.LF);
         parts.push(d + CMD.LF);
     }
 
@@ -142,10 +142,10 @@ var SnipePrint = (function () {
     function buildFooter(parts, totalLabel) {
         var d = divider();
         parts.push(d + CMD.LF);
-        parts.push(totalLabel + CMD.LF);
+        parts.push(truncate(totalLabel) + CMD.LF);
         parts.push(CMD.LF);
-        parts.push('Staff signature: _______________' + CMD.LF);
-        parts.push('User signature:  _______________' + CMD.LF);
+        parts.push(truncate('Staff signature: _______________') + CMD.LF);
+        parts.push(truncate('User signature:  _______________') + CMD.LF);
         parts.push(CMD.LF);
         parts.push(CMD.CUT);
     }
@@ -279,16 +279,16 @@ var SnipePrint = (function () {
             parts.push(CMD.INIT);
             parts.push(CMD.ALIGN_CTR);
             parts.push(CMD.BOLD_ON);
-            parts.push('QZ TRAY TEST' + CMD.LF);
+            parts.push(truncate('QZ TRAY TEST') + CMD.LF);
             parts.push(CMD.BOLD_OFF);
             parts.push(CMD.ALIGN_LEFT);
             parts.push(d + CMD.LF);
-            parts.push('Printer: ' + printerLabel() + CMD.LF);
-            parts.push('Mode: ' + _cfg.connectionType + CMD.LF);
-            parts.push('Paper width: ' + _cfg.paperWidth + ' chars' + CMD.LF);
-            parts.push('Time: ' + new Date().toLocaleString() + CMD.LF);
+            parts.push(truncate('Printer: ' + printerLabel()) + CMD.LF);
+            parts.push(truncate('Mode: ' + _cfg.connectionType) + CMD.LF);
+            parts.push(truncate('Paper width: ' + _cfg.paperWidth + ' chars') + CMD.LF);
+            parts.push(truncate('Time: ' + new Date().toLocaleString()) + CMD.LF);
             parts.push(d + CMD.LF);
-            parts.push('If you can read this, printing works!' + CMD.LF);
+            parts.push(truncate('If you can read this, printing works!') + CMD.LF);
             parts.push(CMD.LF);
             parts.push(CMD.CUT);
 
