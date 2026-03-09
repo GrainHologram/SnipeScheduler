@@ -260,6 +260,8 @@ try {
     }
 
     $pdo->commit();
+    $wasStaffBookingFor = $isStaff && $userOverride;
+    $bookedForName = $userName;
     $_SESSION['basket'] = []; // clear basket
     unset($_SESSION['basket_kit_groups'], $_SESSION['basket_kit_names']);
     unset($_SESSION['booking_user_override']);
@@ -288,16 +290,29 @@ try {
     <title>Booking submitted</title>
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <?php if (!empty($wasStaffBookingFor)): ?>
+    <meta http-equiv="refresh" content="3;url=index.php">
+    <?php endif; ?>
 </head>
 <body class="p-4">
 <div class="container">
     <?= layout_logo_tag() ?>
+    <?php if (!empty($wasStaffBookingFor)): ?>
+    <h1>Booking submitted</h1>
+    <p>Reservation for <strong><?= h($bookedForName) ?></strong> has been submitted for <?= (int)$totalRequestedItems ?> item(s).</p>
+    <p class="text-muted">Redirecting to dashboard&hellip;</p>
+    <p>
+        <a href="index.php" class="btn btn-primary">Return to dashboard</a>
+        <a href="catalogue.php" class="btn btn-secondary">Book for another user</a>
+    </p>
+    <?php else: ?>
     <h1>Thank you</h1>
     <p>Your booking has been submitted for <?= (int)$totalRequestedItems ?> item(s).</p>
     <p>
         <a href="catalogue.php" class="btn btn-primary">Book more equipment</a>
         <a href="my_bookings.php" class="btn btn-secondary">View my bookings</a>
     </p>
+    <?php endif; ?>
 </div>
 <?php layout_footer(); ?>
 </body>
