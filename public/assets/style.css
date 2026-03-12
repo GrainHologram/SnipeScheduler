@@ -45,6 +45,10 @@ a:visited {
     color: var(--primary-strong);
 }
 
+a.btn:visited {
+    color: var(--bs-btn-color);
+}
+
 .btn.btn-link:visited,
 a.btn.btn-link:visited {
     color: inherit;
