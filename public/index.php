@@ -467,7 +467,7 @@ if ($welcomeEnabled):
             <ol class="mb-3" style="padding-left:1.25rem;">
                 <li class="mb-2">
                     <strong>Browse &amp; reserve</strong><br>
-                    <span class="text-muted">Visit the catalogue to see available equipment. Add items to your basket, choose your dates, and submit a reservation request.</span>
+                    <span class="text-muted">Visit the catalogue to see available equipment. The catalogue defaults to available kits; to see individual items, click on the "Equipment" tab. Add items to your basket, choose your dates, and submit a reservation request.</span>
                 </li>
                 <li class="mb-2">
                     <strong>Authorisation</strong><br>
