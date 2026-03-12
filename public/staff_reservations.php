@@ -56,8 +56,10 @@ $restoreError = '';
 
 // Filters
 $qRaw    = trim($_GET['q'] ?? '');
-$fromRaw = trim($_GET['from'] ?? '');
-$toRaw   = trim($_GET['to'] ?? '');
+$defaultFrom = date('Y-m-d', strtotime('-30 days'));
+$defaultTo   = date('Y-m-d', strtotime('+30 days'));
+$fromRaw = trim($_GET['from'] ?? $defaultFrom);
+$toRaw   = trim($_GET['to'] ?? $defaultTo);
 $pageRaw = (int)($_GET['page'] ?? 1);
 $perPageRaw = (int)($_GET['per_page'] ?? 10);
 $sortRaw = trim($_GET['sort'] ?? '');
