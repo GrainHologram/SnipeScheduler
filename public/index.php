@@ -159,6 +159,33 @@ if ($isStaff) {
     $stmt->execute([':nowUtc' => $nowUtc]);
     $overdueItems = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $overdueCount = count($overdueItems);
+
+    // Batch-fetch checkout_items for overdue checkouts (for items modal)
+    $overdueCheckoutIds = array_column($overdueItems, 'checkout_id');
+    $overdueCheckoutItems = [];
+    if (!empty($overdueCheckoutIds)) {
+        $ph = implode(',', array_fill(0, count($overdueCheckoutIds), '?'));
+        $ciStmt = $pdo->prepare("SELECT checkout_id, asset_tag, asset_name, model_name, checked_in_at
+                                   FROM checkout_items WHERE checkout_id IN ($ph) ORDER BY id");
+        $ciStmt->execute(array_values($overdueCheckoutIds));
+        foreach ($ciStmt->fetchAll(PDO::FETCH_ASSOC) as $ci) {
+            $overdueCheckoutItems[(int)$ci['checkout_id']][] = $ci;
+        }
+    }
+
+    // Group overdue by user_email
+    $overdueGrouped = [];
+    foreach ($overdueItems as $row) {
+        $email = $row['user_email'];
+        if (!isset($overdueGrouped[$email])) {
+            $overdueGrouped[$email] = [
+                'user_name' => $row['user_name'],
+                'snipeit_user_id' => $row['snipeit_user_id'],
+                'checkouts' => [],
+            ];
+        }
+        $overdueGrouped[$email]['checkouts'][] = $row;
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -412,28 +439,42 @@ if ($isStaff) {
                         <div class="card-body text-muted">No overdue items.</div>
                     <?php else: ?>
                         <div class="list-group list-group-flush">
-                            <?php foreach ($overdueItems as $item):
-                                $coName = $item['checkout_name'] ?: ($item['reservation_name'] ?: ($item['asset_name_cache'] ?: null));
-                                $coLabel = $coName ?: ($item['item_count'] . ' item' . ($item['item_count'] != 1 ? 's' : ''));
-                            ?>
+                            <?php foreach ($overdueGrouped as $odEmail => $odGroup): ?>
+                                <?php
+                                    $earliestOverdue = $odGroup['checkouts'][0]['end_datetime'];
+                                    $overdueTime = app_format_datetime($earliestOverdue);
+                                ?>
                                 <div class="list-group-item">
-                                    <div class="d-flex justify-content-between align-items-start">
-                                        <div>
-                                            <?= h($coLabel) ?>
-                                            <?php if ($coName && $item['item_count'] > 0): ?>
-                                                <span class="text-muted small">(<?= (int)$item['item_count'] ?> item<?= $item['item_count'] != 1 ? 's' : '' ?>)</span>
-                                            <?php endif; ?>
-                                            <div class="small text-muted">
-                                                <?= h($item['user_name']) ?> &mdash;
-                                                due <?= h(app_format_datetime($item['end_datetime'])) ?>
-                                            </div>
-                                        </div>
-                                        <?php if (!empty($item['snipeit_user_id'])): ?>
-                                            <a href="quick_checkin.php?user=<?= (int)$item['snipeit_user_id'] ?>" class="btn btn-sm btn-outline-danger">
-                                                Checkin
-                                            </a>
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        <span class="fw-semibold" style="min-width:0; flex:1;"><?= h($odGroup['user_name']) ?></span>
+                                        <span class="text-muted small flex-shrink-0">Due <?= h($overdueTime) ?></span>
+                                        <?php if (!empty($odGroup['snipeit_user_id'])): ?>
+                                            <a href="quick_checkin.php?user=<?= (int)$odGroup['snipeit_user_id'] ?>" class="btn btn-sm btn-outline-danger flex-shrink-0">Checkin</a>
                                         <?php endif; ?>
                                     </div>
+                                    <?php foreach ($odGroup['checkouts'] as $coRow): ?>
+                                        <?php
+                                            $coItems = $overdueCheckoutItems[(int)$coRow['checkout_id']] ?? [];
+                                            $coName = $coRow['checkout_name'] ?: ($coRow['reservation_name'] ?: ($coRow['asset_name_cache'] ?: null));
+                                            if (!$coName && !empty($coItems)) {
+                                                $names = array_column($coItems, 'asset_name');
+                                                $coName = implode(', ', array_filter($names));
+                                            }
+                                            $coLabel = $coName ?: ($coRow['item_count'] . ' item' . ($coRow['item_count'] != 1 ? 's' : ''));
+                                            $itemCount = (int)$coRow['item_count'];
+                                        ?>
+                                        <div class="d-flex align-items-center gap-2 ps-2" style="min-width:0;">
+                                            <span class="text-muted small" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1;">
+                                                <?= h($coLabel) ?>
+                                            </span>
+                                            <?php if ($itemCount > 0): ?>
+                                                <a href="javascript:void(0)" onclick="showDashItems('overdue',<?= (int)$coRow['checkout_id'] ?>)"
+                                                   class="text-muted small flex-shrink-0" style="text-decoration:underline; cursor:pointer;">
+                                                    (<?= $itemCount ?> item<?= $itemCount !== 1 ? 's' : '' ?>)
+                                                </a>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endforeach; ?>
                                 </div>
                             <?php endforeach; ?>
                         </div>
@@ -713,6 +754,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 var dashCheckoutItems = <?= json_encode($dueCheckoutItems, JSON_HEX_TAG) ?>;
+var dashOverdueItems = <?= json_encode($overdueCheckoutItems, JSON_HEX_TAG) ?>;
 var dashReservationItems = <?= json_encode($pendingResItems, JSON_HEX_TAG) ?>;
 
 function escHtml(s) {
@@ -726,9 +768,9 @@ function showDashItems(type, id) {
     var body = document.getElementById('dashItemsBody');
     var items, html;
 
-    if (type === 'checkout') {
-        items = dashCheckoutItems[id] || [];
-        title.textContent = 'Checkout Items';
+    if (type === 'checkout' || type === 'overdue') {
+        items = (type === 'overdue' ? dashOverdueItems[id] : dashCheckoutItems[id]) || [];
+        title.textContent = type === 'overdue' ? 'Overdue Items' : 'Checkout Items';
         html = '<table class="table table-sm mb-0"><thead><tr><th>Asset Tag</th><th>Name</th><th>Model</th><th>Status</th></tr></thead><tbody>';
         items.forEach(function(ci) {
             var status = ci.checked_in_at ? '<span class="badge bg-secondary">Returned</span>' : '<span class="badge bg-success">Out</span>';
