@@ -451,6 +451,64 @@ if ($isStaff) {
     </div>
 </div>
 
+<?php
+$welcomeEnabled = $config['app']['welcome_enabled'] ?? true;
+if ($welcomeEnabled):
+?>
+<div id="welcomeBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1050;" onclick="closeWelcomeModal()"></div>
+<div id="welcomeModal" style="display:none; position:fixed; inset:0; z-index:1055; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)closeWelcomeModal()">
+    <div style="max-width:550px; margin:0 auto; background:#fff; border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid #dee2e6;">
+            <h5 style="margin:0;">Welcome to <?= h($config['app']['name'] ?? 'SnipeScheduler') ?></h5>
+            <button type="button" onclick="closeWelcomeModal()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
+        </div>
+        <div style="padding:1rem;">
+            <p class="mb-3">Here's how the equipment booking system works:</p>
+            <ol class="mb-3" style="padding-left:1.25rem;">
+                <li class="mb-2">
+                    <strong>Browse &amp; reserve</strong><br>
+                    <span class="text-muted">Visit the catalogue to see available equipment. Add items to your basket, choose your dates, and submit a reservation request.</span>
+                </li>
+                <li class="mb-2">
+                    <strong>Authorisation</strong><br>
+                    <span class="text-muted">Some equipment requires certifications or specific access levels. If an item is restricted, you'll see a badge on it &mdash; contact staff to get authorised.</span>
+                </li>
+                <li class="mb-2">
+                    <strong>Collect &amp; return</strong><br>
+                    <span class="text-muted">Pick up your equipment at the start of your reservation. Return it by the scheduled end time and check in with staff.</span>
+                </li>
+                <li class="mb-2">
+                    <strong>Need help?</strong><br>
+                    <span class="text-muted">If something is missing from the catalogue or you have questions, please contact staff.</span>
+                </li>
+            </ol>
+            <div class="text-end">
+                <button type="button" class="btn btn-primary" onclick="closeWelcomeModal()">Get started</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (localStorage.getItem('snipesched_welcome_dismissed')) return;
+    document.getElementById('welcomeBackdrop').style.display = 'block';
+    document.getElementById('welcomeModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+});
+function closeWelcomeModal() {
+    document.getElementById('welcomeBackdrop').style.display = 'none';
+    document.getElementById('welcomeModal').style.display = 'none';
+    document.body.style.overflow = '';
+    localStorage.setItem('snipesched_welcome_dismissed', '1');
+}
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('welcomeModal').style.display === 'block') {
+        closeWelcomeModal();
+    }
+});
+</script>
+<?php endif; ?>
+
 <?php if ($isStaff): ?>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -588,10 +646,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     clearBtn.addEventListener('click', clearUser);
 
-    // Auto-refresh every 60 seconds (skip if feedback modal is open)
+    // Auto-refresh every 60 seconds (skip if feedback or welcome modal is open)
     setInterval(function() {
-        var modal = document.getElementById('feedbackModal');
-        if (!modal || modal.style.display !== 'block') {
+        var feedback = document.getElementById('feedbackModal');
+        var welcome = document.getElementById('welcomeModal');
+        if ((!feedback || feedback.style.display !== 'block') &&
+            (!welcome || welcome.style.display !== 'block')) {
             window.location.reload();
         }
     }, 60000);
