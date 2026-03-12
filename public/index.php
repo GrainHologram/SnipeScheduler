@@ -84,7 +84,7 @@ if ($isStaff) {
     // Due today — grouped by checkout
     $stmt = $pdo->prepare("
         SELECT c.id AS checkout_id, c.name AS checkout_name, c.user_name, c.user_email,
-               c.end_datetime, c.snipeit_user_id,
+               c.start_datetime, c.end_datetime, c.snipeit_user_id,
                r.name AS reservation_name, r.asset_name_cache,
                COUNT(ci.id) AS item_count
           FROM checkouts c
@@ -99,6 +99,47 @@ if ($isStaff) {
     $stmt->execute([':todayStart' => $todayUtcStart, ':todayEnd' => $todayUtcEnd]);
     $dueToday  = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $dueCount  = count($dueToday);
+
+    // Batch-fetch checkout_items for all due-today checkouts (for items modal)
+    $dueCheckoutIds = array_column($dueToday, 'checkout_id');
+    $dueCheckoutItems = [];
+    if (!empty($dueCheckoutIds)) {
+        $ph = implode(',', array_fill(0, count($dueCheckoutIds), '?'));
+        $ciStmt = $pdo->prepare("SELECT checkout_id, asset_tag, asset_name, model_name, checked_in_at
+                                   FROM checkout_items WHERE checkout_id IN ($ph) ORDER BY id");
+        $ciStmt->execute(array_values($dueCheckoutIds));
+        foreach ($ciStmt->fetchAll(PDO::FETCH_ASSOC) as $ci) {
+            $dueCheckoutItems[(int)$ci['checkout_id']][] = $ci;
+        }
+    }
+
+    // Group due-today by user_email
+    $dueTodayGrouped = [];
+    foreach ($dueToday as $row) {
+        $email = $row['user_email'];
+        if (!isset($dueTodayGrouped[$email])) {
+            $dueTodayGrouped[$email] = [
+                'user_name' => $row['user_name'],
+                'snipeit_user_id' => $row['snipeit_user_id'],
+                'checkouts' => [],
+            ];
+        }
+        $dueTodayGrouped[$email]['checkouts'][] = $row;
+    }
+
+    // Group pending pickups by user_email
+    $pickupsGrouped = [];
+    foreach ($pendingPickups as $row) {
+        $email = $row['user_email'];
+        if (!isset($pickupsGrouped[$email])) {
+            $pickupsGrouped[$email] = [
+                'user_name' => $row['user_name'],
+                'snipeit_user_id' => $row['snipeit_user_id'],
+                'reservations' => [],
+            ];
+        }
+        $pickupsGrouped[$email]['reservations'][] = $row;
+    }
 
     // Overdue — grouped by checkout
     $stmt = $pdo->prepare("
@@ -245,52 +286,48 @@ if ($isStaff) {
                     <?php if (empty($pendingPickups)): ?>
                         <div class="card-body text-muted">No pending pickups for today.</div>
                     <?php else: ?>
-                        <div class="table-responsive">
-                            <table class="table table-sm mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>User</th>
-                                        <th>Time</th>
-                                        <th>Items</th>
-                                        <th>Status</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php foreach ($pendingPickups as $pickup): ?>
+                        <?php $qzConfig = load_config()['qz_tray'] ?? []; ?>
+                        <div class="list-group list-group-flush">
+                            <?php foreach ($pickupsGrouped as $puEmail => $puGroup): ?>
+                                <?php
+                                    $firstRes = $puGroup['reservations'][0];
+                                    $earliestTime = app_format_time($firstRes['start_datetime']);
+                                ?>
+                                <div class="list-group-item">
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        <span class="fw-semibold" style="min-width:0; flex:1;"><?= h($puGroup['user_name']) ?></span>
+                                        <span class="text-muted small flex-shrink-0">Pickup <?= h($earliestTime) ?></span>
+                                        <?= layout_status_badge($firstRes['status']) ?>
+                                        <a href="reservations.php?tab=today&res=<?= (int)$firstRes['id'] ?>" class="btn btn-sm btn-outline-primary flex-shrink-0">Process</a>
+                                    </div>
+                                    <?php foreach ($puGroup['reservations'] as $pickup): ?>
                                         <?php
-                                            $items = $pendingResItems[(int)$pickup['id']] ?? [];
-                                            $summary = build_items_summary_text($items);
+                                            $resItems = $pendingResItems[(int)$pickup['id']] ?? [];
+                                            $resLabel = $pickup['name'] ?: build_items_summary_text($resItems);
+                                            $totalQty = 0;
+                                            foreach ($resItems as $ri) { $totalQty += (int)($ri['qty'] ?? 0); }
                                         ?>
-                                        <tr>
-                                            <td>
-                                                <?= h($pickup['user_name']) ?>
-                                                <?php if (!empty($pickup['name'])): ?>
-                                                    <br><small class="text-muted"><?= h($pickup['name']) ?></small>
-                                                <?php endif; ?>
-                                            </td>
-                                            <td><?= h(app_format_datetime($pickup['start_datetime'])) ?></td>
-                                            <td><?= h($summary ?: '—') ?></td>
-                                            <td><?= layout_status_badge($pickup['status']) ?></td>
-                                            <td>
-                                                <a href="reservations.php?tab=today&res=<?= (int)$pickup['id'] ?>" class="btn btn-sm btn-outline-primary">
-                                                    Process
+                                        <div class="d-flex align-items-center gap-2 ps-2" style="min-width:0;">
+                                            <span class="text-muted small" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1;">
+                                                <?= h($resLabel ?: '—') ?>
+                                            </span>
+                                            <?php if ($totalQty > 0): ?>
+                                                <a href="javascript:void(0)" onclick="showDashItems('reservation',<?= (int)$pickup['id'] ?>)"
+                                                   class="text-muted small flex-shrink-0" style="text-decoration:underline; cursor:pointer;">
+                                                    (<?= $totalQty ?> item<?= $totalQty !== 1 ? 's' : '' ?>)
                                                 </a>
-                                                <?php
-                                                    $qzConfig = load_config()['qz_tray'] ?? [];
-                                                    if (!empty($qzConfig['enabled'])):
-                                                ?>
-                                                <button type="button" class="btn btn-sm btn-link text-muted p-0 mt-1"
+                                            <?php endif; ?>
+                                            <?php if (!empty($qzConfig['enabled'])): ?>
+                                                <button type="button" class="btn btn-sm btn-link text-muted p-0 flex-shrink-0"
                                                         data-reservation-id="<?= (int)$pickup['id'] ?>"
                                                         onclick="qzPrintReservationPickList(this)">
                                                     <small>Pick List</small>
                                                 </button>
-                                                <?php endif; ?>
-                                            </td>
-                                        </tr>
+                                            <?php endif; ?>
+                                        </div>
                                     <?php endforeach; ?>
-                                </tbody>
-                            </table>
+                                </div>
+                            <?php endforeach; ?>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -301,41 +338,45 @@ if ($isStaff) {
                     <?php if (empty($dueToday)): ?>
                         <div class="card-body text-muted">No equipment due back today.</div>
                     <?php else: ?>
-                        <div class="table-responsive">
-                            <table class="table table-sm mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>Checkout</th>
-                                        <th>User</th>
-                                        <th>Due</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php foreach ($dueToday as $item):
-                                        $coName = $item['checkout_name'] ?: ($item['reservation_name'] ?: ($item['asset_name_cache'] ?: null));
-                                        $coLabel = $coName ?: ($item['item_count'] . ' item' . ($item['item_count'] != 1 ? 's' : ''));
-                                    ?>
-                                        <tr>
-                                            <td>
+                        <div class="list-group list-group-flush">
+                            <?php foreach ($dueTodayGrouped as $dtEmail => $dtGroup): ?>
+                                <?php
+                                    $earliestDue = $dtGroup['checkouts'][0]['end_datetime'];
+                                    $dueTime = app_format_time($earliestDue);
+                                ?>
+                                <div class="list-group-item">
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        <span class="fw-semibold" style="min-width:0; flex:1;"><?= h($dtGroup['user_name']) ?></span>
+                                        <span class="text-muted small flex-shrink-0">Due <?= h($dueTime) ?></span>
+                                        <?php if (!empty($dtGroup['snipeit_user_id'])): ?>
+                                            <a href="quick_checkin.php?user=<?= (int)$dtGroup['snipeit_user_id'] ?>" class="btn btn-sm btn-outline-primary flex-shrink-0">Checkin</a>
+                                        <?php endif; ?>
+                                    </div>
+                                    <?php foreach ($dtGroup['checkouts'] as $coRow): ?>
+                                        <?php
+                                            $coItems = $dueCheckoutItems[(int)$coRow['checkout_id']] ?? [];
+                                            $coName = $coRow['checkout_name'] ?: ($coRow['reservation_name'] ?: ($coRow['asset_name_cache'] ?: null));
+                                            if (!$coName && !empty($coItems)) {
+                                                $names = array_column($coItems, 'asset_name');
+                                                $coName = implode(', ', array_filter($names));
+                                            }
+                                            $coLabel = $coName ?: ($coRow['item_count'] . ' item' . ($coRow['item_count'] != 1 ? 's' : ''));
+                                            $itemCount = (int)$coRow['item_count'];
+                                        ?>
+                                        <div class="d-flex align-items-center gap-2 ps-2" style="min-width:0;">
+                                            <span class="text-muted small" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1;">
                                                 <?= h($coLabel) ?>
-                                                <?php if ($coName && $item['item_count'] > 0): ?>
-                                                    <span class="text-muted small">(<?= (int)$item['item_count'] ?> item<?= $item['item_count'] != 1 ? 's' : '' ?>)</span>
-                                                <?php endif; ?>
-                                            </td>
-                                            <td><?= h($item['user_name']) ?></td>
-                                            <td><?= h(app_format_datetime($item['end_datetime'])) ?></td>
-                                            <td>
-                                                <?php if (!empty($item['snipeit_user_id'])): ?>
-                                                    <a href="quick_checkin.php?user=<?= (int)$item['snipeit_user_id'] ?>" class="btn btn-sm btn-outline-primary">
-                                                        Checkin
-                                                    </a>
-                                                <?php endif; ?>
-                                            </td>
-                                        </tr>
+                                            </span>
+                                            <?php if ($itemCount > 0): ?>
+                                                <a href="javascript:void(0)" onclick="showDashItems('checkout',<?= (int)$coRow['checkout_id'] ?>)"
+                                                   class="text-muted small flex-shrink-0" style="text-decoration:underline; cursor:pointer;">
+                                                    (<?= $itemCount ?> item<?= $itemCount !== 1 ? 's' : '' ?>)
+                                                </a>
+                                            <?php endif; ?>
+                                        </div>
                                     <?php endforeach; ?>
-                                </tbody>
-                            </table>
+                                </div>
+                            <?php endforeach; ?>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -403,6 +444,18 @@ if ($isStaff) {
                         </div>
                     <?php endif; ?>
                 </div>
+            </div>
+        </div>
+
+        <!-- Items detail modal -->
+        <div id="dashItemsBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1050;" onclick="closeDashItemsModal()"></div>
+        <div id="dashItemsModal" style="display:none; position:fixed; inset:0; z-index:1055; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)closeDashItemsModal()">
+            <div style="max-width:550px; margin:0 auto; background:#fff; border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid #dee2e6;">
+                    <h5 style="margin:0;" id="dashItemsTitle">Items</h5>
+                    <button type="button" onclick="closeDashItemsModal()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
+                </div>
+                <div id="dashItemsBody" style="padding:1rem; max-height:70vh; overflow-y:auto;"></div>
             </div>
         </div>
 
@@ -646,15 +699,70 @@ document.addEventListener('DOMContentLoaded', function() {
 
     clearBtn.addEventListener('click', clearUser);
 
-    // Auto-refresh every 60 seconds (skip if feedback or welcome modal is open)
+    // Auto-refresh every 60 seconds (skip if feedback, welcome, or items modal is open)
     setInterval(function() {
         var feedback = document.getElementById('feedbackModal');
         var welcome = document.getElementById('welcomeModal');
+        var dashItems = document.getElementById('dashItemsModal');
         if ((!feedback || feedback.style.display !== 'block') &&
-            (!welcome || welcome.style.display !== 'block')) {
+            (!welcome || welcome.style.display !== 'block') &&
+            (!dashItems || dashItems.style.display !== 'block')) {
             window.location.reload();
         }
     }, 60000);
+});
+
+var dashCheckoutItems = <?= json_encode($dueCheckoutItems, JSON_HEX_TAG) ?>;
+var dashReservationItems = <?= json_encode($pendingResItems, JSON_HEX_TAG) ?>;
+
+function escHtml(s) {
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(s));
+    return d.innerHTML;
+}
+
+function showDashItems(type, id) {
+    var title = document.getElementById('dashItemsTitle');
+    var body = document.getElementById('dashItemsBody');
+    var items, html;
+
+    if (type === 'checkout') {
+        items = dashCheckoutItems[id] || [];
+        title.textContent = 'Checkout Items';
+        html = '<table class="table table-sm mb-0"><thead><tr><th>Asset Tag</th><th>Name</th><th>Model</th><th>Status</th></tr></thead><tbody>';
+        items.forEach(function(ci) {
+            var status = ci.checked_in_at ? '<span class="badge bg-secondary">Returned</span>' : '<span class="badge bg-success">Out</span>';
+            html += '<tr><td>' + escHtml(ci.asset_tag || '') + '</td><td>' + escHtml(ci.asset_name || '') + '</td><td>' + escHtml(ci.model_name || '') + '</td><td>' + status + '</td></tr>';
+        });
+        html += '</tbody></table>';
+    } else {
+        items = dashReservationItems[id] || [];
+        title.textContent = 'Reservation Items';
+        html = '<table class="table table-sm mb-0"><thead><tr><th>Model</th><th>Qty</th></tr></thead><tbody>';
+        items.forEach(function(ri) {
+            html += '<tr><td>' + escHtml(ri.name || '') + '</td><td>' + (ri.qty || 0) + '</td></tr>';
+        });
+        html += '</tbody></table>';
+    }
+
+    if (!items.length) {
+        html = '<p class="text-muted mb-0">No items found.</p>';
+    }
+
+    body.innerHTML = html;
+    document.getElementById('dashItemsBackdrop').style.display = 'block';
+    document.getElementById('dashItemsModal').style.display = 'block';
+}
+
+function closeDashItemsModal() {
+    document.getElementById('dashItemsBackdrop').style.display = 'none';
+    document.getElementById('dashItemsModal').style.display = 'none';
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('dashItemsModal').style.display === 'block') {
+        closeDashItemsModal();
+    }
 });
 </script>
 <?php endif; ?>

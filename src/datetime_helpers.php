@@ -127,6 +127,19 @@ if (!function_exists('app_format_datetime')) {
     }
 }
 
+if (!function_exists('app_format_time')) {
+    function app_format_time($value, ?array $cfg = null, ?DateTimeZone $tz = null): string
+    {
+        $cfg = $cfg ?? load_config();
+        $tz = $tz ?? app_get_timezone($cfg);
+        $dt = app_parse_datetime_value($value, $tz);
+        if (!$dt) {
+            return is_scalar($value) ? (string)$value : '';
+        }
+        return $dt->format(app_get_time_format($cfg));
+    }
+}
+
 /**
  * Return the Snipe-IT server timezone.
  * Falls back to the app timezone when snipeit.timezone is empty.
