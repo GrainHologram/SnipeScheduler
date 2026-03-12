@@ -247,9 +247,11 @@ try {
                                         }
                                     }
                                     $catLabel = $categoryLabels[$row['category']] ?? ucfirst($row['category']);
-                                    $msgPreview = mb_strlen($row['message']) > 120
-                                        ? mb_substr($row['message'], 0, 120) . '...'
-                                        : $row['message'];
+                                    $msgFull = $row['message'];
+                                    $msgTruncated = mb_strlen($msgFull) > 120;
+                                    $msgPreview = $msgTruncated
+                                        ? mb_substr($msgFull, 0, 120) . '...'
+                                        : $msgFull;
                                     $statusVal = $row['status'];
                                     $badgeClass = $statusBadges[$statusVal] ?? 'bg-secondary';
                                     $statusLabel = $statusLabels[$statusVal] ?? ucfirst($statusVal);
@@ -262,7 +264,14 @@ try {
                                         </td>
                                         <td><?= h($catLabel) ?></td>
                                         <td>
-                                            <div style="max-width:300px;"><?= h($msgPreview) ?></div>
+                                            <div style="max-width:300px;">
+                                                <?php if ($msgTruncated): ?>
+                                                    <span class="feedback-msg-preview"><?= h($msgPreview) ?> <a href="javascript:void(0)" class="small" onclick="this.parentElement.style.display='none';this.parentElement.nextElementSibling.style.display='';">more</a></span>
+                                                    <span class="feedback-msg-full" style="display:none;"><?= h($msgFull) ?></span>
+                                                <?php else: ?>
+                                                    <?= h($msgFull) ?>
+                                                <?php endif; ?>
+                                            </div>
                                             <?php if ($row['staff_notes']): ?>
                                                 <div class="text-muted small mt-1"><strong>Staff notes:</strong> <?= h($row['staff_notes']) ?></div>
                                             <?php endif; ?>
