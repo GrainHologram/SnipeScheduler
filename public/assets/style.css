@@ -45,9 +45,15 @@ a:visited {
     color: var(--primary-strong);
 }
 
-a.btn:visited {
-    color: var(--bs-btn-color);
-}
+a.btn-primary:visited,
+a.btn-primary:visited:hover { color: #fff; }
+a.btn-outline-primary:visited { color: #0d6efd; }
+a.btn-outline-secondary:visited { color: #6c757d; }
+a.btn-outline-success:visited { color: #198754; }
+a.btn-outline-danger:visited { color: #dc3545; }
+a.btn-outline-warning:visited { color: #ffc107; }
+a.btn-outline-info:visited { color: #0dcaf0; }
+a.btn-outline-dark:visited { color: #212529; }
 
 .btn.btn-link:visited,
 a.btn.btn-link:visited {
