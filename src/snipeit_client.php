@@ -1439,6 +1439,10 @@ function list_checked_out_assets(bool $overdueOnly = false): array
     foreach ($rows as $row) {
         $expectedCheckin = $row['expected_checkin'] ?? '';
         if ($overdueOnly) {
+            // No expected_checkin means we can't determine if overdue — skip
+            if ($expectedCheckin === '' || $expectedCheckin === null) {
+                continue;
+            }
             $normalizedExpected = $expectedCheckin;
             if (is_string($expectedCheckin) && preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $expectedCheckin)) {
                 $normalizedExpected = $expectedCheckin . ' 23:59:59';
