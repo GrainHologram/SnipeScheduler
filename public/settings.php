@@ -6,7 +6,7 @@ require_once SRC_PATH . '/config_writer.php';
 require_once SRC_PATH . '/snipeit_client.php';
 require_once SRC_PATH . '/email.php';
 
-$active  = basename($_SERVER['PHP_SELF']);
+$active  = 'activity_log.php'; // keep Admin nav highlighted
 $isAdmin = !empty($currentUser['is_admin']);
 $isStaff = !empty($currentUser['is_staff']) || $isAdmin;
 
