@@ -60,8 +60,8 @@ if ($reservationId > 0) {
             $model = null;
         }
 
-        $catName   = $model['category']['name'] ?? 'Other';
-        $modelName = $model['name'] ?? ('Model #' . $modelId);
+        $catName   = html_entity_decode($model['category']['name'] ?? 'Other', ENT_QUOTES, 'UTF-8');
+        $modelName = html_entity_decode($model['name'] ?? ('Model #' . $modelId), ENT_QUOTES, 'UTF-8');
 
         if (!isset($categories[$catName])) {
             $categories[$catName] = [];
@@ -124,7 +124,7 @@ $formattedItems = [];
 foreach ($items as $item) {
     $formattedItems[] = [
         'asset_tag'     => $item['asset_tag'] ?? '',
-        'model_name'    => $item['model_name'] ?? '',
+        'model_name'    => html_entity_decode($item['model_name'] ?? '', ENT_QUOTES, 'UTF-8'),
         'checked_in_at' => $item['checked_in_at'] ?? null,
     ];
 }
