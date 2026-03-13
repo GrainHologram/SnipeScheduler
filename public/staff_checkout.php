@@ -903,6 +903,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $_SESSION['selected_reservation_fresh'] = 1;
+        // AJAX: return JSON instead of redirect
+        if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])
+            && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+            header('Content-Type: application/json');
+            $flash = $_SESSION['scan_flash'] ?? ['type' => 'info', 'msg' => 'Scan processed.'];
+            unset($_SESSION['scan_flash']);
+            $flash['asset_id'] = $assetId ?? 0;
+            $flash['asset_tag'] = $assetTag ?? '';
+            $flash['asset_name'] = $assetName ?? '';
+            $flash['model_id'] = $modelId ?? 0;
+            $flash['model_name'] = $modelName ?? '';
+            echo json_encode($flash);
+            exit;
+        }
         header('Location: ' . $selfUrl);
         exit;
     } elseif ($mode === 'add_asset') {
@@ -2222,12 +2236,16 @@ $active  = basename($_SERVER['PHP_SELF']);
                     btn.appendChild(secondary);
                 }
 
-                btn.addEventListener('click', () => {
-                    input.value = btn.dataset.value;
+                btn.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
                     hideSuggestions();
-                    // Auto-submit the scan form
-                    const form = input.closest('form');
-                    if (form) form.submit();
+                    if (window._scanQueue) {
+                        window._scanQueue.enqueue(btn.dataset.value);
+                    } else {
+                        input.value = btn.dataset.value;
+                        const form = input.closest('form');
+                        if (form) form.submit();
+                    }
                 });
 
                 list.appendChild(btn);
@@ -2241,6 +2259,111 @@ $active  = basename($_SERVER['PHP_SELF']);
             list.innerHTML = '';
         }
     });
+})();
+
+// AJAX scan queue — prevents dropped barcode scans during page navigation
+(function() {
+    const scanForm = document.getElementById('scan-form');
+    const scanInput = document.getElementById('scan-tag-input');
+    if (!scanForm || !scanInput) return;
+
+    const scanQueue = [];
+    let processing = false;
+
+    // Flash container — inserted after the sticky scan bar
+    const flashContainer = document.createElement('div');
+    flashContainer.id = 'scan-flash-container';
+    const stickyBar = scanForm.closest('.sticky-scan-bar');
+    if (stickyBar) {
+        stickyBar.insertAdjacentElement('afterend', flashContainer);
+    } else {
+        scanForm.parentElement.appendChild(flashContainer);
+    }
+
+    // Intercept form submit
+    scanForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        enqueueTag(scanInput.value.trim());
+    });
+
+    function enqueueTag(tag) {
+        if (!tag) return;
+        scanInput.value = '';
+        scanInput.focus();
+        scanQueue.push(tag);
+        processQueue();
+    }
+
+    async function processQueue() {
+        if (processing || scanQueue.length === 0) return;
+        processing = true;
+        const tag = scanQueue.shift();
+        const queuedMsg = scanQueue.length > 0
+            ? ' (' + scanQueue.length + ' queued)' : '';
+        showFlash('info', 'Scanning: ' + tag + '...' + queuedMsg);
+
+        const formData = new FormData();
+        formData.append('mode', 'scan_asset');
+        formData.append('scan_tag', tag);
+
+        try {
+            const res = await fetch(window.location.href, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: formData
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            showFlash(data.type || 'info', data.msg || 'Scan processed.');
+            onScanResult(data);
+        } catch (err) {
+            showFlash('error', 'Scan failed for "' + tag + '": '
+                + (err.message || 'network error'));
+        }
+
+        processing = false;
+        processQueue();
+    }
+
+    function onScanResult(data) {
+        if (data.type === 'error' || !data.model_id) return;
+        // Find dropdown for this model with an empty slot
+        const selects = document.querySelectorAll(
+            'select[data-model-select="' + data.model_id + '"]'
+        );
+        let filled = false;
+        selects.forEach(function(sel) {
+            if (filled) return;
+            if (sel.value === '') {
+                // Add option if not already present
+                let optExists = sel.querySelector('option[value="' + data.asset_id + '"]');
+                if (!optExists) {
+                    const opt = document.createElement('option');
+                    opt.value = data.asset_id;
+                    opt.textContent = data.asset_tag + (data.asset_name ? ' \u2013 ' + data.asset_name : '');
+                    sel.appendChild(opt);
+                }
+                sel.value = data.asset_id;
+                filled = true;
+            }
+        });
+        if (!filled && data.type !== 'error') {
+            // Edge case: no empty slot (new model or qty bump from scan)
+            // Server persisted the change; it will appear on next page load.
+        }
+    }
+
+    function showFlash(type, msg) {
+        const cls = { success:'alert-success', warning:'alert-warning',
+                      error:'alert-danger', info:'alert-info' }[type] || 'alert-info';
+        flashContainer.innerHTML =
+            '<div class="alert ' + cls + ' py-2 mb-2">'
+            + msg.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            + '</div>';
+    }
+
+    // Expose for autocomplete integration
+    window._scanQueue = { enqueue: enqueueTag };
 })();
 </script>
 <?php if (!$embedded): ?>

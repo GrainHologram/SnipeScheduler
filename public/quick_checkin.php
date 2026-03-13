@@ -194,6 +194,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $errors[] = 'Could not add asset: ' . $e->getMessage();
             }
         }
+
+        // AJAX: return JSON instead of full page render
+        if (($mode === 'add_asset' || $mode === 'add_asset_by_id')
+            && !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
+            && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+            header('Content-Type: application/json');
+            $result = ['type' => 'info', 'msg' => 'Processed.'];
+            if (!empty($errors)) {
+                $result = ['type' => 'error', 'msg' => implode(' ', $errors)];
+            } elseif (!empty($messages)) {
+                $result = ['type' => 'success', 'msg' => implode(' ', $messages)];
+                $lastAsset = end($checkinAssets);
+                if ($lastAsset) {
+                    $result['asset'] = [
+                        'id'         => (int)$lastAsset['id'],
+                        'asset_tag'  => $lastAsset['asset_tag'],
+                        'name'       => $lastAsset['name'],
+                        'model'      => $lastAsset['model'],
+                        'model_id'   => (int)($lastAsset['model_id'] ?? 0),
+                        'assigned_name'  => $lastAsset['assigned_name'] ?? '',
+                        'assigned_email' => $lastAsset['assigned_email'] ?? '',
+                        'checked_out'    => !empty($lastAsset['assigned_name']),
+                    ];
+                }
+            }
+            echo json_encode($result);
+            exit;
+        }
     } elseif ($mode === 'checkin') {
         $note = trim($_POST['note'] ?? '');
 
@@ -623,13 +651,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="sticky-scan-sentinel"></div>
         <div class="card mb-3 sticky-scan-bar">
             <div class="card-body py-2">
-                <form method="post" class="row g-2 align-items-end">
+                <form method="post" class="row g-2 align-items-end" id="scan-form">
                     <input type="hidden" name="mode" value="add_asset">
                     <div class="col">
                         <label class="form-label mb-1 fw-semibold">Find or scan asset</label>
                         <div class="position-relative asset-autocomplete-wrapper">
                             <input type="text"
                                    name="asset_tag"
+                                   id="scan-tag-input"
                                    class="form-control asset-autocomplete"
                                    autocomplete="off"
                                    placeholder="Scan barcode or search by name, model..."
@@ -722,12 +751,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <?php endif; ?>
 
                 <?php if (empty($checkinAssets)): ?>
-                    <div class="alert alert-secondary">
+                    <div class="alert alert-secondary" id="checkin-empty-state">
                         No assets in the check-in list yet. Scan or enter an asset tag above.
                     </div>
                 <?php else: ?>
                     <?php $savedActions = $_SESSION['checkin_asset_actions'] ?? []; ?>
-                    <div class="table-responsive mb-3">
+                    <div class="table-responsive mb-3" id="checkin-table-container">
                         <table class="table table-sm table-striped align-middle mb-0">
                             <thead>
                                 <tr>
@@ -738,7 +767,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <th style="width: 150px;"></th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody id="checkin-tbody">
                                 <?php foreach ($checkinAssets as $asset):
                                     $aId = (int)$asset['id'];
                                     $hasAction = isset($savedActions[$aId]);
@@ -800,7 +829,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </table>
                     </div>
 
-                    <form method="post" class="border-top pt-3">
+                    <form method="post" class="border-top pt-3" id="checkin-action-form">
                         <input type="hidden" name="mode" value="checkin">
 
                         <div class="row g-3 mb-3">
@@ -900,10 +929,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     btn.appendChild(secondary);
                 }
 
-                btn.addEventListener('click', () => {
-                    input.value = btn.dataset.value;
+                btn.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
                     hideSuggestions();
-                    input.focus();
+                    if (window._scanQueue) {
+                        window._scanQueue.enqueue(btn.dataset.value);
+                    } else {
+                        input.value = btn.dataset.value;
+                        input.focus();
+                    }
                 });
 
                 list.appendChild(btn);
@@ -917,6 +951,147 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             list.innerHTML = '';
         }
     });
+})();
+
+// AJAX scan queue — prevents dropped barcode scans during page navigation
+(function() {
+    const scanForm = document.getElementById('scan-form');
+    const scanInput = document.getElementById('scan-tag-input');
+    if (!scanForm || !scanInput) return;
+
+    const scanQueue = [];
+    let processing = false;
+
+    // Flash container — inserted after the sticky scan bar
+    const flashContainer = document.createElement('div');
+    flashContainer.id = 'scan-flash-container';
+    const stickyBar = scanForm.closest('.sticky-scan-bar');
+    if (stickyBar) {
+        stickyBar.insertAdjacentElement('afterend', flashContainer);
+    } else {
+        scanForm.parentElement.appendChild(flashContainer);
+    }
+
+    // Intercept form submit
+    scanForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        enqueueTag(scanInput.value.trim());
+    });
+
+    function enqueueTag(tag) {
+        if (!tag) return;
+        scanInput.value = '';
+        scanInput.focus();
+        scanQueue.push(tag);
+        processQueue();
+    }
+
+    async function processQueue() {
+        if (processing || scanQueue.length === 0) return;
+        processing = true;
+        const tag = scanQueue.shift();
+        const queuedMsg = scanQueue.length > 0
+            ? ' (' + scanQueue.length + ' queued)' : '';
+        showFlash('info', 'Scanning: ' + tag + '...' + queuedMsg);
+
+        const formData = new FormData();
+        formData.append('mode', 'add_asset');
+        formData.append('asset_tag', tag);
+
+        try {
+            const res = await fetch('quick_checkin.php', {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: formData
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            showFlash(data.type || 'info', data.msg || 'Scan processed.');
+            onScanResult(data);
+        } catch (err) {
+            showFlash('error', 'Scan failed for "' + tag + '": '
+                + (err.message || 'network error'));
+        }
+
+        processing = false;
+        processQueue();
+    }
+
+    function onScanResult(data) {
+        if (data.type === 'error' || !data.asset) return;
+        const a = data.asset;
+
+        // Hide empty state, show table
+        const emptyState = document.getElementById('checkin-empty-state');
+        if (emptyState) emptyState.style.display = 'none';
+
+        let tableContainer = document.getElementById('checkin-table-container');
+        let tbody = document.getElementById('checkin-tbody');
+
+        // If table doesn't exist yet (was empty state), create it
+        if (!tableContainer) {
+            const card = emptyState ? emptyState.parentElement : document.querySelector('.card-body');
+            tableContainer = document.createElement('div');
+            tableContainer.className = 'table-responsive mb-3';
+            tableContainer.id = 'checkin-table-container';
+            tableContainer.innerHTML =
+                '<table class="table table-sm table-striped align-middle mb-0">' +
+                '<thead><tr>' +
+                '<th>Asset Tag</th><th>Name</th><th>Model</th>' +
+                '<th>Checked out to</th><th style="width: 150px;"></th>' +
+                '</tr></thead><tbody id="checkin-tbody"></tbody></table>';
+            if (emptyState) {
+                emptyState.insertAdjacentElement('afterend', tableContainer);
+            } else {
+                card.appendChild(tableContainer);
+            }
+            tbody = document.getElementById('checkin-tbody');
+        }
+
+        if (tableContainer) tableContainer.style.display = '';
+
+        // Build assigned-to label
+        let assignedLabel = '';
+        if (a.assigned_email) {
+            assignedLabel = a.assigned_name && a.assigned_name !== a.assigned_email
+                ? a.assigned_name + ' <' + a.assigned_email + '>'
+                : a.assigned_email;
+        } else if (a.assigned_name) {
+            assignedLabel = a.assigned_name;
+        }
+
+        // Build table row
+        const tr = document.createElement('tr');
+        const esc = function(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
+        tr.innerHTML =
+            '<td>' + esc(a.asset_tag) + '</td>' +
+            '<td>' + esc(a.name) + '</td>' +
+            '<td>' + esc(a.model) + '</td>' +
+            '<td>' + (assignedLabel
+                ? esc(assignedLabel)
+                : '<span class="badge bg-warning text-dark">Not checked out</span>') + '</td>' +
+            '<td class="text-nowrap">' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary" disabled>Note</button> ' +
+                '<a href="quick_checkin.php?remove=' + a.id + '" class="btn btn-sm btn-outline-danger">Remove</a>' +
+            '</td>';
+        tbody.appendChild(tr);
+
+        // Show checkin action form
+        const actionForm = document.getElementById('checkin-action-form');
+        if (actionForm) actionForm.style.display = '';
+    }
+
+    function showFlash(type, msg) {
+        const cls = { success:'alert-success', warning:'alert-warning',
+                      error:'alert-danger', info:'alert-info' }[type] || 'alert-info';
+        flashContainer.innerHTML =
+            '<div class="alert ' + cls + ' py-2 mb-2">'
+            + msg.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            + '</div>';
+    }
+
+    // Expose for autocomplete integration
+    window._scanQueue = { enqueue: enqueueTag };
 })();
 </script>
 <?php layout_model_history_modal(true); ?>
