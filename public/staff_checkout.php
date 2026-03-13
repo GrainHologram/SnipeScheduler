@@ -256,6 +256,7 @@ $bulkCheckoutToValue = '';
 $bulkNoteValue = '';
 $reservationNoteValue = '';
 $showAppendOverride = false;
+$showOverdueOverride = false;
 $activeCheckoutExpected = '';
 $overrideStart = '';
 $overrideEnd   = '';
@@ -1116,6 +1117,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                         }
 
+                        // Overdue items enforcement
+                        $overdueOverride = !empty($_POST['overdue_override']);
+                        if (!$overdueOverride) {
+                            $overdueStmt = $pdo->prepare("
+                                SELECT COUNT(*) FROM checkouts c
+                                JOIN checkout_items ci ON ci.checkout_id = c.id
+                                WHERE c.status IN ('open','partial')
+                                  AND ci.checked_in_at IS NULL
+                                  AND c.end_datetime < :nowUtc
+                                  AND c.user_email = :userEmail
+                            ");
+                            $overdueStmt->execute([
+                                ':nowUtc'    => (new DateTime('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s'),
+                                ':userEmail' => $selectedReservation['user_email'],
+                            ]);
+                            if ((int)$overdueStmt->fetchColumn() > 0) {
+                                $showOverdueOverride = true;
+                                throw new Exception('This user has overdue items that have not been returned. Manual override required to proceed.');
+                            }
+                        }
+
                         // Authorization enforcement per model
                         foreach ($selectedItems as $item) {
                             $mid = (int)$item['model_id'];
@@ -1602,6 +1624,32 @@ $active  = basename($_SERVER['PHP_SELF']);
                         <?php endforeach; ?>
                         <button type="submit" class="btn btn-warning btn-sm">
                             Append to existing checkout
+                        </button>
+                    </form>
+                <?php endif; ?>
+                <?php if ($showOverdueOverride && $selectedReservation): ?>
+                    <hr class="my-2">
+                    <p class="mb-2">
+                        This user has overdue items. You can override this check to proceed with the checkout.
+                    </p>
+                    <form method="post" class="d-inline">
+                        <input type="hidden" name="mode" value="reservation_checkout">
+                        <input type="hidden" name="overdue_override" value="1">
+                        <input type="hidden" name="reservation_note" value="<?= h($reservationNoteValue) ?>">
+                        <input type="hidden" name="reservation_user_id" value="<?= (int)$selectedReservationUserId ?>">
+                        <input type="hidden" name="override_start_datetime" value="<?= h($overrideStart) ?>">
+                        <input type="hidden" name="override_end_datetime" value="<?= h($overrideEnd) ?>">
+                        <?php foreach ($selectedItems as $item): ?>
+                            <?php
+                                $mid = (int)$item['model_id'];
+                                $selectionsForModel = $presetSelections[$mid] ?? [];
+                            ?>
+                            <?php foreach ($selectionsForModel as $idx => $aid): ?>
+                                <input type="hidden" name="selected_assets[<?= $mid ?>][<?= (int)$idx ?>]" value="<?= (int)$aid ?>">
+                            <?php endforeach; ?>
+                        <?php endforeach; ?>
+                        <button type="submit" class="btn btn-warning btn-sm">
+                            Override — proceed with checkout
                         </button>
                     </form>
                 <?php endif; ?>

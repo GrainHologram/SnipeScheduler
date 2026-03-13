@@ -187,6 +187,12 @@ if ($isStaff) {
         $overdueGrouped[$email]['checkouts'][] = $row;
     }
 }
+
+// Build lookup set of emails with overdue checkouts (for pickup card highlighting)
+$overdueUserEmails = [];
+foreach ($overdueGrouped as $email => $_grp) {
+    $overdueUserEmails[$email] = true;
+}
 ?>
 <!DOCTYPE html>
 <html>
@@ -319,10 +325,14 @@ if ($isStaff) {
                                 <?php
                                     $firstRes = $puGroup['reservations'][0];
                                     $earliestTime = app_format_time($firstRes['start_datetime']);
+                                    $puIsOverdue = isset($overdueUserEmails[$puEmail]);
                                 ?>
-                                <div class="list-group-item">
+                                <div class="list-group-item<?= $puIsOverdue ? ' list-group-item-warning' : '' ?>">
                                     <div class="d-flex align-items-center gap-2 mb-1">
                                         <span class="fw-semibold" style="min-width:0; flex:1;"><?= h($puGroup['user_name']) ?></span>
+                                        <?php if ($puIsOverdue): ?>
+                                            <span class="badge bg-danger flex-shrink-0">Overdue items</span>
+                                        <?php endif; ?>
                                         <span class="text-muted small flex-shrink-0">Pickup <?= h($earliestTime) ?></span>
                                         <?= layout_status_badge($firstRes['status']) ?>
                                         <a href="reservations.php?tab=today&res=<?= (int)$firstRes['id'] ?>" class="btn btn-sm btn-outline-primary flex-shrink-0">Process</a>
