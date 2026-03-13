@@ -109,6 +109,8 @@ if ($isStaff) {
                                    FROM checkout_items WHERE checkout_id IN ($ph) ORDER BY id");
         $ciStmt->execute(array_values($dueCheckoutIds));
         foreach ($ciStmt->fetchAll(PDO::FETCH_ASSOC) as $ci) {
+            $ci['asset_name'] = html_entity_decode($ci['asset_name'] ?? '', ENT_QUOTES, 'UTF-8');
+            $ci['model_name'] = html_entity_decode($ci['model_name'] ?? '', ENT_QUOTES, 'UTF-8');
             $dueCheckoutItems[(int)$ci['checkout_id']][] = $ci;
         }
     }
@@ -169,6 +171,8 @@ if ($isStaff) {
                                    FROM checkout_items WHERE checkout_id IN ($ph) ORDER BY id");
         $ciStmt->execute(array_values($overdueCheckoutIds));
         foreach ($ciStmt->fetchAll(PDO::FETCH_ASSOC) as $ci) {
+            $ci['asset_name'] = html_entity_decode($ci['asset_name'] ?? '', ENT_QUOTES, 'UTF-8');
+            $ci['model_name'] = html_entity_decode($ci['model_name'] ?? '', ENT_QUOTES, 'UTF-8');
             $overdueCheckoutItems[(int)$ci['checkout_id']][] = $ci;
         }
     }

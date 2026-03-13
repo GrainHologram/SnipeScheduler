@@ -106,7 +106,7 @@ function batch_get_reservation_items(PDO $pdo, array $reservationIds): array
 
         $grouped[$resId][] = [
             'model_id' => $modelId,
-            'name'     => $row['model_name_cache'] ?: ('Model #' . $modelId),
+            'name'     => html_entity_decode($row['model_name_cache'] ?: ('Model #' . $modelId), ENT_QUOTES, 'UTF-8'),
             'qty'      => $qty,
         ];
     }
