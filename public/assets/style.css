@@ -719,6 +719,11 @@ form .form-select {
     padding: 0.9rem 1.1rem;
 }
 
+.filter-panel--soft {
+    background: rgba(var(--primary-rgb), 0.7);
+    box-shadow: 0 12px 28px rgba(var(--primary-rgb), 0.14);
+}
+
 .filter-panel--compact .filter-panel__header {
     margin-bottom: 0.45rem;
 }
