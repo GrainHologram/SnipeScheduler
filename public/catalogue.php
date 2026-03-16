@@ -862,7 +862,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     'prefetch'       => '1',
                 ], 'strlen');
             ?>
-            <form class="filter-panel filter-panel--compact mb-3" method="get" action="catalogue.php" id="catalogue-window-form">
+            <form class="filter-panel filter-panel--compact filter-panel--soft mb-3" method="get" action="catalogue.php" id="catalogue-window-form">
                 <div class="filter-panel__header d-flex align-items-center gap-3">
                     <span class="filter-panel__dot"></span>
                     <div class="filter-panel__title">RESERVATION WINDOW</div>
