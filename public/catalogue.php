@@ -1703,6 +1703,11 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 // Save full list for modal data before filtering/paginating
                 $allKitCards = $kitCards;
 
+                // Sort kits by name
+                usort($kitCards, function($a, $b) {
+                    return strnatcasecmp($a['name'], $b['name']);
+                });
+
                 // Apply search filter to kits
                 if ($search !== null) {
                     $kitCards = array_filter($kitCards, function($kc) use ($search) {
