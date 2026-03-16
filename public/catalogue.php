@@ -1552,6 +1552,17 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         $kitQty = max(1, (int)($km['quantity'] ?? 1));
                         $modelLines[] = $kitQty . 'x ' . $modelName;
 
+                        // Fetch model image (cached by snipeit_request)
+                        $modelImage = '';
+                        if ($mid > 0) {
+                            try {
+                                $modelData = get_model($mid);
+                                $modelImage = $modelData['image'] ?? '';
+                            } catch (Throwable $e) {
+                                // Non-fatal
+                            }
+                        }
+
                         // Stats
                         $stats = $kitModelStats[$mid] ?? null;
                         $requestableCount = $stats ? $stats['requestable_count'] : 0;
@@ -1644,6 +1655,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                             'name'     => $modelName,
                             'kit_qty'  => $kitQty,
                             'free'     => $freeUnits,
+                            'image'    => $modelImage,
                         ];
                     }
 
@@ -1680,17 +1692,72 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         'auth_missing'    => $kitAuthMissing,
                     ];
                 }
+
+                // Save full list for modal data before filtering/paginating
+                $allKitCards = $kitCards;
+
+                // Apply search filter to kits
+                if ($search !== null) {
+                    $kitCards = array_filter($kitCards, function($kc) use ($search) {
+                        $needle = mb_strtolower($search);
+                        if (mb_strpos(mb_strtolower($kc['name']), $needle) !== false) return true;
+                        foreach ($kc['model_lines'] as $line) {
+                            if (mb_strpos(mb_strtolower($line), $needle) !== false) return true;
+                        }
+                        return false;
+                    });
+                    $kitCards = array_values($kitCards); // re-index
+                }
+
+                // Paginate kits
+                $totalKits = count($kitCards);
+                $kitPerPage = 12;
+                $totalKitPages = max(1, (int)ceil($totalKits / $kitPerPage));
+                $kitPage = min($page, $totalKitPages);
+                $kitCards = array_slice($kitCards, ($kitPage - 1) * $kitPerPage, $kitPerPage);
             }
         ?>
         <?php if ($kitsError): ?>
             <div class="alert alert-danger">
                 Error loading kits from Snipe-IT: <?= h($kitsError) ?>
             </div>
-        <?php elseif (empty($kitCards)): ?>
+        <?php elseif (empty($allKitCards ?? [])): ?>
             <div class="alert alert-info">
                 No kits available. Equipment kits are configured in Snipe-IT.
             </div>
         <?php else: ?>
+            <form class="filter-panel mb-4" method="get" action="catalogue.php" id="kits-filter-form">
+                <div class="filter-panel__header d-flex align-items-center gap-3">
+                    <span class="filter-panel__dot"></span>
+                    <div class="filter-panel__title">SEARCH</div>
+                </div>
+                <input type="hidden" name="tab" value="kits">
+                <input type="hidden" name="start_datetime" value="<?= h($windowStartRaw) ?>">
+                <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
+                <input type="hidden" name="prefetch" value="1">
+                <div class="row g-3 align-items-end">
+                    <div class="col-12 col-lg-8">
+                        <label class="form-label mb-1 fw-semibold">Search by name</label>
+                        <div class="input-group filter-search">
+                            <span class="input-group-text filter-search__icon" aria-hidden="true">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+                                    <line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                            </span>
+                            <input type="text"
+                                   name="q"
+                                   class="form-control filter-search__input"
+                                   value="<?= h($searchRaw) ?>"
+                                   placeholder="Search by kit or model name...">
+                        </div>
+                    </div>
+                    <div class="col-12 col-lg-2 d-grid">
+                        <button class="btn btn-primary btn-lg" type="submit">Filter results</button>
+                    </div>
+                </div>
+            </form>
+
             <?php if ($windowActive): ?>
                 <div class="alert alert-info">
                     Showing kit availability for:
@@ -1702,12 +1769,22 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 </div>
             <?php endif; ?>
 
+            <?php if (empty($kitCards)): ?>
+                <div class="alert alert-info">
+                    No kits found matching your search. Try adjusting your filters.
+                </div>
+            <?php else: ?>
+
             <div class="row g-3">
                 <?php foreach ($kitCards as $kitCard): ?>
                     <div class="col-md-4">
                         <div class="card h-100 model-card">
                             <div class="card-body d-flex flex-column">
-                                <h5 class="card-title"><?= h($kitCard['name']) ?></h5>
+                                <h5 class="card-title">
+                                    <a href="#" class="text-decoration-none" onclick="openKitContentsModal(<?= (int)$kitCard['id'] ?>); return false;">
+                                        <?= h($kitCard['name']) ?>
+                                    </a>
+                                </h5>
                                 <div class="small text-muted mb-2">
                                     <?php foreach ($kitCard['model_lines'] as $line): ?>
                                         <div><?= h($line) ?></div>
@@ -1809,6 +1886,105 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     </div>
                 <?php endforeach; ?>
             </div>
+
+            <!-- Kit Pagination -->
+            <?php if ($totalKitPages > 1): ?>
+                <nav class="mt-4">
+                    <ul class="pagination">
+                        <?php
+                        $kitBaseQuery = [
+                            'tab'      => 'kits',
+                            'q'        => $searchRaw,
+                            'start_datetime' => $windowStartRaw,
+                            'end_datetime' => $windowEndRaw,
+                            'prefetch' => 1,
+                        ];
+                        ?>
+                        <?php for ($p = 1; $p <= $totalKitPages; $p++): ?>
+                            <?php $q = http_build_query(array_merge($kitBaseQuery, ['page' => $p])); ?>
+                            <li class="page-item <?= $p === $kitPage ? 'active' : '' ?>">
+                                <a class="page-link" href="catalogue.php?<?= $q ?>">
+                                    <?= $p ?>
+                                </a>
+                            </li>
+                        <?php endfor; ?>
+                    </ul>
+                </nav>
+            <?php endif; ?>
+
+            <?php endif; // end non-empty kitCards ?>
+
+            <!-- Kit Contents Data for Modal -->
+            <script>
+            var kitContentsData = <?= json_encode(array_combine(
+                array_column($allKitCards, 'id'),
+                array_map(function($kc) {
+                    return [
+                        'name' => $kc['name'],
+                        'models' => array_map(function($md) {
+                            return [
+                                'id' => $md['id'],
+                                'name' => $md['name'],
+                                'qty' => $md['kit_qty'],
+                                'image' => $md['image'],
+                            ];
+                        }, $kc['model_details']),
+                    ];
+                }, $allKitCards)
+            ), JSON_HEX_TAG) ?>;
+            </script>
+
+            <!-- Kit Contents Modal -->
+            <div id="kitContentsBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1060;" onclick="closeKitContentsModal()"></div>
+            <div id="kitContentsModal" style="display:none; position:fixed; inset:0; z-index:1065; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)closeKitContentsModal()">
+                <div style="max-width:600px; margin:0 auto; background:var(--bs-body-bg, #fff); border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
+                    <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid var(--bs-border-color, #dee2e6);">
+                        <h5 id="kitContentsTitle" style="margin:0;">Kit Contents</h5>
+                        <button type="button" onclick="closeKitContentsModal()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
+                    </div>
+                    <div id="kitContentsBody" style="padding:1rem;">
+                    </div>
+                </div>
+            </div>
+            <script>
+            function openKitContentsModal(kitId) {
+                var kit = kitContentsData[kitId];
+                if (!kit) return;
+                document.getElementById('kitContentsTitle').textContent = kit.name;
+                var html = '<div class="list-group">';
+                kit.models.forEach(function(m) {
+                    var imgHtml = m.image
+                        ? '<img src="image_proxy.php?src=' + encodeURIComponent(m.image) + '" style="width:48px; height:48px; object-fit:contain; border-radius:4px; background:#f8f9fa;" alt="">'
+                        : '<div style="width:48px; height:48px; background:#f1f3f5; border-radius:4px; display:flex; align-items:center; justify-content:center;"><small class="text-muted">&mdash;</small></div>';
+                    html += '<div class="list-group-item d-flex align-items-center gap-3">';
+                    html += imgHtml;
+                    html += '<div class="flex-grow-1">';
+                    html += '<div class="fw-semibold">' + escKitHtml(m.name) + '</div>';
+                    html += '<small class="text-muted">Quantity: ' + m.qty + '</small>';
+                    html += '</div>';
+                    html += '</div>';
+                });
+                html += '</div>';
+                document.getElementById('kitContentsBody').innerHTML = html;
+                document.getElementById('kitContentsBackdrop').style.display = 'block';
+                document.getElementById('kitContentsModal').style.display = 'block';
+            }
+
+            function closeKitContentsModal() {
+                document.getElementById('kitContentsBackdrop').style.display = 'none';
+                document.getElementById('kitContentsModal').style.display = 'none';
+            }
+
+            function escKitHtml(s) {
+                var d = document.createElement('div');
+                d.textContent = s || '';
+                return d.innerHTML;
+            }
+
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') closeKitContentsModal();
+            });
+            </script>
         <?php endif; ?>
         <?php endif; // end kits tab ?>
         </div>
