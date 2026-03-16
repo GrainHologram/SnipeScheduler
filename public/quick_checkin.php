@@ -673,6 +673,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             Add to check-in list
                         </button>
                     </div>
+                    <div class="col-auto">
+                        <a href="quick_checkin.php" class="btn btn-outline-secondary" title="Refresh page to sync all scanned items">Refresh</a>
+                    </div>
                 </form>
             </div>
         </div>

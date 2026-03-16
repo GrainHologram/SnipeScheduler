@@ -1693,6 +1693,9 @@ $active  = basename($_SERVER['PHP_SELF']);
                             <div class="col-md-3 d-grid">
                                 <button type="submit" class="btn btn-outline-primary">Assign</button>
                             </div>
+                            <div class="col-auto d-grid">
+                                <a href="<?= h($selfUrl) ?>" class="btn btn-outline-secondary" title="Refresh page to sync all scanned items">Refresh</a>
+                            </div>
                         </div>
                     </form>
                 </div>
