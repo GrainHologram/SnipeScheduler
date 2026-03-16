@@ -1497,8 +1497,24 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     }
                 }
 
-                // Bulk-fetch stats for all models referenced by kits
+                // Bulk-fetch model images for all kit models (single API call)
                 $allKitModelIds = array_unique($allKitModelIds);
+                $kitModelImages = [];
+                if (!empty($allKitModelIds)) {
+                    try {
+                        $imgData = snipeit_request('GET', 'models', ['limit' => 500]);
+                        foreach (($imgData['rows'] ?? []) as $m) {
+                            $mid = (int)($m['id'] ?? 0);
+                            if ($mid > 0 && in_array($mid, $allKitModelIds, true)) {
+                                $kitModelImages[$mid] = $m['image'] ?? '';
+                            }
+                        }
+                    } catch (Throwable $e) {
+                        // Non-fatal — images just won't appear
+                    }
+                }
+
+                // Bulk-fetch stats for all models referenced by kits
                 $kitModelStats = [];
                 if (!empty($allKitModelIds)) {
                     try {
@@ -1552,16 +1568,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         $kitQty = max(1, (int)($km['quantity'] ?? 1));
                         $modelLines[] = $kitQty . 'x ' . $modelName;
 
-                        // Fetch model image (cached by snipeit_request)
-                        $modelImage = '';
-                        if ($mid > 0) {
-                            try {
-                                $modelData = get_model($mid);
-                                $modelImage = $modelData['image'] ?? '';
-                            } catch (Throwable $e) {
-                                // Non-fatal
-                            }
-                        }
+                        $modelImage = $kitModelImages[$mid] ?? '';
 
                         // Stats
                         $stats = $kitModelStats[$mid] ?? null;
