@@ -1914,82 +1914,85 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
 
             <?php endif; // end non-empty kitCards ?>
 
-            <!-- Kit Contents Data for Modal -->
-            <script>
-            var kitContentsData = <?= json_encode(array_combine(
-                array_column($allKitCards, 'id'),
-                array_map(function($kc) {
-                    return [
-                        'name' => $kc['name'],
-                        'models' => array_map(function($md) {
-                            return [
-                                'id' => $md['id'],
-                                'name' => $md['name'],
-                                'qty' => $md['kit_qty'],
-                                'image' => $md['image'],
-                            ];
-                        }, $kc['model_details']),
-                    ];
-                }, $allKitCards)
-            ), JSON_HEX_TAG) ?>;
-            </script>
-
-            <!-- Kit Contents Modal -->
-            <div id="kitContentsBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1060;" onclick="closeKitContentsModal()"></div>
-            <div id="kitContentsModal" style="display:none; position:fixed; inset:0; z-index:1065; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)closeKitContentsModal()">
-                <div style="max-width:600px; margin:0 auto; background:var(--bs-body-bg, #fff); border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
-                    <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid var(--bs-border-color, #dee2e6);">
-                        <h5 id="kitContentsTitle" style="margin:0;">Kit Contents</h5>
-                        <button type="button" onclick="closeKitContentsModal()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
-                    </div>
-                    <div id="kitContentsBody" style="padding:1rem;">
-                    </div>
-                </div>
-            </div>
-            <script>
-            function openKitContentsModal(kitId) {
-                var kit = kitContentsData[kitId];
-                if (!kit) return;
-                document.getElementById('kitContentsTitle').textContent = kit.name;
-                var html = '<div class="list-group">';
-                kit.models.forEach(function(m) {
-                    var imgHtml = m.image
-                        ? '<img src="image_proxy.php?src=' + encodeURIComponent(m.image) + '" style="width:48px; height:48px; object-fit:contain; border-radius:4px; background:#f8f9fa;" alt="">'
-                        : '<div style="width:48px; height:48px; background:#f1f3f5; border-radius:4px; display:flex; align-items:center; justify-content:center;"><small class="text-muted">&mdash;</small></div>';
-                    html += '<div class="list-group-item d-flex align-items-center gap-3">';
-                    html += imgHtml;
-                    html += '<div class="flex-grow-1">';
-                    html += '<div class="fw-semibold">' + escKitHtml(m.name) + '</div>';
-                    html += '<small class="text-muted">Quantity: ' + m.qty + '</small>';
-                    html += '</div>';
-                    html += '</div>';
-                });
-                html += '</div>';
-                document.getElementById('kitContentsBody').innerHTML = html;
-                document.getElementById('kitContentsBackdrop').style.display = 'block';
-                document.getElementById('kitContentsModal').style.display = 'block';
-            }
-
-            function closeKitContentsModal() {
-                document.getElementById('kitContentsBackdrop').style.display = 'none';
-                document.getElementById('kitContentsModal').style.display = 'none';
-            }
-
-            function escKitHtml(s) {
-                var d = document.createElement('div');
-                d.textContent = s || '';
-                return d.innerHTML;
-            }
-
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') closeKitContentsModal();
-            });
-            </script>
         <?php endif; ?>
         <?php endif; // end kits tab ?>
         </div>
     </div>
 </div>
+
+<?php if (!empty($allKitCards)): ?>
+<!-- Kit Contents Data for Modal -->
+<script>
+var kitContentsData = <?= json_encode(array_combine(
+    array_column($allKitCards, 'id'),
+    array_map(function($kc) {
+        return [
+            'name' => html_entity_decode($kc['name'], ENT_QUOTES, 'UTF-8'),
+            'models' => array_map(function($md) {
+                return [
+                    'id' => $md['id'],
+                    'name' => html_entity_decode($md['name'], ENT_QUOTES, 'UTF-8'),
+                    'qty' => $md['kit_qty'],
+                    'image' => $md['image'],
+                ];
+            }, $kc['model_details']),
+        ];
+    }, $allKitCards)
+), JSON_HEX_TAG) ?>;
+</script>
+
+<!-- Kit Contents Modal -->
+<div id="kitContentsBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1060;" onclick="closeKitContentsModal()"></div>
+<div id="kitContentsModal" style="display:none; position:fixed; inset:0; z-index:1065; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)closeKitContentsModal()">
+    <div style="max-width:600px; margin:0 auto; background:var(--bs-body-bg, #fff); border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid var(--bs-border-color, #dee2e6);">
+            <h5 id="kitContentsTitle" style="margin:0;">Kit Contents</h5>
+            <button type="button" onclick="closeKitContentsModal()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
+        </div>
+        <div id="kitContentsBody" style="padding:1rem;">
+        </div>
+    </div>
+</div>
+<script>
+function openKitContentsModal(kitId) {
+    var kit = kitContentsData[kitId];
+    if (!kit) return;
+    document.getElementById('kitContentsTitle').textContent = kit.name;
+    var html = '<div class="list-group">';
+    kit.models.forEach(function(m) {
+        var imgHtml = m.image
+            ? '<img src="image_proxy.php?src=' + encodeURIComponent(m.image) + '" style="width:48px; height:48px; object-fit:contain; border-radius:4px; background:#f8f9fa;" alt="">'
+            : '<div style="width:48px; height:48px; background:#f1f3f5; border-radius:4px; display:flex; align-items:center; justify-content:center;"><small class="text-muted">&mdash;</small></div>';
+        html += '<div class="list-group-item d-flex align-items-center gap-3">';
+        html += imgHtml;
+        html += '<div class="flex-grow-1">';
+        html += '<div class="fw-semibold">' + escKitHtml(m.name) + '</div>';
+        html += '<small class="text-muted">Quantity: ' + m.qty + '</small>';
+        html += '</div>';
+        html += '</div>';
+    });
+    html += '</div>';
+    document.getElementById('kitContentsBody').innerHTML = html;
+    document.getElementById('kitContentsBackdrop').style.display = 'block';
+    document.getElementById('kitContentsModal').style.display = 'block';
+}
+
+function closeKitContentsModal() {
+    document.getElementById('kitContentsBackdrop').style.display = 'none';
+    document.getElementById('kitContentsModal').style.display = 'none';
+}
+
+function escKitHtml(s) {
+    var d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeKitContentsModal();
+});
+</script>
+<?php endif; ?>
 
 <div id="basket-toast"
      class="basket-toast"
