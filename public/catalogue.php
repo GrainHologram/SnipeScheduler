@@ -862,17 +862,6 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     'prefetch'       => '1',
                 ], 'strlen');
             ?>
-            <ul class="nav nav-tabs mb-3">
-                <li class="nav-item">
-                    <a class="nav-link <?= $tab === 'equipment' ? 'active' : '' ?>"
-                       href="catalogue.php?<?= http_build_query(array_merge($tabQueryParams, ['tab' => 'equipment'])) ?>">Equipment</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link <?= $tab === 'kits' ? 'active' : '' ?>"
-                       href="catalogue.php?<?= http_build_query(array_merge($tabQueryParams, ['tab' => 'kits'])) ?>">Kits</a>
-                </li>
-            </ul>
-
             <form class="filter-panel filter-panel--compact mb-3" method="get" action="catalogue.php" id="catalogue-window-form">
                 <div class="filter-panel__header d-flex align-items-center gap-3">
                     <span class="filter-panel__dot"></span>
@@ -921,6 +910,17 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     <div class="text-danger small mt-2"><?= h($windowError) ?></div>
                 <?php endif; ?>
             </form>
+
+            <ul class="nav nav-tabs mb-3">
+                <li class="nav-item">
+                    <a class="nav-link <?= $tab === 'equipment' ? 'active' : '' ?>"
+                       href="catalogue.php?<?= http_build_query(array_merge($tabQueryParams, ['tab' => 'equipment'])) ?>">Equipment</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link <?= $tab === 'kits' ? 'active' : '' ?>"
+                       href="catalogue.php?<?= http_build_query(array_merge($tabQueryParams, ['tab' => 'kits'])) ?>">Kits</a>
+                </li>
+            </ul>
 
             <?php if ($categoryErr): ?>
                 <div class="alert alert-warning">
