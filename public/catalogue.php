@@ -873,6 +873,55 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 </li>
             </ul>
 
+            <form class="filter-panel filter-panel--compact mb-3" method="get" action="catalogue.php" id="catalogue-window-form">
+                <div class="filter-panel__header d-flex align-items-center gap-3">
+                    <span class="filter-panel__dot"></span>
+                    <div class="filter-panel__title">RESERVATION WINDOW</div>
+                </div>
+                <input type="hidden" name="tab" value="<?= h($tab) ?>">
+                <input type="hidden" name="q" value="<?= h($searchRaw) ?>">
+                <input type="hidden" name="category" value="<?= h($categoryRaw) ?>">
+                <input type="hidden" name="sort" value="<?= h($sortRaw) ?>">
+                <input type="hidden" name="prefetch" value="1">
+                <input type="hidden" name="start_datetime" id="window_start_datetime" value="<?= h($windowStartRaw) ?>">
+                <input type="hidden" name="end_datetime" id="window_end_datetime" value="<?= h($windowEndRaw) ?>">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Pick-up date &amp; time</label>
+                        <div id="window-start-picker"></div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Return date &amp; time</label>
+                        <div id="window-end-picker"></div>
+                    </div>
+                    <div class="col-md-4 d-grid d-md-flex gap-2">
+                        <button class="btn btn-primary btn-lg w-100 flex-md-fill mt-3 mt-md-0 reservation-window-btn" type="button" id="window-today-btn">
+                            Today
+                        </button>
+                        <button class="btn btn-primary btn-lg w-100 flex-md-fill mt-3 mt-md-0 reservation-window-btn" type="submit">
+                            Update availability
+                        </button>
+                    </div>
+                </div>
+                <?php if ($isStaff): ?>
+                <div class="mt-2">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input window-bypass-cap" type="checkbox" id="window-bypass-capacity">
+                        <label class="form-check-label" for="window-bypass-capacity">Bypass slot capacity</label>
+                    </div>
+                    <?php if ($isAdmin): ?>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input window-bypass-closed" type="checkbox" id="window-bypass-closed">
+                        <label class="form-check-label" for="window-bypass-closed">Bypass closed hours</label>
+                    </div>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
+                <?php if ($windowError !== ''): ?>
+                    <div class="text-danger small mt-2"><?= h($windowError) ?></div>
+                <?php endif; ?>
+            </form>
+
             <?php if ($categoryErr): ?>
                 <div class="alert alert-warning">
                     Could not load categories from Snipe-IT: <?= htmlspecialchars($categoryErr) ?>
@@ -951,55 +1000,6 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     <button class="btn btn-primary btn-lg" type="submit">Filter results</button>
                 </div>
             </div>
-        </form>
-
-        <form class="filter-panel filter-panel--compact mb-4" method="get" action="catalogue.php" id="catalogue-window-form">
-            <div class="filter-panel__header d-flex align-items-center gap-3">
-                <span class="filter-panel__dot"></span>
-                <div class="filter-panel__title">RESERVATION WINDOW</div>
-            </div>
-            <input type="hidden" name="tab" value="equipment">
-            <input type="hidden" name="q" value="<?= h($searchRaw) ?>">
-            <input type="hidden" name="category" value="<?= h($categoryRaw) ?>">
-            <input type="hidden" name="sort" value="<?= h($sortRaw) ?>">
-            <input type="hidden" name="prefetch" value="1">
-            <input type="hidden" name="start_datetime" id="catalogue_start_datetime" value="<?= h($windowStartRaw) ?>">
-            <input type="hidden" name="end_datetime" id="catalogue_end_datetime" value="<?= h($windowEndRaw) ?>">
-            <div class="row g-3 align-items-end">
-                <div class="col-md-4">
-                    <label class="form-label fw-semibold">Pick-up date &amp; time</label>
-                    <div id="equip-start-picker"></div>
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label fw-semibold">Return date &amp; time</label>
-                    <div id="equip-end-picker"></div>
-                </div>
-                <div class="col-md-4 d-grid d-md-flex gap-2">
-                    <button class="btn btn-primary btn-lg w-100 flex-md-fill mt-3 mt-md-0 reservation-window-btn" type="button" id="catalogue-today-btn">
-                        Today
-                    </button>
-                    <button class="btn btn-primary btn-lg w-100 flex-md-fill mt-3 mt-md-0 reservation-window-btn" type="submit">
-                        Update availability
-                    </button>
-                </div>
-            </div>
-            <?php if ($isStaff): ?>
-            <div class="mt-2">
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input equip-bypass-cap" type="checkbox" id="equip-bypass-capacity">
-                    <label class="form-check-label" for="equip-bypass-capacity">Bypass slot capacity</label>
-                </div>
-                <?php if ($isAdmin): ?>
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input equip-bypass-closed" type="checkbox" id="equip-bypass-closed">
-                    <label class="form-check-label" for="equip-bypass-closed">Bypass closed hours</label>
-                </div>
-                <?php endif; ?>
-            </div>
-            <?php endif; ?>
-            <?php if ($windowError !== ''): ?>
-                <div class="text-danger small mt-2"><?= h($windowError) ?></div>
-            <?php endif; ?>
         </form>
 
         <?php if (empty($models) && !$modelErr): ?>
@@ -1702,52 +1702,6 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 </div>
             <?php endif; ?>
 
-            <form class="filter-panel filter-panel--compact mb-4" method="get" action="catalogue.php" id="kits-window-form">
-                <div class="filter-panel__header d-flex align-items-center gap-3">
-                    <span class="filter-panel__dot"></span>
-                    <div class="filter-panel__title">RESERVATION WINDOW</div>
-                </div>
-                <input type="hidden" name="tab" value="kits">
-                <input type="hidden" name="q" value="<?= h($searchRaw) ?>">
-                <input type="hidden" name="category" value="<?= h($categoryRaw) ?>">
-                <input type="hidden" name="sort" value="<?= h($sortRaw) ?>">
-                <input type="hidden" name="prefetch" value="1">
-                <input type="hidden" name="start_datetime" id="kits_start_datetime" value="<?= h($windowStartRaw) ?>">
-                <input type="hidden" name="end_datetime" id="kits_end_datetime" value="<?= h($windowEndRaw) ?>">
-                <div class="row g-3 align-items-end">
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Pick-up date &amp; time</label>
-                        <div id="kits-start-picker"></div>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Return date &amp; time</label>
-                        <div id="kits-end-picker"></div>
-                    </div>
-                    <div class="col-md-4 d-grid d-md-flex gap-2">
-                        <button class="btn btn-primary btn-lg w-100 flex-md-fill mt-3 mt-md-0 reservation-window-btn" type="button" id="kits-today-btn">
-                            Today
-                        </button>
-                        <button class="btn btn-primary btn-lg w-100 flex-md-fill mt-3 mt-md-0 reservation-window-btn" type="submit">
-                            Update availability
-                        </button>
-                    </div>
-                </div>
-                <?php if ($isStaff): ?>
-                <div class="mt-2">
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input kits-bypass-cap" type="checkbox" id="kits-bypass-capacity">
-                        <label class="form-check-label" for="kits-bypass-capacity">Bypass slot capacity</label>
-                    </div>
-                    <?php if ($isAdmin): ?>
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input kits-bypass-closed" type="checkbox" id="kits-bypass-closed">
-                        <label class="form-check-label" for="kits-bypass-closed">Bypass closed hours</label>
-                    </div>
-                    <?php endif; ?>
-                </div>
-                <?php endif; ?>
-            </form>
-
             <div class="row g-3">
                 <?php foreach ($kitCards as $kitCard): ?>
                     <div class="col-md-4">
@@ -1916,8 +1870,7 @@ document.addEventListener('DOMContentLoaded', function () {
         dateFormat: <?= json_encode(app_get_date_format()) ?>
     };
 
-    var equipEndManuallySet = false;
-    var kitsEndManuallySet = false;
+    var windowEndManuallySet = false;
 
     function autoSetEnd(endPicker, datetime) {
         if (maxCheckoutHours > 0) {
@@ -1937,59 +1890,33 @@ document.addEventListener('DOMContentLoaded', function () {
         form.submit();
     }
 
-    // ---- Equipment tab slot pickers ----
-    var equipForm = document.getElementById('catalogue-window-form');
-    var equipStartHidden = document.getElementById('catalogue_start_datetime');
-    var equipEndHidden = document.getElementById('catalogue_end_datetime');
-    var equipStartPicker = null, equipEndPicker = null;
+    // ---- Unified window slot pickers ----
+    var windowForm = document.getElementById('catalogue-window-form');
+    var windowStartHidden = document.getElementById('window_start_datetime');
+    var windowEndHidden = document.getElementById('window_end_datetime');
+    var windowStartPicker = null, windowEndPicker = null;
 
-    if (document.getElementById('equip-start-picker')) {
-        equipEndPicker = new SlotPicker(Object.assign({}, spOpts, {
-            container: document.getElementById('equip-end-picker'),
-            hiddenInput: equipEndHidden,
+    if (document.getElementById('window-start-picker')) {
+        windowEndPicker = new SlotPicker(Object.assign({}, spOpts, {
+            container: document.getElementById('window-end-picker'),
+            hiddenInput: windowEndHidden,
             type: 'end',
             intervalMinutes: intervalMinutes,
-            onSelect: function () { equipEndManuallySet = true; if (equipStartHidden.value) submitWindowForm(equipForm); }
+            onSelect: function () { windowEndManuallySet = true; if (windowStartHidden.value) submitWindowForm(windowForm); }
         }));
-        equipStartPicker = new SlotPicker(Object.assign({}, spOpts, {
-            container: document.getElementById('equip-start-picker'),
-            hiddenInput: equipStartHidden,
+        windowStartPicker = new SlotPicker(Object.assign({}, spOpts, {
+            container: document.getElementById('window-start-picker'),
+            hiddenInput: windowStartHidden,
             type: 'start',
             intervalMinutes: intervalMinutes,
-            onSelect: function (dt) { if (!equipEndManuallySet) autoSetEnd(equipEndPicker, dt); if (equipEndHidden.value) submitWindowForm(equipForm); }
+            onSelect: function (dt) { if (!windowEndManuallySet) autoSetEnd(windowEndPicker, dt); if (windowEndHidden.value) submitWindowForm(windowForm); }
         }));
-        if (equipStartHidden.value) equipStartPicker.setValue(equipStartHidden.value);
-        if (equipEndHidden.value) { equipEndPicker.setValue(equipEndHidden.value); equipEndManuallySet = true; }
+        if (windowStartHidden.value) windowStartPicker.setValue(windowStartHidden.value);
+        if (windowEndHidden.value) { windowEndPicker.setValue(windowEndHidden.value); windowEndManuallySet = true; }
     }
 
-    // ---- Kits tab slot pickers ----
-    var kitsForm = document.getElementById('kits-window-form');
-    var kitsStartHidden = document.getElementById('kits_start_datetime');
-    var kitsEndHidden = document.getElementById('kits_end_datetime');
-    var kitsStartPicker = null, kitsEndPicker = null;
-
-    if (document.getElementById('kits-start-picker')) {
-        kitsEndPicker = new SlotPicker(Object.assign({}, spOpts, {
-            container: document.getElementById('kits-end-picker'),
-            hiddenInput: kitsEndHidden,
-            type: 'end',
-            intervalMinutes: intervalMinutes,
-            onSelect: function () { kitsEndManuallySet = true; if (kitsStartHidden.value) submitWindowForm(kitsForm); }
-        }));
-        kitsStartPicker = new SlotPicker(Object.assign({}, spOpts, {
-            container: document.getElementById('kits-start-picker'),
-            hiddenInput: kitsStartHidden,
-            type: 'start',
-            intervalMinutes: intervalMinutes,
-            onSelect: function (dt) { if (!kitsEndManuallySet) autoSetEnd(kitsEndPicker, dt); if (kitsEndHidden.value) submitWindowForm(kitsForm); }
-        }));
-        if (kitsStartHidden.value) kitsStartPicker.setValue(kitsStartHidden.value);
-        if (kitsEndHidden.value) { kitsEndPicker.setValue(kitsEndHidden.value); kitsEndManuallySet = true; }
-    }
-
-    // ---- Today buttons ----
-    var todayBtn = document.getElementById('catalogue-today-btn');
-    var kitsTodayBtn = document.getElementById('kits-today-btn');
+    // ---- Today button ----
+    var todayBtn = document.getElementById('window-today-btn');
 
     function handleToday(startPicker, endPicker, form, btn) {
         if (btn) btn.disabled = true;
@@ -2028,32 +1955,27 @@ document.addEventListener('DOMContentLoaded', function () {
             });
     }
 
-    if (todayBtn && equipStartPicker) {
-        todayBtn.addEventListener('click', function () { equipEndManuallySet = false; handleToday(equipStartPicker, equipEndPicker, equipForm, todayBtn); });
-    }
-    if (kitsTodayBtn && kitsStartPicker) {
-        kitsTodayBtn.addEventListener('click', function () { kitsEndManuallySet = false; handleToday(kitsStartPicker, kitsEndPicker, kitsForm, kitsTodayBtn); });
+    if (todayBtn && windowStartPicker) {
+        todayBtn.addEventListener('click', function () { windowEndManuallySet = false; handleToday(windowStartPicker, windowEndPicker, windowForm, todayBtn); });
     }
 
     // ---- Bypass toggles ----
-    function wireBypass(capId, closedId, startP, endP) {
-        var cap = document.getElementById(capId);
-        var closed = document.getElementById(closedId);
-        if (cap && startP) {
+    (function () {
+        var cap = document.getElementById('window-bypass-capacity');
+        var closed = document.getElementById('window-bypass-closed');
+        if (cap && windowStartPicker) {
             cap.addEventListener('change', function () {
-                startP.setBypass('capacity', this.checked);
-                endP.setBypass('capacity', this.checked);
+                windowStartPicker.setBypass('capacity', this.checked);
+                windowEndPicker.setBypass('capacity', this.checked);
             });
         }
-        if (closed && startP) {
+        if (closed && windowStartPicker) {
             closed.addEventListener('change', function () {
-                startP.setBypass('closed', this.checked);
-                endP.setBypass('closed', this.checked);
+                windowStartPicker.setBypass('closed', this.checked);
+                windowEndPicker.setBypass('closed', this.checked);
             });
         }
-    }
-    wireBypass('equip-bypass-capacity', 'equip-bypass-closed', equipStartPicker, equipEndPicker);
-    wireBypass('kits-bypass-capacity', 'kits-bypass-closed', kitsStartPicker, kitsEndPicker);
+    })();
 
     function applyOverdueBlock(items) {
         if (catalogueContent) {
