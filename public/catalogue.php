@@ -1711,7 +1711,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
 
                 // Paginate kits
                 $totalKits = count($kitCards);
-                $kitPerPage = 12;
+                $kitPerPage = $perPage;
                 $totalKitPages = max(1, (int)ceil($totalKits / $kitPerPage));
                 $kitPage = min($page, $totalKitPages);
                 $kitCards = array_slice($kitCards, ($kitPage - 1) * $kitPerPage, $kitPerPage);
