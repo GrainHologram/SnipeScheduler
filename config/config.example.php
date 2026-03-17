@@ -197,4 +197,39 @@ return [
         'from_email' => '',
         'from_name'  => 'SnipeScheduler',
     ],
+
+    'discord_bot' => [
+        'bot_token'          => '',  // Discord bot token (secret)
+        'oauth_client_id'    => '',  // Discord application client ID
+        'oauth_client_secret'=> '',  // Discord application client secret
+        'oauth_redirect_uri' => '',  // Auto-detected if empty
+        'dm_enabled'         => false, // Master switch for DM notifications
+    ],
+
+    'notifications' => [
+        'discord_webhook_url' => '',  // Discord webhook URL; leave empty to disable Discord notifications
+        'events' => [
+            'checkout'              => ['email' => true, 'discord' => true],
+            'checkin'               => ['email' => true, 'discord' => true],
+            'reservation_submitted' => ['email' => true, 'discord' => true],
+            'reservation_cancelled' => ['email' => true, 'discord' => true],
+            'reservation_missed'    => ['email' => true, 'discord' => true],
+            'overdue_reminder'      => ['email' => true, 'discord' => true],
+            'overdue_escalation'    => ['email' => true, 'discord' => true],
+        ],
+    ],
+
+    'overdue' => [
+        'grace_period_hours' => 24,  // hours after end_datetime before staff is notified
+        'tiers' => [
+            // tier 0: immediately late (user only)
+            ['hours_overdue' => 0,   'user_email' => true, 'staff_email' => false, 'staff_discord' => false, 'label' => 'Late notice'],
+            // tier 1: grace period expired (user + staff)
+            ['hours_overdue' => 24,  'user_email' => true, 'staff_email' => true,  'staff_discord' => true,  'label' => 'Overdue — grace period expired'],
+            // tier 2: 3 days overdue
+            ['hours_overdue' => 72,  'user_email' => true, 'staff_email' => true,  'staff_discord' => true,  'label' => 'Overdue — 3 days'],
+            // tier 3: 7 days overdue (escalation)
+            ['hours_overdue' => 168, 'user_email' => true, 'staff_email' => true,  'staff_discord' => true,  'label' => 'Overdue — 1 week, policy action pending'],
+        ],
+    ],
 ];

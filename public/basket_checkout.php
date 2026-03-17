@@ -6,6 +6,7 @@ require_once SRC_PATH . '/activity_log.php';
 require_once SRC_PATH . '/snipeit_client.php';
 require_once SRC_PATH . '/checkout_rules.php';
 require_once SRC_PATH . '/layout.php';
+require_once SRC_PATH . '/notifications.php';
 
 // Helper: redirect back to basket with an error message
 function basket_error(string $msg): void
@@ -275,6 +276,47 @@ try {
             'end'       => $end,
             'booked_for'=> $userEmail,
         ],
+    ]);
+
+    // Notifications
+    $startDisplay = app_format_datetime_local($start);
+    $endDisplay   = app_format_datetime_local($end);
+    $itemSummary  = $label;
+    $resBodyLines = [
+        "Reservation #{$reservationId} submitted.",
+        "Items: {$itemSummary}",
+        "Pickup: {$startDisplay}",
+        "Return by: {$endDisplay}",
+    ];
+    $dmData = get_user_discord_dm_data($userEmail);
+    send_notification('user', 'reservation_submitted', [
+        'user_email' => $userEmail,
+        'user_name'  => $userName,
+        'subject'    => 'Reservation submitted',
+        'body_lines' => $resBodyLines,
+        'discord_dm_event_key' => 'reservation_created',
+        'discord_embeds' => [build_discord_embed(
+            'Reservation Submitted',
+            "Reservation #{$reservationId} submitted.",
+            DISCORD_COLOR_YELLOW,
+            [
+                ['name' => 'Items', 'value' => $itemSummary, 'inline' => false],
+                ['name' => 'Pickup', 'value' => $startDisplay, 'inline' => true],
+                ['name' => 'Return', 'value' => $endDisplay, 'inline' => true],
+            ]
+        )],
+    ] + $dmData);
+    send_notification('staff', 'reservation_submitted', [
+        'discord_embeds' => [build_discord_embed(
+            'Reservation Submitted',
+            "**{$userName}** submitted reservation #{$reservationId}",
+            DISCORD_COLOR_YELLOW,
+            [
+                ['name' => 'Items', 'value' => $itemSummary, 'inline' => false],
+                ['name' => 'Pickup', 'value' => $startDisplay, 'inline' => true],
+                ['name' => 'Return', 'value' => $endDisplay, 'inline' => true],
+            ]
+        )],
     ]);
 
 } catch (Exception $e) {

@@ -8,6 +8,7 @@
 require_once __DIR__ . '/../src/bootstrap.php';
 require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/activity_log.php';
+require_once SRC_PATH . '/notifications.php';
 
 $config = load_config();
 
@@ -88,6 +89,17 @@ if (!empty($missedIdInts)) {
     }
 }
 
+// Fetch user info for missed reservations (for notifications)
+$missedReservations = [];
+if (!empty($missedIdInts)) {
+    $placeholders2 = implode(',', array_fill(0, count($missedIdInts), '?'));
+    $resStmt = $pdo->prepare("SELECT id, user_name, user_email FROM reservations WHERE id IN ({$placeholders2})");
+    $resStmt->execute($missedIdInts);
+    foreach ($resStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $missedReservations[(int)$r['id']] = $r;
+    }
+}
+
 foreach ($missedIds as $missedId) {
     $resId = (int)$missedId;
     if ($resId > 0) {
@@ -98,6 +110,44 @@ foreach ($missedIds as $missedId) {
                 'assets' => $assetsByReservation[$resId] ?? [],
                 'cutoff_minutes' => $cutoffMinutes,
             ],
+        ]);
+
+        // Send missed notification
+        $missedRes = $missedReservations[$resId] ?? [];
+        $missedUserEmail = $missedRes['user_email'] ?? '';
+        $missedUserName  = $missedRes['user_name'] ?? $missedUserEmail;
+        $missedAssets    = implode(', ', $assetsByReservation[$resId] ?? []);
+        $missedBodyLines = [
+            "Reservation #{$resId} has been marked as missed.",
+            $missedAssets !== '' ? "Items: {$missedAssets}" : '',
+            "The reservation was not collected within the {$cutoffMinutes}-minute window.",
+        ];
+        if ($missedUserEmail !== '') {
+            $dmData = get_user_discord_dm_data($missedUserEmail);
+            send_notification('user', 'reservation_missed', [
+                'user_email' => $missedUserEmail,
+                'user_name'  => $missedUserName,
+                'subject'    => 'Reservation missed',
+                'body_lines' => $missedBodyLines,
+                'discord_embeds' => [build_discord_embed(
+                    'Reservation Missed',
+                    "Reservation #{$resId} has been marked as missed.",
+                    DISCORD_COLOR_RED,
+                    array_filter([
+                        $missedAssets !== '' ? ['name' => 'Items', 'value' => $missedAssets, 'inline' => false] : null,
+                    ])
+                )],
+            ] + $dmData);
+        }
+        send_notification('staff', 'reservation_missed', [
+            'discord_embeds' => [build_discord_embed(
+                'Reservation Missed',
+                "**{$missedUserName}** missed reservation #{$resId}",
+                DISCORD_COLOR_RED,
+                array_filter([
+                    $missedAssets !== '' ? ['name' => 'Items', 'value' => $missedAssets, 'inline' => false] : null,
+                ])
+            )],
         ]);
     }
 }

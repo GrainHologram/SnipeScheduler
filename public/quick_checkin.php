@@ -8,6 +8,7 @@ require_once SRC_PATH . '/snipeit_client.php';
 require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/activity_log.php';
 require_once SRC_PATH . '/email.php';
+require_once SRC_PATH . '/notifications.php';
 require_once SRC_PATH . '/layout.php';
 require_once SRC_PATH . '/booking_helpers.php';
 
@@ -493,6 +494,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $note !== '' ? ["Note: {$note}"] : []
                     );
                     layout_send_notification($email, $info['name'], 'Assets checked in', $bodyLines);
+                    // Discord DM
+                    $dmData = get_user_discord_dm_data($email);
+                    if (!empty($dmData['discord_user_id'])) {
+                        $assetList = implode(', ', $info['assets']);
+                        send_notification('user', 'checkin', [
+                            'user_email' => $email,
+                            'user_name'  => $info['name'],
+                            'subject'    => '',
+                            'body_lines' => [],
+                            'discord_dm_event_key' => 'checkout_returned',
+                            'discord_embeds' => [build_discord_embed(
+                                'Assets Checked In',
+                                'The following assets have been returned.',
+                                DISCORD_COLOR_BLUE,
+                                [
+                                    ['name' => 'Assets', 'value' => $assetList ?: 'N/A', 'inline' => false],
+                                ]
+                            )],
+                        ] + $dmData);
+                    }
                 }
                 // Notify staff performing check-in
                 if ($staffEmail !== '' && !empty($assetTags)) {
@@ -522,6 +543,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'checked_in_from' => $checkedInFrom,
                         'note'   => $note,
                     ],
+                ]);
+
+                // Discord notification
+                $checkinAssetList = implode(', ', array_filter($assetTags));
+                send_notification('staff', 'checkin', [
+                    'staff_email' => $staffEmail,
+                    'staff_name'  => $staffDisplayName,
+                    'subject'     => 'Assets checked in',
+                    'body_lines'  => $bodyLines ?? [],
+                    'discord_embeds' => [build_discord_embed(
+                        'Quick Check-in',
+                        count($assetTags) . " asset(s) checked in",
+                        DISCORD_COLOR_BLUE,
+                        [
+                            ['name' => 'Assets', 'value' => $checkinAssetList ?: 'N/A', 'inline' => false],
+                            ['name' => 'Staff', 'value' => $staffDisplayName ?: 'Unknown', 'inline' => true],
+                        ]
+                    )],
                 ]);
             }
             // Process deferred per-asset actions (notes, maintenance, status changes)
