@@ -89,6 +89,28 @@ if (!function_exists('layout_adjust_lightness')) {
     }
 }
 
+if (!function_exists('layout_design_version')) {
+    /**
+     * Return the active design version (1 or 2). Driven by config['app']['design_version'].
+     */
+    function layout_design_version(?array $cfg = null): int
+    {
+        $config = layout_cached_config($cfg);
+        return (int)($config['app']['design_version'] ?? 1);
+    }
+}
+
+if (!function_exists('layout_stylesheet_url')) {
+    /**
+     * Return the stylesheet URL for the active design version.
+     * Usage in page templates: <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
+     */
+    function layout_stylesheet_url(?array $cfg = null): string
+    {
+        return layout_design_version($cfg) >= 2 ? 'assets/style-v2.css' : 'assets/style.css';
+    }
+}
+
 if (!function_exists('layout_primary_color')) {
     function layout_primary_color(?array $cfg = null): string
     {
