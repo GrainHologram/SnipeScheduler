@@ -239,22 +239,43 @@ try {
     $reservationId = (int)$pdo->lastInsertId();
 
     // Insert reservation_items as model-level rows with quantity
+    // Build reverse map: model_id => kit_id from session kit groups
+    $modelKitMap = [];
+    $kitNames    = $_SESSION['basket_kit_names'] ?? [];
+    if (!empty($_SESSION['basket_kit_groups'])) {
+        foreach ($_SESSION['basket_kit_groups'] as $kitId => $batches) {
+            foreach ($batches as $batch) {
+                foreach ($batch as $entry2) {
+                    $mid = (int)($entry2['model_id'] ?? 0);
+                    if ($mid > 0) {
+                        $modelKitMap[$mid] = (int)$kitId;
+                    }
+                }
+            }
+        }
+    }
+
     $insertItem = $pdo->prepare("
         INSERT INTO reservation_items (
-            reservation_id, model_id, model_name_cache, quantity
+            reservation_id, model_id, model_name_cache, kit_id, kit_name_cache, quantity
         ) VALUES (
-            :reservation_id, :model_id, :model_name_cache, :quantity
+            :reservation_id, :model_id, :model_name_cache, :kit_id, :kit_name_cache, :quantity
         )
     ");
 
     foreach ($models as $entry) {
         $model = $entry['model'];
         $qty   = (int)$entry['qty'];
+        $mid   = (int)$model['id'];
+        $kitId     = $modelKitMap[$mid] ?? null;
+        $kitName   = $kitId !== null ? ($kitNames[$kitId] ?? null) : null;
 
         $insertItem->execute([
             ':reservation_id'   => $reservationId,
-            ':model_id'         => (int)$model['id'],
-            ':model_name_cache' => $model['name'] ?? ('Model #' . $model['id']),
+            ':model_id'         => $mid,
+            ':model_name_cache' => $model['name'] ?? ('Model #' . $mid),
+            ':kit_id'           => $kitId,
+            ':kit_name_cache'   => $kitName,
             ':quantity'         => $qty,
         ]);
     }
