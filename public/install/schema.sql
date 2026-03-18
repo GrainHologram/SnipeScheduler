@@ -65,6 +65,8 @@ CREATE TABLE IF NOT EXISTS reservation_items (
     reservation_id INT UNSIGNED NOT NULL,
     model_id INT UNSIGNED NOT NULL,
     model_name_cache VARCHAR(255) NOT NULL,
+    kit_id INT UNSIGNED DEFAULT NULL,
+    kit_name_cache VARCHAR(255) DEFAULT NULL,
     quantity INT UNSIGNED NOT NULL DEFAULT 1,
     deleted_at DATETIME DEFAULT NULL,
 
@@ -286,3 +288,6 @@ CREATE TABLE IF NOT EXISTS feedback (
 
 INSERT IGNORE INTO schema_version (version)
 VALUES ('v1.5.0');
+
+INSERT IGNORE INTO schema_version (version)
+VALUES ('v1.8.0');

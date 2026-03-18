@@ -180,35 +180,86 @@ var SnipePrint = (function () {
     }
 
     /**
-     * Build ESC/POS data for a reservation pick sheet grouped by category.
+     * Build ESC/POS data for a reservation pick sheet.
+     * Uses kit groupings when available, falls back to category-only.
      */
     function buildReservationData(data) {
         var parts = [];
         buildHeader(parts, data, 'PICK LIST', 'Reservation ', data.reservation_id);
 
-        var categories = data.categories || {};
-        var catNames = Object.keys(categories);
+        var kits = data.kits || {};
+        var kitNames = Object.keys(kits);
+        var nonKitCategories = data.non_kit_categories || {};
+        var nonKitCatNames = Object.keys(nonKitCategories);
+        var hasKits = kitNames.length > 0;
         var totalQty = 0;
 
-        for (var i = 0; i < catNames.length; i++) {
-            var catName = catNames[i];
-            var items = categories[catName] || [];
+        if (hasKits) {
+            // Kit items first
+            for (var k = 0; k < kitNames.length; k++) {
+                var kitName = kitNames[k];
+                var kitItems = kits[kitName] || [];
 
-            // Category heading
-            parts.push(CMD.BOLD_ON);
-            parts.push(truncate(catName) + CMD.LF);
-            parts.push(CMD.BOLD_OFF);
+                // Kit heading
+                parts.push(CMD.BOLD_ON);
+                parts.push(truncate('Kit: ' + kitName) + CMD.LF);
+                parts.push(CMD.BOLD_OFF);
 
-            for (var j = 0; j < items.length; j++) {
-                var item = items[j];
-                var qty = item.quantity || 1;
-                totalQty += qty;
-                parts.push(truncate('  ' + qty + 'x ' + (item.model_name || '')) + CMD.LF);
+                for (var j = 0; j < kitItems.length; j++) {
+                    var item = kitItems[j];
+                    var qty = item.quantity || 1;
+                    totalQty += qty;
+                    parts.push(truncate('  ' + qty + 'x ' + (item.model_name || '')) + CMD.LF);
+                }
+
+                parts.push(CMD.LF);
             }
 
-            // Blank line between categories (but not after the last one)
-            if (i < catNames.length - 1) {
-                parts.push(CMD.LF);
+            // Non-kit items grouped by category
+            if (nonKitCatNames.length > 0) {
+                parts.push(CMD.BOLD_ON);
+                parts.push(truncate('Individual Items') + CMD.LF);
+                parts.push(CMD.BOLD_OFF);
+
+                for (var c = 0; c < nonKitCatNames.length; c++) {
+                    var catName = nonKitCatNames[c];
+                    var catItems = nonKitCategories[catName] || [];
+
+                    parts.push(CMD.BOLD_ON);
+                    parts.push(truncate('  ' + catName) + CMD.LF);
+                    parts.push(CMD.BOLD_OFF);
+
+                    for (var m = 0; m < catItems.length; m++) {
+                        var ci = catItems[m];
+                        var cq = ci.quantity || 1;
+                        totalQty += cq;
+                        parts.push(truncate('    ' + cq + 'x ' + (ci.model_name || '')) + CMD.LF);
+                    }
+                }
+            }
+        } else {
+            // No kits — fall back to category grouping (backwards compat)
+            var categories = data.categories || {};
+            var catNames2 = Object.keys(categories);
+
+            for (var i = 0; i < catNames2.length; i++) {
+                var cn = catNames2[i];
+                var items = categories[cn] || [];
+
+                parts.push(CMD.BOLD_ON);
+                parts.push(truncate(cn) + CMD.LF);
+                parts.push(CMD.BOLD_OFF);
+
+                for (var n = 0; n < items.length; n++) {
+                    var it = items[n];
+                    var q = it.quantity || 1;
+                    totalQty += q;
+                    parts.push(truncate('  ' + q + 'x ' + (it.model_name || '')) + CMD.LF);
+                }
+
+                if (i < catNames2.length - 1) {
+                    parts.push(CMD.LF);
+                }
             }
         }
 
