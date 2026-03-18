@@ -126,7 +126,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && !empty($_GET['res'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $allowedKeys = array_keys($baseQuery);
     $extraKeys = array_diff(array_keys($_GET), $allowedKeys);
-    if (empty($extraKeys)) {
+    $isRefresh = isset($_GET['refresh']);
+    if (empty($extraKeys) && !$isRefresh) {
         if (!empty($_SESSION['selected_reservation_fresh'])) {
             unset($_SESSION['selected_reservation_fresh']);
         } else {
@@ -441,6 +442,21 @@ if ($selectedReservationId) {
 // ---------------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $mode = $_POST['mode'] ?? '';
+
+    // Refresh: save current dropdown selections to session, then redirect
+    if (isset($_POST['action_refresh'])) {
+        if ($selectedReservationId && isset($_POST['selected_assets']) && is_array($_POST['selected_assets'])) {
+            $normalizedSelections = [];
+            foreach ($_POST['selected_assets'] as $midRaw => $choices) {
+                $mid = (int)$midRaw;
+                if ($mid <= 0 || !is_array($choices)) continue;
+                $normalizedSelections[$mid] = array_values(array_map('intval', $choices));
+            }
+            $_SESSION['reservation_selected_assets'][$selectedReservationId] = $normalizedSelections;
+        }
+        header('Location: ' . $selfUrl . (str_contains($selfUrl, '?') ? '&' : '?') . 'refresh=1');
+        exit;
+    }
 
     if (isset($_POST['remove_model_id_all']) || isset($_POST['remove_slot'])) {
         $removeAll = isset($_POST['remove_model_id_all']);
@@ -1694,7 +1710,7 @@ $active  = basename($_SERVER['PHP_SELF']);
                                 <button type="submit" class="btn btn-outline-primary">Assign</button>
                             </div>
                             <div class="col-auto d-grid">
-                                <a href="<?= h($selfUrl) ?>" class="btn btn-outline-secondary" title="Refresh page to sync all scanned items">Refresh</a>
+                                <a href="<?= h($selfUrl . (str_contains($selfUrl, '?') ? '&' : '?') . 'refresh=1') ?>" class="btn btn-outline-secondary" title="Refresh page to sync all scanned items">Refresh</a>
                             </div>
                         </div>
                     </form>
@@ -1965,6 +1981,9 @@ $active  = basename($_SERVER['PHP_SELF']);
                         <?php endif; ?>
                         <button type="submit" name="mode" value="reservation_checkout" class="btn btn-primary">
                             Check out selected assets for this reservation
+                        </button>
+                        <button type="submit" name="action_refresh" value="1" class="btn btn-outline-secondary ms-2" title="Refresh page to sync assets (preserves selections)">
+                            Refresh
                         </button>
                     </form>
                 </div>
