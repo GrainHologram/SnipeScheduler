@@ -126,7 +126,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && !empty($_GET['res'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $allowedKeys = array_keys($baseQuery);
     $extraKeys = array_diff(array_keys($_GET), $allowedKeys);
-    if (empty($extraKeys)) {
+    $isRefresh = isset($_GET['refresh']);
+    if (empty($extraKeys) && !$isRefresh) {
         if (!empty($_SESSION['selected_reservation_fresh'])) {
             unset($_SESSION['selected_reservation_fresh']);
         } else {
@@ -1694,7 +1695,7 @@ $active  = basename($_SERVER['PHP_SELF']);
                                 <button type="submit" class="btn btn-outline-primary">Assign</button>
                             </div>
                             <div class="col-auto d-grid">
-                                <a href="<?= h($selfUrl) ?>" class="btn btn-outline-secondary" title="Refresh page to sync all scanned items">Refresh</a>
+                                <a href="<?= h($selfUrl . (str_contains($selfUrl, '?') ? '&' : '?') . 'refresh=1') ?>" class="btn btn-outline-secondary" title="Refresh page to sync all scanned items">Refresh</a>
                             </div>
                         </div>
                     </form>
