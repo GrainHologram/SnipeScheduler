@@ -130,6 +130,7 @@ return [
         'debug'    => true,
         'logo_url' => '', // optional: full URL or relative path to logo image
         'primary_color' => '#660000', // main UI colour for gradients/buttons
+        'design_version' => 1, // 1 = current design (style.css), 2 = redesign (style-v2.css)
         'date_format' => 'd/m/Y', // display format for dates (see settings for options)
         'time_format' => 'H:i', // display format for times (12/24-hour options in settings)
         'missed_cutoff_minutes' => 60, // minutes after start time before marking reservation as missed

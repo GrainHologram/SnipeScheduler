@@ -195,7 +195,7 @@ if ($editOverrideId > 0) {
     <title>Opening Hours – SnipeScheduler</title>
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
     <?= layout_theme_styles($config) ?>
 </head>
 <body class="p-4">
