@@ -1710,7 +1710,7 @@ $active  = basename($_SERVER['PHP_SELF']);
                                 <button type="submit" class="btn btn-outline-primary">Assign</button>
                             </div>
                             <div class="col-auto d-grid">
-                                <a href="<?= h($selfUrl . (str_contains($selfUrl, '?') ? '&' : '?') . 'refresh=1') ?>" class="btn btn-outline-secondary" title="Refresh page to sync all scanned items">Refresh</a>
+                                <button type="button" class="btn btn-outline-secondary" title="Refresh page to sync all scanned items" onclick="var f=document.getElementById('reservationCheckoutForm');if(f){var h=document.createElement('input');h.type='hidden';h.name='action_refresh';h.value='1';f.appendChild(h);f.submit();}else{location.href='<?= h($selfUrl . (str_contains($selfUrl, '?') ? '&' : '?') . 'refresh=1') ?>';}">Refresh</button>
                             </div>
                         </div>
                     </form>
@@ -1723,7 +1723,7 @@ $active  = basename($_SERVER['PHP_SELF']);
                         Choose assets for each model in reservation #<?= (int)$selectedReservation['id'] ?>.
                     </p>
 
-                    <form method="post" action="<?= h($selfUrl) ?>" data-loading="Processing checkout...">
+                    <form id="reservationCheckoutForm" method="post" action="<?= h($selfUrl) ?>" data-loading="Processing checkout...">
                         <?php foreach ($baseQuery as $k => $v): ?>
                             <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
                         <?php endforeach; ?>
