@@ -443,6 +443,21 @@ if ($selectedReservationId) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $mode = $_POST['mode'] ?? '';
 
+    // Refresh: save current dropdown selections to session, then redirect
+    if (isset($_POST['action_refresh'])) {
+        if ($selectedReservationId && isset($_POST['selected_assets']) && is_array($_POST['selected_assets'])) {
+            $normalizedSelections = [];
+            foreach ($_POST['selected_assets'] as $midRaw => $choices) {
+                $mid = (int)$midRaw;
+                if ($mid <= 0 || !is_array($choices)) continue;
+                $normalizedSelections[$mid] = array_values(array_map('intval', $choices));
+            }
+            $_SESSION['reservation_selected_assets'][$selectedReservationId] = $normalizedSelections;
+        }
+        header('Location: ' . $selfUrl . (str_contains($selfUrl, '?') ? '&' : '?') . 'refresh=1');
+        exit;
+    }
+
     if (isset($_POST['remove_model_id_all']) || isset($_POST['remove_slot'])) {
         $removeAll = isset($_POST['remove_model_id_all']);
         $removeModelId = 0;
@@ -1966,6 +1981,9 @@ $active  = basename($_SERVER['PHP_SELF']);
                         <?php endif; ?>
                         <button type="submit" name="mode" value="reservation_checkout" class="btn btn-primary">
                             Check out selected assets for this reservation
+                        </button>
+                        <button type="submit" name="action_refresh" value="1" class="btn btn-outline-secondary ms-2" title="Refresh page to sync assets (preserves selections)">
+                            Refresh
                         </button>
                     </form>
                 </div>
