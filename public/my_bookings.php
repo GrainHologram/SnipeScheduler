@@ -132,6 +132,7 @@ if (!empty($_GET['deleted'])) {
 
         <!-- App navigation -->
         <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
+        <?= layout_render_topbar($active) ?>
 
         <!-- Top bar -->
         <div class="top-bar mb-3">

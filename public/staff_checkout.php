@@ -1473,6 +1473,7 @@ $active  = basename($_SERVER['PHP_SELF']);
         <!-- App navigation -->
         <?php if (!$embedded): ?>
             <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
+            <?= layout_render_topbar($active) ?>
         <?php endif; ?>
 
         <!-- Top bar -->

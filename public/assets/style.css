@@ -78,6 +78,13 @@ input[type="checkbox"] {
     border-color: var(--primary);
 }
 
+.app-topbar,
+.app-nav-brand,
+.app-nav-user,
+.app-nav-header {
+    display: none;
+}
+
 .page-shell {
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(244, 249, 255, 0.96));
     border-radius: 1.1rem;

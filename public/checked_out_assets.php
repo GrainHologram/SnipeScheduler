@@ -558,6 +558,7 @@ function layout_checked_out_url(string $base, array $params): string
 
         <?php if (!$embedded): ?>
             <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
+            <?= layout_render_topbar($active) ?>
         <?php endif; ?>
 
         <?php

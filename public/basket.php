@@ -319,6 +319,7 @@ if (!empty($basket)) {
         </div>
 
         <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
+        <?= layout_render_topbar($active) ?>
 
         <div class="top-bar mb-3">
             <div class="top-bar-user">

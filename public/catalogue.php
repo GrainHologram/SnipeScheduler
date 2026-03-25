@@ -740,6 +740,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
 
         <!-- App navigation -->
         <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
+        <?= layout_render_topbar($active, $tab === 'equipment' ? 'Equipment' : 'Kits') ?>
 
         <?php if ($blockCatalogueOverdue): ?>
             <div id="overdue-warning" class="alert alert-warning<?= $overdueErr ? '' : ' d-none' ?>">
@@ -911,16 +912,18 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 <?php endif; ?>
             </form>
 
-            <ul class="nav nav-tabs mb-3">
-                <li class="nav-item">
-                    <a class="nav-link <?= $tab === 'equipment' ? 'active' : '' ?>"
-                       href="catalogue.php?<?= http_build_query(array_merge($tabQueryParams, ['tab' => 'equipment'])) ?>">Equipment</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link <?= $tab === 'kits' ? 'active' : '' ?>"
-                       href="catalogue.php?<?= http_build_query(array_merge($tabQueryParams, ['tab' => 'kits'])) ?>">Kits</a>
-                </li>
-            </ul>
+            <div class="catalogue-tab-nav">
+                <ul class="nav nav-tabs mb-3">
+                    <li class="nav-item">
+                        <a class="nav-link <?= $tab === 'equipment' ? 'active' : '' ?>"
+                           href="catalogue.php?<?= http_build_query(array_merge($tabQueryParams, ['tab' => 'equipment'])) ?>">Equipment</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link <?= $tab === 'kits' ? 'active' : '' ?>"
+                           href="catalogue.php?<?= http_build_query(array_merge($tabQueryParams, ['tab' => 'kits'])) ?>">Kits</a>
+                    </li>
+                </ul>
+            </div>
 
             <?php if ($categoryErr): ?>
                 <div class="alert alert-warning">

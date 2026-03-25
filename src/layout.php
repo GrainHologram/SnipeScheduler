@@ -162,18 +162,41 @@ if (!function_exists('layout_render_nav')) {
         $cfg = load_config();
         $quickCheckoutEnabled = $cfg['app']['quick_checkout_enabled'] ?? true;
 
-        $links = [
-            ['href' => 'index.php',          'label' => 'Dashboard',           'staff' => false],
-            ['href' => 'catalogue.php',      'label' => 'Catalogue',           'staff' => false],
-            ['href' => 'reservations.php',   'label' => 'Reservations',        'staff' => true],
-            ['href' => 'quick_checkout.php', 'label' => 'Quick Checkout',      'staff' => true, 'enabled' => $quickCheckoutEnabled],
-            ['href' => 'quick_checkin.php',  'label' => 'Quick Checkin',       'staff' => true],
-            ['href' => 'activity_log.php',   'label' => 'Admin',               'staff' => false, 'admin_only' => true],
-            ['href' => '#', 'label' => 'Feedback', 'staff' => true, 'onclick' => 'openFeedbackModal(); return false;', 'class' => 'app-nav-feedback'],
-            ['href' => 'my_bookings.php',    'label' => 'My Reservations',     'staff' => false, 'right' => true],
-        ];
+        $currentTab   = $_GET['tab'] ?? 'kits';
+        $designVersion = (int)($cfg['app']['design_version'] ?? 1);
 
-        $html = '<nav class="app-nav">';
+        if ($designVersion >= 2) {
+            $links = [
+                ['href' => 'index.php',        'label' => 'Dashboard',        'staff' => false],
+                ['href' => 'my_bookings.php',  'label' => 'My Reservations',  'staff' => false],
+                ['href' => 'reservations.php', 'label' => 'Reservations',     'staff' => true],
+                ['href' => '#',                'label' => 'Feedback',         'staff' => false, 'onclick' => 'openFeedbackModal(); return false;', 'class' => 'app-nav-feedback'],
+
+                ['type' => 'header', 'label' => 'Catalogue',   'staff' => false],
+                ['href' => 'catalogue.php?tab=equipment&prefetch=1', 'label' => 'Equipment', 'staff' => false, 'tab' => 'equipment'],
+                ['href' => 'catalogue.php?tab=kits&prefetch=1',      'label' => 'Kits',  'staff' => false, 'tab' => 'kits'],
+
+                ['type' => 'header', 'label' => 'Processing',  'staff' => true],
+                ['href' => 'quick_checkout.php', 'label' => 'Quick Checkout', 'staff' => true, 'enabled' => $quickCheckoutEnabled],
+                ['href' => 'quick_checkin.php',  'label' => 'Quick Checkin',  'staff' => true],
+
+                ['type' => 'header', 'label' => 'Admin',       'staff' => false, 'admin_only' => true],
+                ['href' => 'activity_log.php',   'label' => 'Admin',          'staff' => false, 'admin_only' => true],
+            ];
+        } else {
+            $links = [
+                ['href' => 'index.php',          'label' => 'Dashboard',       'staff' => false],
+                ['href' => 'catalogue.php',       'label' => 'Catalogue',       'staff' => false],
+                ['href' => 'reservations.php',    'label' => 'Reservations',    'staff' => true],
+                ['href' => 'quick_checkout.php',  'label' => 'Quick Checkout',  'staff' => true, 'enabled' => $quickCheckoutEnabled],
+                ['href' => 'quick_checkin.php',   'label' => 'Quick Checkin',   'staff' => true],
+                ['href' => 'activity_log.php',    'label' => 'Admin',           'staff' => false, 'admin_only' => true],
+                ['href' => '#',                   'label' => 'Feedback',        'staff' => true, 'onclick' => 'openFeedbackModal(); return false;', 'class' => 'app-nav-feedback'],
+                ['href' => 'my_bookings.php',     'label' => 'My Reservations', 'staff' => false, 'right' => true],
+            ];
+        }
+
+        $html = '<nav class="app-nav"><a href="index.php" class="app-nav-brand">Wrap It</a>';
         foreach ($links as $link) {
             if (isset($link['enabled']) && !$link['enabled']) {
                 continue;
@@ -182,20 +205,88 @@ if (!function_exists('layout_render_nav')) {
                 if (!$isAdmin) {
                     continue;
                 }
-            } elseif ($link['staff'] && !$isStaff) {
+            } elseif (!empty($link['staff']) && !$isStaff) {
                 continue;
             }
 
-            $href    = htmlspecialchars($link['href'], ENT_QUOTES, 'UTF-8');
-            $label   = htmlspecialchars($link['label'], ENT_QUOTES, 'UTF-8');
-            $classes = 'app-nav-link' . ($active === $link['href'] ? ' active' : '') . (!empty($link['class']) ? ' ' . $link['class'] : '');
-            $style  = !empty($link['right']) ? ' style="margin-left:auto"' : '';
+            $label = htmlspecialchars($link['label'], ENT_QUOTES, 'UTF-8');
 
+            if (isset($link['type']) && $link['type'] === 'header') {
+                $html .= '<span class="app-nav-header">' . $label . '</span>';
+                continue;
+            }
+
+            // Determine active state — for links with a tab param, match against current tab too
+            $isActive = $active === $link['href'];
+            if (!$isActive && isset($link['tab'])) {
+                $isActive = $active === 'catalogue.php' && $currentTab === $link['tab'];
+            }
+
+            $href    = htmlspecialchars($link['href'], ENT_QUOTES, 'UTF-8');
+            $classes = 'app-nav-link' . ($isActive ? ' active' : '') . (!empty($link['class']) ? ' ' . $link['class'] : '');
+            $style   = !empty($link['right']) ? ' style="margin-left:auto"' : '';
             $onclick = !empty($link['onclick']) ? ' onclick="' . htmlspecialchars($link['onclick'], ENT_QUOTES, 'UTF-8') . '"' : '';
             $html .= '<a href="' . $href . '" class="' . $classes . '"' . $style . $onclick . '>' . $label . '</a>';
         }
+        $user      = $_SESSION['user'] ?? [];
+        $firstName = $user['first_name'] ?? '';
+        $lastName  = $user['last_name'] ?? '';
+        $fullName  = htmlspecialchars(trim($firstName . ' ' . $lastName), ENT_QUOTES, 'UTF-8');
+        $email     = htmlspecialchars($user['email'] ?? '', ENT_QUOTES, 'UTF-8');
+
+        $html .= '<details class="app-nav-user">'
+               . '<summary class="app-nav-user-trigger">'
+               . '<span class="app-nav-user-name">' . $fullName . '</span>'
+               . '<span class="app-nav-user-email">' . $email . '</span>'
+               . '</summary>'
+               . '<div class="app-nav-user-popover">'
+               . '<a href="basket.php" class="app-nav-user-action">View Basket</a>'
+               . '<a href="logout.php" class="app-nav-user-action">Log out</a>'
+               . '</div>'
+               . '</details>';
+
         $html .= '</nav>';
 
+        return $html;
+    }
+}
+
+if (!function_exists('layout_render_topbar')) {
+    /**
+     * Render the fixed top bar showing the current page title.
+     * Styled by style-v2.css; hidden via style.css in design v1.
+     */
+    function layout_render_topbar(string $active, string $subtitle = ''): string
+    {
+        $titles = [
+            'index.php'              => 'Equipment Booking',
+            'catalogue.php'          => 'Catalogue',
+            'reservations.php'       => 'Reservations',
+            'quick_checkout.php'     => 'Quick Checkout',
+            'quick_checkin.php'      => 'Quick Checkin',
+            'activity_log.php'       => 'Admin',
+            'my_bookings.php'        => 'My Reservations',
+            'basket.php'             => 'Basket',
+            'reservation_detail.php' => 'Reservation Detail',
+            'reservation_edit.php'   => 'Edit Reservation',
+            'settings.php'           => 'Settings',
+            'checkout_history.php'   => 'Checkout History',
+            'checked_out_assets.php' => 'Checked Out Assets',
+            'feedback.php'           => 'Feedback',
+            'opening_hours.php'      => 'Opening Hours',
+            'overdue_report.php'     => 'Overdue Report',
+            'staff_checkout.php'     => 'Staff Checkout',
+            'staff_reservations.php' => 'Staff Reservations',
+        ];
+
+        $title = $titles[$active] ?? '';
+        $html  = '<div class="app-topbar">';
+        $html .= '<span class="app-topbar-title">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</span>';
+        if ($subtitle !== '') {
+            $html .= '<span class="app-topbar-sep">›</span>';
+            $html .= '<span class="app-topbar-subtitle">' . htmlspecialchars($subtitle, ENT_QUOTES, 'UTF-8') . '</span>';
+        }
+        $html .= '</div>';
         return $html;
     }
 }

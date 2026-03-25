@@ -291,6 +291,7 @@ if (!empty($reservations)) {
         <!-- App navigation -->
         <?php if (!$embedded): ?>
             <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
+            <?= layout_render_topbar($active) ?>
         <?php endif; ?>
 
         <!-- Top bar -->
