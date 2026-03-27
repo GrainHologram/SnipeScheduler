@@ -137,8 +137,6 @@ function sync_local_after_renewal(PDO $pdo, int $assetId, string $normalized, in
                SET end_datetime = :new_end
              WHERE snipeit_user_id = :uid
                AND status IN ('open','partial')
-             ORDER BY created_at DESC
-             LIMIT 1
         ")->execute([':new_end' => $endUtc, ':uid' => $userId]);
     }
 }
