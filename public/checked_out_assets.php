@@ -127,11 +127,51 @@ function sync_local_after_renewal(PDO $pdo, int $assetId, string $normalized, in
     ")->execute([':ec' => $snipeValue, ':aid' => $assetId]);
 
     // Update the associated checkout's end_datetime (stored in UTC)
-    if ($userId > 0) {
-        $utcDt = clone $dt;
-        $utcDt->setTimezone($utc);
-        $endUtc = $utcDt->format('Y-m-d H:i:s');
+    $utcDt = clone $dt;
+    $utcDt->setTimezone($utc);
+    $endUtc = $utcDt->format('Y-m-d H:i:s');
 
+    $updatedCheckoutIds = [];
+
+    // Primary: find checkout directly via checkout_items for this asset
+    $coLookup = $pdo->prepare("
+        SELECT ci.checkout_id
+          FROM checkout_items ci
+          JOIN checkouts c ON c.id = ci.checkout_id
+         WHERE ci.asset_id = :aid
+           AND ci.checked_in_at IS NULL
+           AND c.status IN ('open','partial')
+         LIMIT 1
+    ");
+    $coLookup->execute([':aid' => $assetId]);
+    $coMatch = $coLookup->fetch(PDO::FETCH_ASSOC);
+
+    if ($coMatch) {
+        $coId = (int)$coMatch['checkout_id'];
+        // Update this checkout + its parent and children
+        $pdo->prepare("
+            UPDATE checkouts SET end_datetime = :new_end
+             WHERE (id = :cid OR parent_checkout_id = :cid_parent)
+               AND status IN ('open','partial')
+        ")->execute([':new_end' => $endUtc, ':cid' => $coId, ':cid_parent' => $coId]);
+        $updatedCheckoutIds[$coId] = true;
+
+        // Also update the parent if this checkout is a child
+        $parentStmt = $pdo->prepare("SELECT parent_checkout_id FROM checkouts WHERE id = :cid");
+        $parentStmt->execute([':cid' => $coId]);
+        $parentId = $parentStmt->fetchColumn();
+        if ($parentId) {
+            $pdo->prepare("
+                UPDATE checkouts SET end_datetime = :new_end
+                 WHERE (id = :pid OR parent_checkout_id = :pid_parent)
+                   AND status IN ('open','partial')
+            ")->execute([':new_end' => $endUtc, ':pid' => (int)$parentId, ':pid_parent' => (int)$parentId]);
+            $updatedCheckoutIds[(int)$parentId] = true;
+        }
+    }
+
+    // Fallback: also update by snipeit_user_id (catches checkouts without checkout_items)
+    if ($userId > 0) {
         $pdo->prepare("
             UPDATE checkouts
                SET end_datetime = :new_end
