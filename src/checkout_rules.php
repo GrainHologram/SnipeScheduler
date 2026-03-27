@@ -382,6 +382,124 @@ function check_user_has_access_group(int $snipeitUserId): bool
 }
 
 /**
+ * Check whether renewing assets to a new end date conflicts with upcoming reservations.
+ *
+ * @param PDO      $pdo
+ * @param array    $assets   Array of ['asset_id' => int, 'model_id' => int]
+ * @param DateTime $newEnd   Proposed new end datetime (UTC)
+ * @return array   Conflict descriptions (empty = no conflicts)
+ */
+function check_renewal_conflicts(PDO $pdo, array $assets, DateTime $newEnd): array
+{
+    if (empty($assets)) {
+        return [];
+    }
+
+    $nowUtc = (new DateTime('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
+    $endUtc = $newEnd->format('Y-m-d H:i:s');
+
+    // Group assets by model and collect all asset IDs
+    $modelAssets = [];   // model_id => [asset_id, ...]
+    $allAssetIds = [];
+    foreach ($assets as $a) {
+        $mid = (int)($a['model_id'] ?? 0);
+        $aid = (int)($a['asset_id'] ?? 0);
+        if ($mid <= 0 || $aid <= 0) {
+            continue;
+        }
+        $modelAssets[$mid][] = $aid;
+        $allAssetIds[] = $aid;
+    }
+
+    $conflicts = [];
+
+    foreach ($modelAssets as $modelId => $assetIds) {
+        $renewalQty = count($assetIds);
+
+        // Pending/confirmed reservations overlapping [now, newEnd]
+        $stmt = $pdo->prepare("
+            SELECT COALESCE(SUM(ri.quantity), 0) AS booked_qty
+            FROM reservation_items ri
+            JOIN reservations r ON r.id = ri.reservation_id
+            WHERE ri.model_id = :model_id
+              AND ri.deleted_at IS NULL
+              AND r.status IN ('pending','confirmed')
+              AND r.start_datetime < :end
+              AND r.end_datetime > :start
+        ");
+        $stmt->execute([
+            ':model_id' => $modelId,
+            ':start'    => $nowUtc,
+            ':end'      => $endUtc,
+        ]);
+        $reservedQty = (int)(($stmt->fetch())['booked_qty'] ?? 0);
+
+        if ($reservedQty <= 0) {
+            continue; // No upcoming reservations for this model — no conflict possible
+        }
+
+        // Active checkout items overlapping [now, newEnd], excluding the assets being renewed
+        $excludePlaceholders = implode(',', array_fill(0, count($allAssetIds), '?'));
+        $coStmt = $pdo->prepare("
+            SELECT COUNT(*) AS co_qty
+            FROM checkout_items ci
+            JOIN checkouts c ON c.id = ci.checkout_id
+            WHERE ci.model_id = ?
+              AND ci.checked_in_at IS NULL
+              AND c.status IN ('open','partial')
+              AND c.start_datetime < ?
+              AND c.end_datetime > ?
+              AND ci.asset_id NOT IN ({$excludePlaceholders})
+        ");
+        $coParams = array_merge([$modelId, $endUtc, $nowUtc], $allAssetIds);
+        $coStmt->execute($coParams);
+        $otherCheckedOutQty = (int)(($coStmt->fetch())['co_qty'] ?? 0);
+
+        // Total requestable capacity
+        $totalRequestable = count_requestable_assets_by_model($modelId);
+
+        if ($totalRequestable > 0 && $reservedQty + $otherCheckedOutQty + $renewalQty > $totalRequestable) {
+            // Fetch conflicting reservation details for the error message
+            $detailStmt = $pdo->prepare("
+                SELECT DISTINCT r.id, r.user_name, r.start_datetime, r.end_datetime
+                FROM reservations r
+                JOIN reservation_items ri ON ri.reservation_id = r.id
+                WHERE ri.model_id = :model_id
+                  AND ri.deleted_at IS NULL
+                  AND r.status IN ('pending','confirmed')
+                  AND r.start_datetime < :end
+                  AND r.end_datetime > :start
+                ORDER BY r.start_datetime
+            ");
+            $detailStmt->execute([
+                ':model_id' => $modelId,
+                ':start'    => $nowUtc,
+                ':end'      => $endUtc,
+            ]);
+            $conflictingRes = $detailStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Get model name
+            try {
+                $modelData = get_model($modelId);
+                $modelName = $modelData['name'] ?? ('Model #' . $modelId);
+            } catch (Throwable $e) {
+                $modelName = 'Model #' . $modelId;
+            }
+
+            foreach ($conflictingRes as $cr) {
+                $resId = (int)$cr['id'];
+                $userName = $cr['user_name'] ?? 'Unknown';
+                $start = app_format_datetime_local($cr['start_datetime']);
+                $end = app_format_datetime_local($cr['end_datetime']);
+                $conflicts[] = "{$modelName} — conflicts with reservation #{$resId} ({$userName}, {$start} – {$end})";
+            }
+        }
+    }
+
+    return $conflicts;
+}
+
+/**
  * Check if a user currently has any active checkouts.
  *
  * @param int $snipeitUserId
