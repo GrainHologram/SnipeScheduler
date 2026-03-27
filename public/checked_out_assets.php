@@ -204,27 +204,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 // Look up asset to get user and checkout info for validation
                 $clCfg = checkout_limits_config();
-                if ($clCfg['enabled']) {
-                    $assetRow = $pdo->prepare("
-                        SELECT assigned_to_id, expected_checkin, last_checkout
-                          FROM checked_out_asset_cache
-                         WHERE asset_id = :aid
-                    ");
-                    $assetRow->execute([':aid' => $renewId]);
-                    $assetInfo = $assetRow->fetch(PDO::FETCH_ASSOC);
-                    $renewUserId = (int)($assetInfo['assigned_to_id'] ?? 0);
+                $assetRow = $pdo->prepare("
+                    SELECT assigned_to_id, model_id, expected_checkin, last_checkout
+                      FROM checked_out_asset_cache
+                     WHERE asset_id = :aid
+                ");
+                $assetRow->execute([':aid' => $renewId]);
+                $assetInfo = $assetRow->fetch(PDO::FETCH_ASSOC);
+                $renewUserId = (int)($assetInfo['assigned_to_id'] ?? 0);
+                $renewModelId = (int)($assetInfo['model_id'] ?? 0);
 
-                    if ($renewUserId > 0) {
-                        $newExpectedDt = new DateTime($normalized, app_get_timezone());
-                        $renewErr = validate_renewal_duration(
-                            $renewUserId,
-                            $assetInfo['expected_checkin'] ?? '',
-                            $newExpectedDt,
-                            $assetInfo['last_checkout'] ?? null
-                        );
-                        if ($renewErr !== null) {
-                            throw new Exception($renewErr);
+                if ($clCfg['enabled'] && $renewUserId > 0) {
+                    $newExpectedDt = new DateTime($normalized, app_get_timezone());
+                    $renewErr = validate_renewal_duration(
+                        $renewUserId,
+                        $assetInfo['expected_checkin'] ?? '',
+                        $newExpectedDt,
+                        $assetInfo['last_checkout'] ?? null
+                    );
+                    if ($renewErr !== null) {
+                        throw new Exception($renewErr);
+                    }
+                }
+
+                // Check for reservation conflicts
+                if ($renewModelId > 0) {
+                    $newEndDt = new DateTime($normalized, app_get_timezone());
+                    $newEndUtc = clone $newEndDt;
+                    $newEndUtc->setTimezone(new DateTimeZone('UTC'));
+
+                    $conflictAssets = [['asset_id' => $renewId, 'model_id' => $renewModelId]];
+
+                    // If single active checkout is enabled, all user assets will be extended too
+                    if ($clCfg['enabled'] && $clCfg['single_active_checkout'] && $renewUserId > 0) {
+                        $otherStmt = $pdo->prepare("
+                            SELECT asset_id, model_id FROM checked_out_asset_cache
+                             WHERE assigned_to_id = :uid AND asset_id != :aid
+                        ");
+                        $otherStmt->execute([':uid' => $renewUserId, ':aid' => $renewId]);
+                        foreach ($otherStmt->fetchAll(PDO::FETCH_ASSOC) as $otherRow) {
+                            $conflictAssets[] = [
+                                'asset_id' => (int)$otherRow['asset_id'],
+                                'model_id' => (int)$otherRow['model_id'],
+                            ];
                         }
+                    }
+
+                    $renewConflicts = check_renewal_conflicts($pdo, $conflictAssets, $newEndUtc);
+                    if (!empty($renewConflicts)) {
+                        throw new Exception("Renewal blocked — conflicts with upcoming reservations:\n" . implode("\n", $renewConflicts));
                     }
                 }
 
@@ -290,20 +318,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $bulkNewExpectedDt = new DateTime($bulkExpected, app_get_timezone());
 
             // Pre-validate per-user duration limits
-            if ($clCfg['enabled'] && !empty($bulkAssetIds)) {
-                $phBulk = implode(',', array_fill(0, count($bulkAssetIds), '?'));
-                $bulkStmt = $pdo->prepare("
-                    SELECT asset_id, assigned_to_id, expected_checkin, last_checkout
-                      FROM checked_out_asset_cache
-                     WHERE asset_id IN ({$phBulk})
-                ");
-                $bulkStmt->execute($bulkAssetIds);
-                $bulkAssetRows = $bulkStmt->fetchAll(PDO::FETCH_ASSOC);
-                $bulkAssetMap = [];
-                foreach ($bulkAssetRows as $bar) {
-                    $bulkAssetMap[(int)$bar['asset_id']] = $bar;
-                }
+            $phBulk = implode(',', array_fill(0, count($bulkAssetIds), '?'));
+            $bulkStmt = $pdo->prepare("
+                SELECT asset_id, assigned_to_id, model_id, expected_checkin, last_checkout
+                  FROM checked_out_asset_cache
+                 WHERE asset_id IN ({$phBulk})
+            ");
+            $bulkStmt->execute($bulkAssetIds);
+            $bulkAssetRows = $bulkStmt->fetchAll(PDO::FETCH_ASSOC);
+            $bulkAssetMap = [];
+            foreach ($bulkAssetRows as $bar) {
+                $bulkAssetMap[(int)$bar['asset_id']] = $bar;
+            }
 
+            if ($clCfg['enabled']) {
                 foreach ($bulkAssetIds as $aid) {
                     $info = $bulkAssetMap[$aid] ?? null;
                     if ($info === null) {
@@ -320,6 +348,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if ($renewErr !== null) {
                             $bulkBlocked[$aid] = $renewErr;
                         }
+                    }
+                }
+            }
+
+            // Check reservation conflicts for non-duration-blocked assets
+            $bulkConflictAssets = [];
+            foreach ($bulkAssetIds as $aid) {
+                if (isset($bulkBlocked[$aid])) {
+                    continue;
+                }
+                $info = $bulkAssetMap[$aid] ?? null;
+                $mid = (int)($info['model_id'] ?? 0);
+                if ($mid > 0) {
+                    $bulkConflictAssets[] = ['asset_id' => $aid, 'model_id' => $mid];
+                }
+            }
+            if (!empty($bulkConflictAssets)) {
+                $bulkEndUtc = clone $bulkNewExpectedDt;
+                $bulkEndUtc->setTimezone(new DateTimeZone('UTC'));
+                $bulkConflicts = check_renewal_conflicts($pdo, $bulkConflictAssets, $bulkEndUtc);
+                if (!empty($bulkConflicts)) {
+                    $error = "Renewal blocked — conflicts with upcoming reservations:\n" . implode("\n", $bulkConflicts);
+                    // Block ALL assets to prevent any renewals
+                    foreach ($bulkAssetIds as $baid) {
+                        $bulkBlocked[$baid] = 'reservation conflict';
                     }
                 }
             }
@@ -382,7 +435,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
                 }
 
-                if (!empty($bulkBlocked)) {
+                if (!empty($bulkBlocked) && $error === '') {
                     $blockMsgs = [];
                     $blockLabels = load_asset_labels($pdo, array_keys($bulkBlocked));
                     foreach ($bulkBlocked as $aid => $reason) {
@@ -642,7 +695,7 @@ function layout_checked_out_url(string $base, array $params): string
 
         <?php if ($error): ?>
             <div class="alert alert-danger">
-                <?= htmlspecialchars($error) ?>
+                <?= nl2br(htmlspecialchars($error)) ?>
             </div>
         <?php endif; ?>
 
