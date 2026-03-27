@@ -147,7 +147,7 @@ v2 uses a fixed left sidebar for navigation and a fixed top bar for page context
 - `--topbar-height: 52px` — height of the fixed top bar.
 - `--mobile-nav-height: 52px` — height of the top nav bar on mobile (≤768px).
 
-`body` has `padding-left: var(--sidebar-width)` and `padding-top: calc(var(--topbar-height) + 1.5rem)` to offset content from these fixed elements.
+`body.p-4` overrides Bootstrap's padding: `padding-left: var(--sidebar-width)`, `padding-top: var(--topbar-height)`, `padding-right: 0`, `padding-bottom: 0`. `.page-shell` has `padding: 0.75rem 0`. This gives equal spacing on all sides of the content area.
 
 On mobile (≤768px), the sidebar becomes a fixed horizontal top bar with horizontal scroll. The `.app-topbar` shifts to `top: var(--mobile-nav-height)`.
 
@@ -156,13 +156,16 @@ On mobile (≤768px), the sidebar becomes a fixed horizontal top bar with horizo
 The v2 sidebar nav (`<nav class="app-nav">`) contains:
 - A brand link (`.app-nav-brand` — "Wrap It", links to `index.php`)
 - Section headers (`.app-nav-header`) and nav links (`.app-nav-link`)
+- A feedback glyph button (`.app-nav-feedback-glyph`) — icon-only `bi-chat-left-dots` anchor that opens the feedback modal. Sits above the user card, pushed to the bottom via `margin-top: auto`.
 - A user card at the bottom (`.app-nav-user`) — `<details>`/`<summary>` popover showing username, email, View Basket and Log out links
 
 Nav sections (v2):
-1. Dashboard, My Reservations / Reservations, Feedback
+1. Dashboard, My Gear / Reservations
 2. *Catalogue* header → Items (`catalogue.php?tab=equipment&prefetch=1`), Kits (`catalogue.php?tab=kits&prefetch=1`)
 3. *Processing* header (staff only) → Quick Checkout, Quick Checkin
 4. *Admin* header (admin only) → Admin
+
+The nav link for `my_bookings.php` is labelled **"My Gear"** in v2 (v1 keeps "My Reservations"). Feedback was removed from the v2 nav link list and replaced by the glyph button described above. v1 retains a full `app-nav-feedback` styled nav link for Feedback.
 
 The catalogue tab links include `prefetch=1` to bypass the catalogue page's loading-overlay redirect.
 
@@ -188,6 +191,9 @@ Called on every page immediately after `layout_render_nav()`. Hidden in v1 via `
 - `.app-nav-brand` — "Wrap It" sidebar brand
 - `.app-nav-user` — sidebar user card
 - `.app-nav-header` — sidebar section headers
+- `.app-nav-feedback-glyph` — v2 feedback icon button (v1 uses the full nav link instead)
+- `.my-bookings-panels`, `.my-bookings-panel`, `.my-bookings-panel-title`, `.my-bookings-panel-box` — v2 two-panel layout for `my_bookings.php`
+- `.panel-empty-state`, `.panel-empty-icon`, `.panel-empty-text` — v2 empty-state glyph components
 
 #### Colour System (`style-v2.css`)
 
@@ -201,7 +207,7 @@ All colours are defined as CSS custom properties in the `:root` block at the top
 | Brand (primary) | `--primary`, `--primary-strong`, `--primary-soft` + RGB variants |
 | Accent aliases | `--accent`, `--accent-2` |
 | Warm accent | `--accent-warm`, `--accent-warm-dark`, `--accent-warm-light`, `--accent-warm-rgb` |
-| Status | `--status-info`, `--status-success` |
+| Status | `--status-info`, `--status-success`, `--badge-secondary`, `--badge-danger` |
 | Layout | `--sidebar-width`, `--topbar-height`, `--mobile-nav-height` |
 | Utility | `--loading-text`, `--filter-btn`, `--shadow-soft` |
 | Bootstrap overrides | `--bs-body-color`, `--bs-card-bg`, `--bs-list-group-bg`, etc. |
@@ -212,6 +218,36 @@ All colours are defined as CSS custom properties in the `:root` block at the top
 - Bootstrap utility classes (e.g. `bg-white`, `bg-light`) are overridden in the "Bootstrap utility class dark overrides" section using `!important` to beat Bootstrap's own `!important`.
 - If a desired visual change requires modifying HTML or PHP template files, flag it and confirm with the user before making that change.
 - HTML changes made to support v2 must not break v1. Use the hide-in-stylesheet pattern described above.
+
+#### Branch Rules for `summer_release`
+
+On the `summer_release` branch, strict rules apply to protect v1:
+
+1. **`assets/style-v2.css` is the only file that can be changed without user approval.** All v2 visual changes go here.
+2. **PHP, HTML, and JavaScript changes require explicit user approval before making them.** Stop and ask — do not make the change speculatively.
+3. **Any change to non-CSS files must work for both v1 and v2.** Dual-version compatibility is required.
+4. **If a PHP/HTML/JS change would cause a visual conflict between v1 and v2,** `assets/style.css` must be updated to preserve the original v1 appearance (typically with `display: none` to suppress new elements).
+
+After any frontend changes are made, run **both** agents before considering the work complete:
+1. `@.claude/agents/ui-compatibility-guardian.md` — audits v1/v2 dual-version compatibility.
+2. `@.claude/agents/accessibility-reviewer.md` — audits accessibility and readability.
+
+#### Pages with `$designVersion` branching
+
+Some pages output different HTML depending on `$designVersion`. When editing these pages, changes must be made to both branches:
+
+**`public/my_bookings.php`** — detects `$designVersion = (int)((load_config())['app']['design_version'] ?? 1)`.
+- **v2 branch** (`$designVersion >= 2`): renders a two-column `.my-bookings-panels` grid with `.my-bookings-panel-box` inset boxes, both panels visible simultaneously. Body class `page-my-gear` enables full-height flex layout. Page title "My Gear". Empty states use `.panel-empty-state` with Bootstrap Icon glyphs.
+- **v1 branch** (`else`): renders the original Bootstrap tab layout (`.reservations-subtabs`) with `?tab=reservations` / `?tab=checked_out` URL routing. Page title "My Reservations". Empty states use Bootstrap `.alert.alert-info` boxes.
+- The checked-out items query runs for all v2 loads, but only when `$tab === 'checked_out'` in v1.
+- A `$checkoutItemsByModel[checkout_id][model_id][]` batch query runs for v2 only (gated on `$designVersion >= 2`), fetching `checkout_items` rows for all linked checkouts to enable per-model asset tag display in the items table.
+
+**v2 reservation card structure** (`.my-bookings-panel` → `.card`):
+- **Header** (`.res-card-header`): flex row with reservation title (`<h5 class="card-title">`) + username subtitle (`.res-card-subtitle`) on the left, status badge on the right.
+- **Divider**: `<hr class="res-card-divider" aria-hidden="true">` separates header from body.
+- **Body** (`<p class="card-text">`): Start and End datetimes only.
+- **Items table**: columns are Item | Assets (asset tags per model, conditional — only shown when a linked checkout with data exists) | Qty. The Assets column matches `checkout_items.model_id` to `reservation_items.model_id` via `$checkoutItemsByModel`.
+- **Footer** (`d-flex justify-content-between`): checkout reference on the left (plain text for end users, link to checkout history for staff), Edit/Delete buttons on the right.
 
 ## Development Notes
 

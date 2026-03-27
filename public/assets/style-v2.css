@@ -8,15 +8,16 @@
    Global / layout
 --------------------------------------------------- */
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&display=swap');
+@import url('https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css');
 
 :root {
     /* Surfaces & backgrounds */
     --bg: #000000;
-    --panel: #141620;
-    --surface: #0d0f14;
-    --surface-card: #181b28;
-    --border: #252840;
-    --border-subtle: #1e2030;
+    --panel: #161616;
+    --surface: #0f0f0f;
+    --surface-card: #1c1c1c;
+    --border: #262626;
+    --border-subtle: #262626;
 
     /* Typography */
     --text: #e8edf7;
@@ -45,9 +46,12 @@
     /* Status */
     --status-info: #3b82f6;
     --status-success: #22c55e;
+    --badge-secondary: #5a6268;
+    --badge-danger: #b02a37;
 
     /* Layout */
     --sidebar-width: 200px;
+    --sidebar-collapsed-width: 52px;
     --topbar-height: 52px;
     --mobile-nav-height: 52px;
 
@@ -108,8 +112,15 @@
     --bs-input-focus-box-shadow: 0 0 0 0.25rem rgba(var(--primary-rgb), 0.25);
 }
 
+html {
+    height: 100%;
+    overflow: hidden;
+}
+
 body {
-    min-height: 100vh;
+    height: 100%;
+    overflow-y: auto;
+    overscroll-behavior-y: none;
     background: var(--bg);
     font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     color: var(--text);
@@ -119,8 +130,8 @@ body {
 body.p-4 {
     padding-left: var(--sidebar-width) !important;
     padding-top: var(--topbar-height) !important;
-    padding-right: 1.5rem !important;
-    padding-bottom: 2rem !important;
+    padding-right: 0 !important;
+    padding-bottom: 0 !important;
 }
 
 .container {
@@ -174,7 +185,7 @@ input[type="checkbox"] {
 }
 
 .page-shell {
-    padding: 1.8rem 0;
+    padding: 0.75rem 0;
 }
 
 .booking-for-alert {
@@ -221,7 +232,7 @@ input[type="checkbox"] {
     gap: 0.25rem;
     align-items: stretch;
     justify-content: flex-start;
-    padding: 2rem 0.75rem;
+    padding: calc((var(--topbar-height) - 1.3em) / 2) 0.75rem 2rem;
     margin-bottom: 0;
     background: #000000;
     border-right: 1px solid var(--border);
@@ -257,7 +268,7 @@ input[type="checkbox"] {
 .app-nav-brand:hover {
     display: block;
     text-align: center;
-    font-size: 1.1rem;
+    font-size: 1.3rem;
     font-weight: 700;
     color: #ffffff;
     padding: 0 0.75rem 1.25rem;
@@ -278,6 +289,22 @@ input[type="checkbox"] {
     box-shadow: none;
     margin-left: 0 !important;
     transition: background 0.15s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.app-nav-icon {
+    font-size: 1rem;
+    opacity: 0.75;
+    flex-shrink: 0;
+    width: 1.1em;
+    text-align: center;
+}
+
+.app-nav-link.active .app-nav-icon,
+.app-nav-link:hover .app-nav-icon {
+    opacity: 1;
 }
 
 .app-nav-link:hover {
@@ -285,6 +312,13 @@ input[type="checkbox"] {
     color: #ffffff;
     transform: none;
     box-shadow: none;
+}
+
+.app-nav-link:focus-visible {
+    background: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+    outline: 2px solid #ffffff;
+    outline-offset: 2px;
 }
 
 .app-nav-link.active {
@@ -295,29 +329,87 @@ input[type="checkbox"] {
     box-shadow: none;
 }
 
-.app-nav-link.app-nav-feedback {
-    background: transparent;
-    color: #ffffff;
-    border-color: transparent;
-    box-shadow: none;
-    font-weight: 500;
+.app-nav-feedback-glyph {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    margin-top: auto;
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom: 0.5rem;
+    border-radius: 50%;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 1.1rem;
+    text-decoration: none;
+    transition: background 0.15s ease, color 0.15s ease;
+    flex-shrink: 0;
 }
 
-.app-nav-link.app-nav-feedback:hover {
-    background: rgba(255, 255, 255, 0.15);
+.app-nav-feedback-glyph:visited {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.app-nav-feedback-glyph:hover {
+    background: rgba(255, 255, 255, 0.1);
     color: #ffffff;
-    transform: none;
-    box-shadow: none;
+    text-decoration: none;
 }
 
 .app-nav-toggle {
     display: none;
 }
 
+/* Hamburger buttons */
+
+.app-nav-hamburger,
+.app-topbar-hamburger {
+    display: none;
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    cursor: pointer;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35rem;
+    border-radius: 0.4rem;
+    transition: background 0.15s ease;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.app-nav-hamburger:hover,
+.app-topbar-hamburger:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.app-nav-hamburger:focus-visible,
+.app-topbar-hamburger:focus-visible {
+    background: rgba(255, 255, 255, 0.15);
+    outline: 2px solid #ffffff;
+    outline-offset: 2px;
+}
+
+/* Mobile drawer backdrop */
+
+.app-nav-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 399;
+}
+
+.app-nav-backdrop.is-visible {
+    display: block;
+}
+
 /* Sidebar user card */
 
 .app-nav-user {
-    margin-top: auto;
     padding-top: 0.75rem;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     position: relative;
@@ -337,6 +429,12 @@ input[type="checkbox"] {
 
 .app-nav-user summary:hover {
     background: rgba(255, 255, 255, 0.08);
+}
+
+.app-nav-user summary:focus-visible {
+    background: rgba(255, 255, 255, 0.08);
+    outline: 2px solid #ffffff;
+    outline-offset: 2px;
 }
 
 .app-nav-user[open] summary {
@@ -410,22 +508,48 @@ input[type="checkbox"] {
 }
 
 .app-topbar-title {
-    font-size: 1rem;
-    font-weight: 600;
+    font-size: 1.3rem;
+    font-weight: 400;
     color: var(--text);
 }
 
 .app-topbar-sep {
     color: var(--text);
-    font-size: 1rem;
+    font-size: 1.3rem;
     margin: 0 0.4rem;
     line-height: 1;
 }
 
 .app-topbar-subtitle {
-    font-size: 1rem;
-    font-weight: 600;
+    font-size: 1.3rem;
+    font-weight: 400;
     color: var(--text);
+}
+
+.app-topbar-basket {
+    margin-left: auto;
+    color: #ffffff;
+    text-decoration: none;
+    font-size: 0.875rem;
+    padding: 0.3rem 0.75rem;
+    background: var(--primary);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    transition: background 0.15s ease;
+    white-space: nowrap;
+}
+
+.app-topbar-basket:visited,
+.app-topbar-basket:hover,
+.app-topbar-basket:focus-visible {
+    background: var(--primary-strong);
+    color: #ffffff;
+    text-decoration: none;
+}
+
+.app-topbar-basket:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: 2px;
 }
 
 .clamp-3 {
@@ -1106,35 +1230,79 @@ form .form-select {
 }
 
 /* --------------------------------------------------
-   Reservations subtabs
+   My Bookings — two-panel layout
 -------------------------------------------------- */
 
-.reservations-subtabs {
-    border-bottom: 3px solid var(--primary-strong);
-    gap: 0.25rem;
+/* Full-height flex chain for the My Gear page */
+body.page-my-gear {
+    display: flex;
+    flex-direction: column;
 }
 
-.reservations-subtabs .nav-link {
-    border: 1px solid transparent;
-    color: var(--primary-strong);
-    font-weight: 600;
-    padding: 0.8rem 1.1rem;
-    border-radius: 0.5rem 0.5rem 0 0;
-    background: linear-gradient(180deg, rgba(var(--primary-soft-rgb),0.18), rgba(255,255,255,0));
-    transition: all 120ms ease;
+body.page-my-gear .container,
+body.page-my-gear .page-shell {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
 }
 
-.reservations-subtabs .nav-link:hover {
-    color: var(--primary);
-    background: linear-gradient(180deg, rgba(var(--primary-soft-rgb),0.36), rgba(255,255,255,0.08));
-    border-color: rgba(var(--primary-rgb),0.25);
+.my-bookings-panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    align-items: stretch;
+    flex: 1;
 }
 
-.reservations-subtabs .nav-link.active {
-    color: #fff;
-    background: linear-gradient(135deg, var(--primary), var(--primary-strong));
-    border-color: var(--primary-strong) var(--primary-strong) #fff;
-    box-shadow: 0 8px 18px rgba(var(--primary-rgb), 0.2);
+.my-bookings-panel {
+    display: flex;
+    flex-direction: column;
+}
+
+.my-bookings-panel-title {
+    font-size: 1.1rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    text-transform: none;
+    color: #ffffff;
+    margin-bottom: 0.5rem;
+}
+
+.my-bookings-panel-box {
+    background: var(--bg);
+    border: 1px solid var(--border-subtle);
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+    flex: 1;
+}
+
+.panel-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 10rem;
+    text-align: center;
+    gap: 0.6rem;
+}
+
+.panel-empty-icon {
+    font-size: 2.5rem;
+    color: var(--muted);
+    opacity: 0.4;
+}
+
+.panel-empty-text {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+@media (max-width: 900px) {
+    .my-bookings-panels {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* --------------------------------------------------
@@ -1364,6 +1532,38 @@ form .form-select {
     color: var(--text);
 }
 
+.res-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.res-card-subtitle {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-top: 2px;
+}
+
+.res-card-divider {
+    border-color: var(--border);
+    margin: 0.75rem 0;
+}
+
+.res-card-header .badge {
+    font-size: 0.8em;
+    font-weight: 600;
+    flex-shrink: 0;
+    margin-top: 3px;
+}
+
+.res-card-header .badge.bg-secondary {
+    background-color: var(--badge-secondary) !important;
+}
+
+.res-card-header .badge.bg-danger {
+    background-color: var(--badge-danger) !important;
+}
+
 .card .card-text {
     color: var(--muted);
 }
@@ -1450,6 +1650,8 @@ form .form-select {
    Responsive tweaks
 -------------------------------------------------- */
 
+/* General small-screen tweaks */
+
 @media (max-width: 768px) {
     .page-header h1 {
         font-size: 1.4rem;
@@ -1457,39 +1659,6 @@ form .form-select {
 
     .page-subtitle {
         font-size: 0.9rem;
-    }
-
-    body {
-        padding-left: 0 !important;
-        padding-top: calc(var(--mobile-nav-height) + var(--topbar-height) + 1.5rem) !important;
-    }
-
-    .app-topbar {
-        left: 0;
-        top: var(--mobile-nav-height);
-    }
-
-    .app-nav {
-        position: fixed;
-        left: 0;
-        top: 0;
-        width: 100%;
-        height: auto;
-        flex-direction: row;
-        flex-wrap: nowrap;
-        align-items: center;
-        justify-content: flex-start;
-        gap: 0.25rem;
-        padding: 0.5rem 0.75rem;
-        border-right: none;
-        border-bottom: 1px solid var(--border);
-        overflow-x: auto;
-        overflow-y: visible;
-    }
-
-    .app-nav-link {
-        white-space: nowrap;
-        padding: 0.4rem 0.65rem;
     }
 }
 
@@ -1507,10 +1676,6 @@ form .form-select {
         gap: 0.5rem;
     }
 
-    .app-nav {
-        flex-wrap: wrap;
-    }
-
     .filter-panel__header {
         flex-direction: column;
         align-items: flex-start;
@@ -1523,6 +1688,231 @@ form .form-select {
 
     .table-responsive {
         margin-bottom: 1rem;
+    }
+}
+
+/* --------------------------------------------------
+   Responsive nav: icon-only sidebar (600px – 959px)
+-------------------------------------------------- */
+
+@media (max-width: 959px) {
+    body,
+    body.p-4 {
+        padding-left: var(--sidebar-collapsed-width) !important;
+    }
+
+    .app-topbar {
+        left: var(--sidebar-collapsed-width);
+    }
+
+    .app-nav {
+        width: var(--sidebar-collapsed-width);
+        padding: 0.75rem 0.25rem;
+        align-items: center;
+        overflow-y: auto;
+        overflow-x: visible;
+    }
+
+    .app-nav-brand {
+        display: none;
+    }
+
+    .app-nav-hamburger {
+        display: flex;
+    }
+
+    .app-nav-header {
+        display: none;
+    }
+
+    .app-nav-user {
+        display: none;
+    }
+
+    .app-nav-feedback-glyph {
+        display: none;
+    }
+
+    .app-nav-label {
+        display: none;
+    }
+
+    .app-nav-link,
+    .app-nav-link:visited {
+        justify-content: center;
+        padding: 0.625rem;
+        min-height: 44px;
+        min-width: 44px;
+        gap: 0;
+        white-space: nowrap;
+    }
+
+    .app-nav-icon {
+        font-size: 1.15rem;
+        opacity: 1;
+        width: auto;
+    }
+}
+
+/* Tooltip for icon-only links (not when expanded) */
+
+@media (min-width: 600px) and (max-width: 959px) {
+    .app-nav:not(.app-nav--expanded) .app-nav-link {
+        position: relative;
+    }
+
+    .app-nav:not(.app-nav--expanded) .app-nav-link:hover::after,
+    .app-nav:not(.app-nav--expanded) .app-nav-link:focus-visible::after {
+        content: attr(title);
+        position: absolute;
+        left: calc(100% + 8px);
+        top: 50%;
+        transform: translateY(-50%);
+        background: var(--surface-card);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 0.35rem;
+        padding: 0.3rem 0.6rem;
+        font-size: 0.8rem;
+        white-space: nowrap;
+        z-index: 500;
+        pointer-events: none;
+    }
+}
+
+/* Expanded overlay in icon-only mode (JS adds .app-nav--expanded) */
+
+@media (min-width: 600px) and (max-width: 959px) {
+    .app-nav.app-nav--expanded {
+        width: var(--sidebar-width);
+        padding: 2rem 0.75rem;
+        align-items: stretch;
+        z-index: 300;
+        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5);
+    }
+
+    .app-nav.app-nav--expanded .app-nav-brand {
+        display: none;
+    }
+
+    .app-nav.app-nav--expanded .app-nav-header {
+        display: block;
+    }
+
+    .app-nav.app-nav--expanded .app-nav-user {
+        display: block;
+    }
+
+    .app-nav.app-nav--expanded .app-nav-feedback-glyph {
+        display: flex;
+    }
+
+    .app-nav.app-nav--expanded .app-nav-label {
+        display: inline;
+    }
+
+    .app-nav.app-nav--expanded .app-nav-link,
+    .app-nav.app-nav--expanded .app-nav-link:visited {
+        justify-content: flex-start;
+        padding: 0.3rem 0.75rem;
+        gap: 0.5rem;
+        min-height: unset;
+        min-width: unset;
+    }
+
+    .app-nav.app-nav--expanded .app-nav-icon {
+        font-size: 1rem;
+        opacity: 0.75;
+        width: 1.1em;
+    }
+
+    .app-nav.app-nav--expanded .app-nav-link.active .app-nav-icon,
+    .app-nav.app-nav--expanded .app-nav-link:hover .app-nav-icon {
+        opacity: 1;
+    }
+}
+
+/* --------------------------------------------------
+   Responsive nav: mobile drawer (< 600px)
+-------------------------------------------------- */
+
+@media (max-width: 599px) {
+    body,
+    body.p-4 {
+        padding-left: 0 !important;
+        padding-top: var(--topbar-height) !important;
+    }
+
+    .app-topbar {
+        left: 0;
+        top: 0;
+        padding-left: 0.25rem;
+    }
+
+    .app-topbar-hamburger {
+        display: flex;
+    }
+
+    /* Sidebar off-screen by default; slides in when open */
+    .app-nav {
+        width: var(--sidebar-width);
+        height: 100vh;
+        padding: 2rem 0.75rem;
+        align-items: stretch;
+        overflow-x: visible;
+        overflow-y: auto;
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        z-index: 400;
+        border-right: 1px solid var(--border);
+    }
+
+    .app-nav.app-nav--open {
+        transform: translateX(0);
+    }
+
+    /* Restore full-sidebar appearance inside the drawer */
+    .app-nav-hamburger {
+        display: none;
+    }
+
+    .app-nav-brand {
+        display: block;
+    }
+
+    .app-nav-header {
+        display: block;
+    }
+
+    .app-nav-user {
+        display: block;
+    }
+
+    .app-nav-feedback-glyph {
+        display: flex;
+    }
+
+    .app-nav-label {
+        display: inline;
+    }
+
+    .app-nav-link,
+    .app-nav-link:visited {
+        justify-content: flex-start;
+        padding: 0.3rem 0.75rem;
+        min-height: 44px;
+        gap: 0.5rem;
+    }
+
+    .app-nav-icon {
+        font-size: 1rem;
+        opacity: 0.75;
+        width: 1.1em;
+    }
+
+    .app-nav-link.active .app-nav-icon,
+    .app-nav-link:hover .app-nav-icon {
+        opacity: 1;
     }
 }
 

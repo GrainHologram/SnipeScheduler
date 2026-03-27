@@ -167,21 +167,20 @@ if (!function_exists('layout_render_nav')) {
 
         if ($designVersion >= 2) {
             $links = [
-                ['href' => 'index.php',        'label' => 'Dashboard',        'staff' => false],
-                ['href' => 'my_bookings.php',  'label' => 'My Reservations',  'staff' => false],
-                ['href' => 'reservations.php', 'label' => 'Reservations',     'staff' => true],
-                ['href' => '#',                'label' => 'Feedback',         'staff' => false, 'onclick' => 'openFeedbackModal(); return false;', 'class' => 'app-nav-feedback'],
+                ['href' => 'index.php',        'label' => 'Dashboard',        'staff' => false, 'icon' => 'bi-speedometer2'],
+                ['href' => 'my_bookings.php',  'label' => 'My Gear',          'staff' => false, 'icon' => 'bi-calendar-check'],
+                ['href' => 'reservations.php', 'label' => 'Reservations',     'staff' => true,  'icon' => 'bi-calendar3'],
 
                 ['type' => 'header', 'label' => 'Catalogue',   'staff' => false],
-                ['href' => 'catalogue.php?tab=equipment&prefetch=1', 'label' => 'Equipment', 'staff' => false, 'tab' => 'equipment'],
-                ['href' => 'catalogue.php?tab=kits&prefetch=1',      'label' => 'Kits',  'staff' => false, 'tab' => 'kits'],
+                ['href' => 'catalogue.php?tab=equipment&prefetch=1', 'label' => 'Equipment', 'staff' => false, 'tab' => 'equipment', 'icon' => 'bi-camera-video'],
+                ['href' => 'catalogue.php?tab=kits&prefetch=1',      'label' => 'Kits',      'staff' => false, 'tab' => 'kits',      'icon' => 'bi-collection'],
 
                 ['type' => 'header', 'label' => 'Processing',  'staff' => true],
-                ['href' => 'quick_checkout.php', 'label' => 'Quick Checkout', 'staff' => true, 'enabled' => $quickCheckoutEnabled],
-                ['href' => 'quick_checkin.php',  'label' => 'Quick Checkin',  'staff' => true],
+                ['href' => 'quick_checkout.php', 'label' => 'Quick Checkout', 'staff' => true, 'enabled' => $quickCheckoutEnabled, 'icon' => 'bi-box-arrow-right'],
+                ['href' => 'quick_checkin.php',  'label' => 'Quick Checkin',  'staff' => true,  'icon' => 'bi-box-arrow-in-left'],
 
                 ['type' => 'header', 'label' => 'Admin',       'staff' => false, 'admin_only' => true],
-                ['href' => 'activity_log.php',   'label' => 'Admin',          'staff' => false, 'admin_only' => true],
+                ['href' => 'activity_log.php',   'label' => 'Admin',          'staff' => false, 'admin_only' => true, 'icon' => 'bi-gear'],
             ];
         } else {
             $links = [
@@ -192,11 +191,13 @@ if (!function_exists('layout_render_nav')) {
                 ['href' => 'quick_checkin.php',   'label' => 'Quick Checkin',   'staff' => true],
                 ['href' => 'activity_log.php',    'label' => 'Admin',           'staff' => false, 'admin_only' => true],
                 ['href' => '#',                   'label' => 'Feedback',        'staff' => true, 'onclick' => 'openFeedbackModal(); return false;', 'class' => 'app-nav-feedback'],
-                ['href' => 'my_bookings.php',     'label' => 'My Reservations', 'staff' => false, 'right' => true],
+                ['href' => 'my_bookings.php',     'label' => 'My Gear',         'staff' => false, 'right' => true],
             ];
         }
 
-        $html = '<nav class="app-nav"><a href="index.php" class="app-nav-brand">Wrap It</a>';
+        $html = '<nav id="app-nav" class="app-nav" aria-label="Main navigation" data-design-version="' . $designVersion . '">'
+              . '<button class="app-nav-hamburger" type="button" aria-label="Expand navigation" aria-expanded="false" aria-controls="app-nav"><i class="bi bi-list" aria-hidden="true"></i></button>'
+              . '<a href="index.php" class="app-nav-brand">Wrap It</a>';
         foreach ($links as $link) {
             if (isset($link['enabled']) && !$link['enabled']) {
                 continue;
@@ -222,12 +223,16 @@ if (!function_exists('layout_render_nav')) {
                 $isActive = $active === 'catalogue.php' && $currentTab === $link['tab'];
             }
 
-            $href    = htmlspecialchars($link['href'], ENT_QUOTES, 'UTF-8');
-            $classes = 'app-nav-link' . ($isActive ? ' active' : '') . (!empty($link['class']) ? ' ' . $link['class'] : '');
-            $style   = !empty($link['right']) ? ' style="margin-left:auto"' : '';
-            $onclick = !empty($link['onclick']) ? ' onclick="' . htmlspecialchars($link['onclick'], ENT_QUOTES, 'UTF-8') . '"' : '';
-            $html .= '<a href="' . $href . '" class="' . $classes . '"' . $style . $onclick . '>' . $label . '</a>';
+            $href      = htmlspecialchars($link['href'], ENT_QUOTES, 'UTF-8');
+            $classes   = 'app-nav-link' . ($isActive ? ' active' : '') . (!empty($link['class']) ? ' ' . $link['class'] : '');
+            $style     = !empty($link['right']) ? ' style="margin-left:auto"' : '';
+            $onclick   = !empty($link['onclick']) ? ' onclick="' . htmlspecialchars($link['onclick'], ENT_QUOTES, 'UTF-8') . '"' : '';
+            $icon      = !empty($link['icon']) ? '<i class="bi ' . htmlspecialchars($link['icon'], ENT_QUOTES, 'UTF-8') . ' app-nav-icon" aria-hidden="true"></i>' : '';
+            $ariaLabel = ' aria-label="' . $label . '" title="' . $label . '"';
+            $html .= '<a href="' . $href . '" class="' . $classes . '"' . $style . $onclick . $ariaLabel . '>' . $icon . '<span class="app-nav-label">' . $label . '</span></a>';
         }
+        $html .= '<a href="#" class="app-nav-feedback-glyph" onclick="openFeedbackModal(); return false;" aria-label="Feedback" title="Submit Feedback"><i class="bi bi-chat-left-dots" aria-hidden="true"></i></a>';
+
         $user      = $_SESSION['user'] ?? [];
         $firstName = $user['first_name'] ?? '';
         $lastName  = $user['last_name'] ?? '';
@@ -235,12 +240,11 @@ if (!function_exists('layout_render_nav')) {
         $email     = htmlspecialchars($user['email'] ?? '', ENT_QUOTES, 'UTF-8');
 
         $html .= '<details class="app-nav-user">'
-               . '<summary class="app-nav-user-trigger">'
+               . '<summary class="app-nav-user-trigger" aria-label="User menu for ' . $fullName . '">'
                . '<span class="app-nav-user-name">' . $fullName . '</span>'
                . '<span class="app-nav-user-email">' . $email . '</span>'
                . '</summary>'
                . '<div class="app-nav-user-popover">'
-               . '<a href="basket.php" class="app-nav-user-action">View Basket</a>'
                . '<a href="logout.php" class="app-nav-user-action">Log out</a>'
                . '</div>'
                . '</details>';
@@ -259,13 +263,13 @@ if (!function_exists('layout_render_topbar')) {
     function layout_render_topbar(string $active, string $subtitle = ''): string
     {
         $titles = [
-            'index.php'              => 'Equipment Booking',
+            'index.php'              => 'Dashboard',
             'catalogue.php'          => 'Catalogue',
             'reservations.php'       => 'Reservations',
             'quick_checkout.php'     => 'Quick Checkout',
             'quick_checkin.php'      => 'Quick Checkin',
             'activity_log.php'       => 'Admin',
-            'my_bookings.php'        => 'My Reservations',
+            'my_bookings.php'        => 'My Gear',
             'basket.php'             => 'Basket',
             'reservation_detail.php' => 'Reservation Detail',
             'reservation_edit.php'   => 'Edit Reservation',
@@ -281,10 +285,14 @@ if (!function_exists('layout_render_topbar')) {
 
         $title = $titles[$active] ?? '';
         $html  = '<div class="app-topbar">';
+        $html .= '<button class="app-topbar-hamburger" type="button" aria-label="Open navigation menu" aria-expanded="false" aria-controls="app-nav"><i class="bi bi-list" aria-hidden="true"></i></button>';
         $html .= '<span class="app-topbar-title">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</span>';
         if ($subtitle !== '') {
             $html .= '<span class="app-topbar-sep">›</span>';
             $html .= '<span class="app-topbar-subtitle">' . htmlspecialchars($subtitle, ENT_QUOTES, 'UTF-8') . '</span>';
+        }
+        if ($active === 'catalogue.php' || $active === 'my_bookings.php') {
+            $html .= '<a href="basket.php" class="app-topbar-basket"><i class="bi bi-basket" aria-hidden="true"></i> View Basket</a>';
         }
         $html .= '</div>';
         return $html;
@@ -389,10 +397,13 @@ if (!function_exists('layout_footer')) {
             ]) . ');</script>';
         }
 
-        echo '<footer class="text-center text-muted mt-4 small">'
-            . 'SnipeScheduler Version ' . $versionEsc . $commitSuffix . ' - Created by '
-            . '<a href="https://www.linkedin.com/in/ben-pirozzolo-76212a88" target="_blank" rel="noopener noreferrer">Ben Pirozzolo</a>'
-            . '</footer>';
+        $currentPage = basename($_SERVER['PHP_SELF'] ?? '');
+        if (in_array($currentPage, ['index.php', 'activity_log.php'], true)) {
+            echo '<footer class="text-center text-muted mt-4 small">'
+                . 'SnipeScheduler Version ' . $versionEsc . $commitSuffix . ' - Created by '
+                . '<a href="https://www.linkedin.com/in/ben-pirozzolo-76212a88" target="_blank" rel="noopener noreferrer">Ben Pirozzolo</a>'
+                . '</footer>';
+        }
 
         // Render feedback modal for staff/admin users
         if (!empty($_SESSION['user']['is_staff']) || !empty($_SESSION['user']['is_admin'])) {

@@ -81,7 +81,19 @@ input[type="checkbox"] {
 .app-topbar,
 .app-nav-brand,
 .app-nav-user,
-.app-nav-header {
+.app-nav-header,
+.app-nav-icon,
+.app-nav-hamburger,
+.app-topbar-hamburger,
+.app-nav-backdrop,
+.app-nav-feedback-glyph,
+.my-bookings-panels,
+.my-bookings-panel,
+.my-bookings-panel-title,
+.my-bookings-panel-box,
+.panel-empty-state,
+.panel-empty-icon,
+.panel-empty-text {
     display: none;
 }
 
