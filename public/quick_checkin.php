@@ -282,6 +282,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $noteText .= ' Staff note: ' . $note;
                         }
                         add_asset_note($assetId, $noteText);
+
+                        // Record unmatched checkin (asset was not checked out)
+                        $detUserForUnmatched = $_SESSION['quick_checkin_detected_user'] ?? null;
+                        $umStmt = $pdo->prepare("
+                            INSERT INTO unmatched_checkins
+                                (asset_id, asset_tag, asset_name, model_id, model_name,
+                                 was_checked_out, checked_in_from_user_id, checked_in_from_user_name,
+                                 checked_in_by, checkout_id)
+                            VALUES (:aid, :atag, :aname, :mid, :mname,
+                                    0, :uid, :uname, :staff, NULL)
+                        ");
+                        $umStmt->execute([
+                            ':aid'   => $assetId,
+                            ':atag'  => $assetTag,
+                            ':aname' => $asset['name'] ?? '',
+                            ':mid'   => (int)($asset['model_id'] ?? 0),
+                            ':mname' => $asset['model'] ?? '',
+                            ':uid'   => $detUserForUnmatched ? (int)$detUserForUnmatched['id'] : null,
+                            ':uname' => $detUserForUnmatched ? ($detUserForUnmatched['name'] ?? '') : null,
+                            ':staff' => $staffDisplayName,
+                        ]);
+
                         $messages[] = "Noted asset {$assetTag} (not checked out).";
 
                         $summaryLabel = 'Not checked out';
@@ -310,6 +332,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $ciUpd = $pdo->prepare("UPDATE checkout_items SET checked_in_at = NOW() WHERE id = :id");
                             $ciUpd->execute([':id' => (int)$ciRow['id']]);
                             recompute_checkout_status($pdo, (int)$ciRow['checkout_id']);
+                        } else {
+                            // No matching checkout_items row — record as unmatched checkin
+                            // Find user's open checkout if any
+                            $umCheckoutId = null;
+                            if ($assignedId > 0) {
+                                $umCoStmt = $pdo->prepare("
+                                    SELECT id FROM checkouts
+                                     WHERE snipeit_user_id = :uid
+                                       AND status IN ('open','partial')
+                                     ORDER BY created_at DESC LIMIT 1
+                                ");
+                                $umCoStmt->execute([':uid' => $assignedId]);
+                                $umCoRow = $umCoStmt->fetch(PDO::FETCH_ASSOC);
+                                if ($umCoRow) {
+                                    $umCheckoutId = (int)$umCoRow['id'];
+                                }
+                            }
+                            $umStmt2 = $pdo->prepare("
+                                INSERT INTO unmatched_checkins
+                                    (asset_id, asset_tag, asset_name, model_id, model_name,
+                                     was_checked_out, checked_in_from_user_id, checked_in_from_user_name,
+                                     checked_in_by, checkout_id)
+                                VALUES (:aid, :atag, :aname, :mid, :mname,
+                                        1, :uid, :uname, :staff, :coid)
+                            ");
+                            $umStmt2->execute([
+                                ':aid'   => $assetId,
+                                ':atag'  => $assetTag,
+                                ':aname' => $asset['name'] ?? '',
+                                ':mid'   => (int)($asset['model_id'] ?? 0),
+                                ':mname' => $asset['model'] ?? '',
+                                ':uid'   => $assignedId > 0 ? $assignedId : null,
+                                ':uname' => $assignedName !== '' ? $assignedName : null,
+                                ':staff' => $staffDisplayName,
+                                ':coid'  => $umCheckoutId,
+                            ]);
                         }
 
                         if ($assignedEmail === '' && $assignedId > 0) {
