@@ -8,7 +8,7 @@ $active  = basename($_SERVER['PHP_SELF']);
 $isAdmin = !empty($currentUser['is_admin']);
 $isStaff = !empty($currentUser['is_staff']) || $isAdmin;
 
-if (!$isAdmin) {
+if (!$isStaff) {
     http_response_code(403);
     echo 'Access denied.';
     exit;
@@ -108,6 +108,7 @@ function format_activity_metadata(?string $metadataJson, array $labelMap, ?DateT
 
 $qRaw    = trim($_GET['q'] ?? '');
 $eventRaw = trim($_GET['event_type'] ?? '');
+$actorRaw = trim($_GET['actor'] ?? '');
 $fromRaw = trim($_GET['from'] ?? '');
 $toRaw   = trim($_GET['to'] ?? '');
 $pageRaw = (int)($_GET['page'] ?? 1);
@@ -116,6 +117,7 @@ $sortRaw = trim($_GET['sort'] ?? '');
 
 $q        = $qRaw !== '' ? $qRaw : null;
 $eventType = $eventRaw !== '' ? $eventRaw : null;
+$actorFilter = $actorRaw !== '' ? $actorRaw : null;
 $dateFrom = $fromRaw !== '' ? $fromRaw : null;
 $dateTo   = $toRaw !== '' ? $toRaw : null;
 $page     = $pageRaw > 0 ? $pageRaw : 1;
@@ -140,9 +142,13 @@ $activityLogError = '';
 $totalRows = 0;
 $totalPages = 1;
 $eventTypeOptions = [];
+$actorOptions = [];
 try {
     $eventStmt = $pdo->query('SELECT DISTINCT event_type FROM activity_log ORDER BY event_type ASC');
     $eventTypeOptions = array_values(array_filter(array_map('trim', $eventStmt->fetchAll(PDO::FETCH_COLUMN))));
+
+    $actorStmt = $pdo->query("SELECT DISTINCT actor_name FROM activity_log WHERE actor_name IS NOT NULL AND actor_name != '' ORDER BY actor_name ASC");
+    $actorOptions = array_values(array_filter(array_map('trim', $actorStmt->fetchAll(PDO::FETCH_COLUMN))));
 
     $where  = [];
     $params = [];
@@ -155,6 +161,11 @@ try {
     if ($eventType !== null) {
         $where[] = 'event_type = :event_type';
         $params[':event_type'] = $eventType;
+    }
+
+    if ($actorFilter !== null) {
+        $where[] = 'actor_name = :actor_name';
+        $params[':actor_name'] = $actorFilter;
     }
 
     if ($dateFrom !== null) {
@@ -283,6 +294,16 @@ try {
                                     ?>
                                     <option value="<?= h($opt) ?>" <?= $eventType === $opt ? 'selected' : '' ?>>
                                         <?= h($label) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-6 col-lg-2">
+                            <select name="actor" class="form-select form-select-lg" aria-label="Filter by staff">
+                                <option value="">All staff</option>
+                                <?php foreach ($actorOptions as $actorOpt): ?>
+                                    <option value="<?= h($actorOpt) ?>" <?= $actorFilter === $actorOpt ? 'selected' : '' ?>>
+                                        <?= h($actorOpt) ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -423,6 +444,7 @@ try {
                             $pagerQuery = [
                                 'q' => $qRaw,
                                 'event_type' => $eventRaw,
+                                'actor' => $actorRaw,
                                 'from' => $fromRaw,
                                 'to' => $toRaw,
                                 'per_page' => $perPage,
@@ -470,6 +492,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('activity-log-filter-form');
     const sortSelect = form ? form.querySelector('select[name="sort"]') : null;
     const eventSelect = form ? form.querySelector('select[name="event_type"]') : null;
+    const actorSelect = form ? form.querySelector('select[name="actor"]') : null;
     if (form && sortSelect) {
         sortSelect.addEventListener('change', function () {
             form.submit();
@@ -477,6 +500,11 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     if (form && eventSelect) {
         eventSelect.addEventListener('change', function () {
+            form.submit();
+        });
+    }
+    if (form && actorSelect) {
+        actorSelect.addEventListener('change', function () {
             form.submit();
         });
     }
