@@ -461,10 +461,28 @@ try {
                                     $pagerQuery['page'] = $nextPage;
                                     $nextUrl = 'activity_log.php?' . http_build_query($pagerQuery);
                                 ?>
+                                <?php
+                                    // Sliding window: show first, last, and up to 5 pages around current
+                                    $windowSize = 2;
+                                    $pageNums = [];
+                                    $pageNums[] = 1;
+                                    for ($p = max(2, $page - $windowSize); $p <= min($totalPages - 1, $page + $windowSize); $p++) {
+                                        $pageNums[] = $p;
+                                    }
+                                    if ($totalPages > 1) {
+                                        $pageNums[] = $totalPages;
+                                    }
+                                    $pageNums = array_unique($pageNums);
+                                    sort($pageNums);
+                                ?>
                                 <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
                                     <a class="page-link" href="<?= h($prevUrl) ?>">Previous</a>
                                 </li>
-                                <?php for ($p = 1; $p <= $totalPages; $p++): ?>
+                                <?php $lastShown = 0; ?>
+                                <?php foreach ($pageNums as $p): ?>
+                                    <?php if ($p > $lastShown + 1): ?>
+                                        <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
+                                    <?php endif; ?>
                                     <?php
                                         $pagerQuery['page'] = $p;
                                         $pageUrl = 'activity_log.php?' . http_build_query($pagerQuery);
@@ -472,7 +490,8 @@ try {
                                     <li class="page-item <?= $p === $page ? 'active' : '' ?>">
                                         <a class="page-link" href="<?= h($pageUrl) ?>"><?= $p ?></a>
                                     </li>
-                                <?php endfor; ?>
+                                    <?php $lastShown = $p; ?>
+                                <?php endforeach; ?>
                                 <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
                                     <a class="page-link" href="<?= h($nextUrl) ?>">Next</a>
                                 </li>
