@@ -11,7 +11,7 @@ $embedded  = defined('RESERVATIONS_EMBED');
 $pageBase  = $embedded ? 'reservations.php' : 'unmatched_checkins_report.php';
 $baseQuery = $embedded ? ['tab' => 'unmatched'] : [];
 
-if (!$isStaff) {
+if (!$isAdmin) {
     http_response_code(403);
     echo 'Access denied.';
     exit;

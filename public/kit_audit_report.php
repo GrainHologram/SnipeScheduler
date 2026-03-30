@@ -12,7 +12,7 @@ $embedded  = defined('RESERVATIONS_EMBED');
 $pageBase  = $embedded ? 'reservations.php' : 'kit_audit_report.php';
 $baseQuery = $embedded ? ['tab' => 'kit_audit'] : [];
 
-if (!$isStaff) {
+if (!$isAdmin) {
     http_response_code(403);
     echo 'Access denied.';
     exit;

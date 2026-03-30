@@ -13,7 +13,11 @@ if (!$isStaff) {
     exit;
 }
 
-$allowedTabs = ['today', 'checked_out', 'history', 'checkout_history', 'unmatched', 'kit_audit'];
+$allowedTabs = ['today', 'checked_out', 'history', 'checkout_history'];
+if ($isAdmin) {
+    $allowedTabs[] = 'unmatched';
+    $allowedTabs[] = 'kit_audit';
+}
 $tab         = $_GET['tab'] ?? 'today';
 if (!in_array($tab, $allowedTabs, true)) {
     $tab = 'today';
@@ -126,6 +130,7 @@ if (!$tabFile || !is_file($tabFile)) {
                 <a class="nav-link <?= $tab === 'checkout_history' ? 'active' : '' ?>"
                    href="reservations.php?tab=checkout_history">Checkout History</a>
             </li>
+            <?php if ($isAdmin): ?>
             <li class="nav-item">
                 <a class="nav-link <?= $tab === 'unmatched' ? 'active' : '' ?>"
                    href="reservations.php?tab=unmatched">Unmatched Checkins</a>
@@ -134,6 +139,7 @@ if (!$tabFile || !is_file($tabFile)) {
                 <a class="nav-link <?= $tab === 'kit_audit' ? 'active' : '' ?>"
                    href="reservations.php?tab=kit_audit">Kit Audit</a>
             </li>
+            <?php endif; ?>
         </ul>
 
         <div class="tab-content border border-top-0 p-3 bg-white reservations-shell">
