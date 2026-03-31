@@ -106,6 +106,22 @@ $deletedMsg = '';
 if (!empty($_GET['deleted'])) {
     $deletedMsg = 'Reservation #' . (int)$_GET['deleted'] . ' has been deleted.';
 }
+
+// Basket state for reuse confirmation (staff/admin)
+$currentBasket = $_SESSION['basket'] ?? [];
+$currentBasketCount = 0;
+foreach ($currentBasket as $q) {
+    $currentBasketCount += (int)$q;
+}
+$bookingOverride = $_SESSION['booking_user_override'] ?? null;
+$basketUserLabel = '';
+if ($bookingOverride) {
+    $overrideName = trim(($bookingOverride['first_name'] ?? '') . ' ' . ($bookingOverride['last_name'] ?? ''));
+    if ($overrideName === '') {
+        $overrideName = $bookingOverride['name'] ?? ($bookingOverride['email'] ?? '');
+    }
+    $basketUserLabel = $overrideName;
+}
 ?>
 <!DOCTYPE html>
 <html>
@@ -292,12 +308,19 @@ if (!empty($_GET['deleted'])) {
 
                                 <div class="d-flex justify-content-end gap-2 mt-3">
                                     <?php if (!empty($items)): ?>
-                                    <form method="post" action="reuse_reservation.php">
-                                        <input type="hidden" name="reservation_id" value="<?= $resId ?>">
-                                        <button type="submit" class="btn btn-outline-secondary btn-sm">
-                                            Reuse items
-                                        </button>
-                                    </form>
+                                        <?php if ($isStaff && ($currentBasketCount > 0 || $bookingOverride)): ?>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm"
+                                                    onclick="showReuseModal(<?= $resId ?>)">
+                                                Reuse items
+                                            </button>
+                                        <?php else: ?>
+                                            <form method="post" action="reuse_reservation.php">
+                                                <input type="hidden" name="reservation_id" value="<?= $resId ?>">
+                                                <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                    Reuse items
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
                                     <?php endif; ?>
                                     <?php if ($status === 'pending'): ?>
                                         <a href="reservation_edit.php?id=<?= $resId ?>&from=my_bookings"
@@ -404,12 +427,19 @@ if (!empty($_GET['deleted'])) {
 
                                     <div class="d-flex justify-content-end gap-2 mt-3">
                                         <?php if (!empty($items)): ?>
-                                        <form method="post" action="reuse_reservation.php">
-                                            <input type="hidden" name="reservation_id" value="<?= $resId ?>">
-                                            <button type="submit" class="btn btn-outline-secondary btn-sm">
-                                                Reuse items
-                                            </button>
-                                        </form>
+                                            <?php if ($isStaff && ($currentBasketCount > 0 || $bookingOverride)): ?>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm"
+                                                        onclick="showReuseModal(<?= $resId ?>)">
+                                                    Reuse items
+                                                </button>
+                                            <?php else: ?>
+                                                <form method="post" action="reuse_reservation.php">
+                                                    <input type="hidden" name="reservation_id" value="<?= $resId ?>">
+                                                    <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                        Reuse items
+                                                    </button>
+                                                </form>
+                                            <?php endif; ?>
                                         <?php endif; ?>
                                         <?php
                                             $deletableStatuses = (load_config())['reservations']['deletable_statuses'] ?? ['pending', 'confirmed', 'cancelled', 'missed'];
@@ -435,8 +465,58 @@ if (!empty($_GET['deleted'])) {
 
     </div>
 </div>
+<?php if ($isStaff && ($currentBasketCount > 0 || $bookingOverride)): ?>
+<!-- Reuse confirmation modal -->
+<div id="reuseBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1050;" onclick="closeReuseModal()"></div>
+<div id="reuseModal" style="display:none; position:fixed; inset:0; z-index:1055; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)closeReuseModal()">
+    <div style="max-width:480px; margin:0 auto; background:#fff; border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid #dee2e6;">
+            <h5 style="margin:0;">Replace current basket?</h5>
+            <button type="button" onclick="closeReuseModal()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
+        </div>
+        <div style="padding:1rem;">
+            <p>Reusing this reservation will <strong>clear your current basket</strong> and replace it with the selected reservation's items.</p>
+            <?php if ($bookingOverride && $basketUserLabel !== ''): ?>
+                <div class="mb-2">
+                    <strong>Booking for:</strong> <?= h($basketUserLabel) ?>
+                    <br><span class="text-muted small">The booking user will be reset to yourself.</span>
+                </div>
+            <?php endif; ?>
+            <?php if ($currentBasketCount > 0): ?>
+                <div class="mb-2">
+                    <strong>Current basket:</strong> <?= $currentBasketCount ?> item<?= $currentBasketCount !== 1 ? 's' : '' ?>
+                    (<?= count($currentBasket) ?> model<?= count($currentBasket) !== 1 ? 's' : '' ?>)
+                </div>
+            <?php endif; ?>
+            <p class="mb-0 text-muted small">This cannot be undone.</p>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:.5rem; padding:.75rem 1rem; border-top:1px solid #dee2e6;">
+            <button type="button" class="btn btn-outline-secondary" onclick="closeReuseModal()">Cancel</button>
+            <form method="post" action="reuse_reservation.php" id="reuseModalForm">
+                <input type="hidden" name="reservation_id" id="reuseModalResId" value="">
+                <button type="submit" class="btn btn-primary">Replace basket</button>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <?php layout_footer(); ?>
 <script>
+<?php if ($isStaff && ($currentBasketCount > 0 || $bookingOverride)): ?>
+function showReuseModal(resId) {
+    document.getElementById('reuseModalResId').value = resId;
+    document.getElementById('reuseBackdrop').style.display = 'block';
+    document.getElementById('reuseModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+}
+function closeReuseModal() {
+    document.getElementById('reuseBackdrop').style.display = 'none';
+    document.getElementById('reuseModal').style.display = 'none';
+    document.body.style.overflow = '';
+}
+<?php endif; ?>
+
 function togglePastReservations() {
     var container = document.getElementById('past-reservations');
     var btn = document.getElementById('toggle-past-btn');
