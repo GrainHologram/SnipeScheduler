@@ -41,10 +41,11 @@ if (empty($items)) {
     exit;
 }
 
-// Clear existing basket
+// Clear existing basket and reset booking user to self
 $_SESSION['basket'] = [];
 $_SESSION['basket_kit_groups'] = [];
 $_SESSION['basket_kit_names'] = [];
+unset($_SESSION['booking_user_override']);
 
 // Populate basket from reservation items
 $kitEntries = []; // kit_id => [ [model_id, quantity], ... ]
