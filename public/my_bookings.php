@@ -291,6 +291,14 @@ if (!empty($_GET['deleted'])) {
                                 <?php endif; ?>
 
                                 <div class="d-flex justify-content-end gap-2 mt-3">
+                                    <?php if (!empty($items)): ?>
+                                    <form method="post" action="reuse_reservation.php">
+                                        <input type="hidden" name="reservation_id" value="<?= $resId ?>">
+                                        <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                            Reuse items
+                                        </button>
+                                    </form>
+                                    <?php endif; ?>
                                     <?php if ($status === 'pending'): ?>
                                         <a href="reservation_edit.php?id=<?= $resId ?>&from=my_bookings"
                                            class="btn btn-outline-primary btn-sm btn-action">
@@ -395,6 +403,14 @@ if (!empty($_GET['deleted'])) {
                                     <?php endif; ?>
 
                                     <div class="d-flex justify-content-end gap-2 mt-3">
+                                        <?php if (!empty($items)): ?>
+                                        <form method="post" action="reuse_reservation.php">
+                                            <input type="hidden" name="reservation_id" value="<?= $resId ?>">
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                Reuse items
+                                            </button>
+                                        </form>
+                                        <?php endif; ?>
                                         <?php
                                             $deletableStatuses = (load_config())['reservations']['deletable_statuses'] ?? ['pending', 'confirmed', 'cancelled', 'missed'];
                                             if (in_array($status, $deletableStatuses, true)):
