@@ -19,9 +19,10 @@ if ($reservationId <= 0) {
 
 // Verify the reservation belongs to the current user
 $currentUserId = (string)($currentUser['snipeit_user_id'] ?? '');
-$stmt = $pdo->prepare("SELECT id FROM reservations WHERE id = :id AND snipeit_user_id = :uid");
+$stmt = $pdo->prepare("SELECT id, user_name, user_email, snipeit_user_id FROM reservations WHERE id = :id AND snipeit_user_id = :uid");
 $stmt->execute([':id' => $reservationId, ':uid' => $currentUserId]);
-if (!$stmt->fetch()) {
+$reservation = $stmt->fetch(PDO::FETCH_ASSOC);
+if (!$reservation) {
     header('Location: my_bookings.php');
     exit;
 }
@@ -41,11 +42,31 @@ if (empty($items)) {
     exit;
 }
 
-// Clear existing basket and reset booking user to self
+// Clear existing basket
 $_SESSION['basket'] = [];
 $_SESSION['basket_kit_groups'] = [];
 $_SESSION['basket_kit_names'] = [];
-unset($_SESSION['booking_user_override']);
+
+// Set booking user from the reservation
+$isStaff = !empty($currentUser['is_staff']) || !empty($currentUser['is_admin']);
+if ($isStaff) {
+    $resEmail = trim((string)($reservation['user_email'] ?? ''));
+    $resName  = trim((string)($reservation['user_name'] ?? ''));
+    $resSnipeId = (int)($reservation['snipeit_user_id'] ?? 0);
+    if ($resEmail !== '') {
+        $_SESSION['booking_user_override'] = [
+            'email'           => $resEmail,
+            'first_name'      => $resName,
+            'last_name'       => '',
+            'id'              => 0,
+            'snipeit_user_id' => $resSnipeId,
+        ];
+    } else {
+        unset($_SESSION['booking_user_override']);
+    }
+} else {
+    unset($_SESSION['booking_user_override']);
+}
 
 // Populate basket from reservation items
 $kitEntries = []; // kit_id => [ [model_id, quantity], ... ]
