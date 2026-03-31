@@ -479,7 +479,7 @@ if ($bookingOverride) {
             <?php if ($bookingOverride && $basketUserLabel !== ''): ?>
                 <div class="mb-2">
                     <strong>Booking for:</strong> <?= h($basketUserLabel) ?>
-                    <br><span class="text-muted small">The booking user will be reset to yourself.</span>
+                    <br><span class="text-muted small">The booking user will be set to the reservation's user.</span>
                 </div>
             <?php endif; ?>
             <?php if ($currentBasketCount > 0): ?>
