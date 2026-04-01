@@ -47,11 +47,11 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'model_search') {
                 continue;
             }
             $mid = (int)($row['id'] ?? 0);
-            $name = $row['name'] ?? '';
+            $name = html_entity_decode($row['name'] ?? '', ENT_QUOTES, 'UTF-8');
             if ($mid <= 0 || $name === '') {
                 continue;
             }
-            $manu = $row['manufacturer']['name'] ?? '';
+            $manu = html_entity_decode($row['manufacturer']['name'] ?? '', ENT_QUOTES, 'UTF-8');
             $label = $manu !== '' ? $name . ' — ' . $manu : $name;
             $results[] = [
                 'id'    => $mid,
