@@ -1005,7 +1005,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 btn.dataset.label = labelText;
                 btn.dataset.image = item.image || '';
 
-                btn.addEventListener('click', () => {
+                btn.addEventListener('mousedown', (e) => {
+                    e.preventDefault(); // prevent blur from hiding suggestions before click
                     input.value = btn.dataset.label;
                     hidden.value = btn.dataset.id;
                     label.value = btn.dataset.label;
