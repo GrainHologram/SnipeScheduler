@@ -350,6 +350,14 @@ if ($selectedReservationId) {
                 }
                 $normalizedSelections[$mid] = array_values($normalizedSelections[$mid]);
             }
+            // Merge with existing session data to preserve scan-added assets
+            // that don't have dropdowns in the form yet
+            $existing = $_SESSION['reservation_selected_assets'][$selectedReservationId] ?? [];
+            foreach ($existing as $mid => $assets) {
+                if (!isset($normalizedSelections[$mid])) {
+                    $normalizedSelections[$mid] = $assets;
+                }
+            }
             $presetSelections = $normalizedSelections;
             if ($selectedReservationId) {
                 $_SESSION['reservation_selected_assets'][$selectedReservationId] = $normalizedSelections;
@@ -452,6 +460,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($mid <= 0 || !is_array($choices)) continue;
                 $normalizedSelections[$mid] = array_values(array_map('intval', $choices));
             }
+            // Merge with existing session data to preserve scan-added assets
+            // that don't have dropdowns in the form yet
+            $existing = $_SESSION['reservation_selected_assets'][$selectedReservationId] ?? [];
+            foreach ($existing as $mid => $assets) {
+                if (!isset($normalizedSelections[$mid])) {
+                    $normalizedSelections[$mid] = $assets;
+                }
+            }
             $_SESSION['reservation_selected_assets'][$selectedReservationId] = $normalizedSelections;
         }
         header('Location: ' . $selfUrl . (str_contains($selfUrl, '?') ? '&' : '?') . 'refresh=1');
@@ -489,6 +505,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $normalizedSelections[$mid][(int)$idx] = (int)$choice;
                     }
                     $normalizedSelections[$mid] = array_values($normalizedSelections[$mid]);
+                }
+            }
+
+            // Merge with existing session data to preserve scan-added assets
+            $existing = $_SESSION['reservation_selected_assets'][$selectedReservationId] ?? [];
+            foreach ($existing as $emid => $eassets) {
+                if (!isset($normalizedSelections[$emid])) {
+                    $normalizedSelections[$emid] = $eassets;
                 }
             }
 
