@@ -135,6 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             unset($_SESSION['reservation_selected_assets']);
             unset($_SESSION['scan_injected_assets']);
             unset($_SESSION['scan_auth_overrides']);
+            unset($_SESSION['scan_status_warnings']);
         }
     }
 }
@@ -287,6 +288,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'select_
     $_SESSION['reservation_selected_assets'] = [];
     unset($_SESSION['scan_injected_assets']);
     unset($_SESSION['scan_auth_overrides']);
+    unset($_SESSION['scan_status_warnings']);
     header('Location: ' . $selfUrl);
     exit;
 }
@@ -336,6 +338,39 @@ if ($selectedReservationId) {
         foreach ($selectedItems as $item) {
             $selectedTotalQty += (int)($item['qty'] ?? 0);
         }
+
+        // Check for existing checkout_items from a prior partial checkout
+        $alreadyCheckedOut = []; // model_id => [ ['asset_id'=>X, 'asset_tag'=>Y, 'asset_name'=>Z], ... ]
+        $partialCheckoutId = null;
+        $coLookup = $pdo->prepare("
+            SELECT c.id FROM checkouts c
+             WHERE c.reservation_id = :rid
+               AND c.status IN ('open','partial')
+             ORDER BY c.created_at DESC LIMIT 1
+        ");
+        $coLookup->execute([':rid' => $selectedReservationId]);
+        $existingCo = $coLookup->fetch(PDO::FETCH_ASSOC);
+        if ($existingCo) {
+            $partialCheckoutId = (int)$existingCo['id'];
+            $ciLookup = $pdo->prepare("
+                SELECT asset_id, asset_tag, asset_name, model_id, model_name
+                  FROM checkout_items
+                 WHERE checkout_id = :coid AND checked_in_at IS NULL
+            ");
+            $ciLookup->execute([':coid' => $partialCheckoutId]);
+            foreach ($ciLookup->fetchAll(PDO::FETCH_ASSOC) as $ci) {
+                $ciMid = (int)$ci['model_id'];
+                if (!isset($alreadyCheckedOut[$ciMid])) {
+                    $alreadyCheckedOut[$ciMid] = [];
+                }
+                $alreadyCheckedOut[$ciMid][] = [
+                    'asset_id'   => (int)$ci['asset_id'],
+                    'asset_tag'  => $ci['asset_tag'] ?? '',
+                    'asset_name' => $ci['asset_name'] ?? '',
+                ];
+            }
+        }
+
         $storedSelections = $_SESSION['reservation_selected_assets'][$selectedReservationId] ?? [];
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['selected_assets']) && is_array($_POST['selected_assets'])) {
             $normalizedSelections = [];
@@ -927,6 +962,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['scan_auth_overrides'][$resId][$assetId] = $overrideLabel;
                 }
 
+                // Persist status warnings (not deployable, assigned, etc.)
+                if (!empty($scanWarnings)) {
+                    if (!isset($_SESSION['scan_status_warnings'])) {
+                        $_SESSION['scan_status_warnings'] = [];
+                    }
+                    if (!isset($_SESSION['scan_status_warnings'][$resId])) {
+                        $_SESSION['scan_status_warnings'][$resId] = [];
+                    }
+                    $_SESSION['scan_status_warnings'][$resId][$assetId] = implode('; ', $scanWarnings);
+                }
+
                 $label = $modelName !== '' ? "{$assetTag} ({$modelName})" : $assetTag;
                 if ($scanWarning !== '') {
                     $scanWarnings[] = $scanWarning;
@@ -1078,6 +1124,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $selectedAssetsInput = $_POST['selected_assets'] ?? [];
             $assetsToCheckout    = [];
 
+            // Build set of asset IDs already checked out from a prior partial checkout
+            $alreadyCheckedOutIds = [];
+            foreach ($alreadyCheckedOut as $_acoMid => $_acoItems) {
+                foreach ($_acoItems as $_acoItem) {
+                    $alreadyCheckedOutIds[(int)$_acoItem['asset_id']] = true;
+                }
+            }
+
             // Validate selections against required quantities
             foreach ($selectedItems as $item) {
                 $mid    = (int)$item['model_id'];
@@ -1102,6 +1156,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $seen = [];
                 for ($i = 0; $i < $qty; $i++) {
                     $assetIdSel = (int)($selectedForModel[$i] ?? 0);
+                    // Skip assets already checked out from a prior partial checkout
+                    if ($assetIdSel > 0 && isset($alreadyCheckedOutIds[$assetIdSel])) {
+                        continue;
+                    }
                     if ($assetIdSel <= 0 || !isset($choicesById[$assetIdSel])) {
                         $checkoutErrors[] = "Invalid asset selection for model {$item['name']}.";
                         continue;
@@ -1118,6 +1176,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'model_name' => $item['name'] ?? '',
                     ];
                 }
+            }
+
+            // If all items are already checked out, just mark fulfilled
+            if (empty($checkoutErrors) && empty($assetsToCheckout) && !empty($alreadyCheckedOutIds)) {
+                $allAssetLabels = [];
+                foreach ($alreadyCheckedOut as $_acoMid => $_acoItems) {
+                    foreach ($_acoItems as $_acoItem) {
+                        $allAssetLabels[] = $_acoItem['asset_tag'];
+                    }
+                }
+                $fullAssetsText = implode(', ', array_filter($allAssetLabels));
+                $pdo->prepare("
+                    UPDATE reservations SET status = 'fulfilled', asset_name_cache = :assets WHERE id = :id
+                ")->execute([':assets' => $fullAssetsText, ':id' => $selectedReservationId]);
+                $checkoutMessages[] = 'All items were already checked out. Reservation marked fulfilled.';
+                unset($_SESSION['reservation_selected_assets'][$selectedReservationId]);
+                unset($_SESSION['scan_injected_assets']);
+                unset($_SESSION['scan_auth_overrides']);
+                unset($_SESSION['scan_status_warnings']);
             }
 
             if (empty($checkoutErrors) && !empty($assetsToCheckout)) {
@@ -1238,32 +1315,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }, $checkedOutAssets);
                             $assetsText = implode(', ', array_filter($assetTags));
 
-                            // Determine parent checkout for single-active-checkout
-                            $parentCheckoutId = null;
-                            if ($appendToActive) {
-                                $activeCheckout = get_user_active_checkout($userId);
-                                if ($activeCheckout) {
-                                    $parentCheckoutId = (int)$activeCheckout['id'];
+                            // If a partial checkout already exists for this reservation, add items to it
+                            if ($partialCheckoutId) {
+                                $newCheckoutId = $partialCheckoutId;
+                            } else {
+                                // Determine parent checkout for single-active-checkout
+                                $parentCheckoutId = null;
+                                if ($appendToActive) {
+                                    $activeCheckout = get_user_active_checkout($userId);
+                                    if ($activeCheckout) {
+                                        $parentCheckoutId = (int)$activeCheckout['id'];
+                                    }
                                 }
-                            }
 
-                            $coInsert = $pdo->prepare("
-                                INSERT INTO checkouts
-                                    (reservation_id, parent_checkout_id, user_id, user_name, user_email, snipeit_user_id, start_datetime, end_datetime, status)
-                                VALUES
-                                    (:rid, :parent, :uid, :uname, :uemail, :suid, :start, :end, 'open')
-                            ");
-                            $coInsert->execute([
-                                ':rid'    => $selectedReservationId,
-                                ':parent' => $parentCheckoutId,
-                                ':uid'    => $selectedReservation['user_id'] ?? '',
-                                ':uname'  => $userName,
-                                ':uemail' => $selectedReservation['user_email'] ?? '',
-                                ':suid'   => $userId,
-                                ':start'  => $selectedStart,
-                                ':end'    => $checkoutExpectedEnd,
-                            ]);
-                            $newCheckoutId = (int)$pdo->lastInsertId();
+                                $coInsert = $pdo->prepare("
+                                    INSERT INTO checkouts
+                                        (reservation_id, parent_checkout_id, user_id, user_name, user_email, snipeit_user_id, start_datetime, end_datetime, status)
+                                    VALUES
+                                        (:rid, :parent, :uid, :uname, :uemail, :suid, :start, :end, 'open')
+                                ");
+                                $coInsert->execute([
+                                    ':rid'    => $selectedReservationId,
+                                    ':parent' => $parentCheckoutId,
+                                    ':uid'    => $selectedReservation['user_id'] ?? '',
+                                    ':uname'  => $userName,
+                                    ':uemail' => $selectedReservation['user_email'] ?? '',
+                                    ':suid'   => $userId,
+                                    ':start'  => $selectedStart,
+                                    ':end'    => $checkoutExpectedEnd,
+                                ]);
+                                $newCheckoutId = (int)$pdo->lastInsertId();
+                            }
 
                             $ciInsert = $pdo->prepare("
                                 INSERT INTO checkout_items
@@ -1284,6 +1366,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                             // Mark reservation as fulfilled if all assets succeeded, otherwise leave as-is
                             if (empty($apiFailures)) {
+                                // Include already-checked-out assets in the cache text
+                                $allAssetLabels = [];
+                                foreach ($alreadyCheckedOut as $_acoMid => $_acoItems) {
+                                    foreach ($_acoItems as $_acoItem) {
+                                        $allAssetLabels[] = $_acoItem['asset_tag'];
+                                    }
+                                }
+                                $allAssetLabels[] = $assetsText;
+                                $fullAssetsText = implode(', ', array_filter($allAssetLabels));
+
                                 $upd = $pdo->prepare("
                                     UPDATE reservations
                                        SET status = 'fulfilled',
@@ -1292,7 +1384,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ");
                                 $upd->execute([
                                     ':id'          => $selectedReservationId,
-                                    ':assets_text' => $assetsText,
+                                    ':assets_text' => $fullAssetsText,
                                 ]);
                                 $checkoutMessages[] = 'Reservation fulfilled and checkout created.';
                             } else {
@@ -1306,6 +1398,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                         unset($_SESSION['scan_injected_assets']);
                         unset($_SESSION['scan_auth_overrides']);
+                        unset($_SESSION['scan_status_warnings']);
 
                         activity_log_event('checkout_created', 'Checkout created from reservation', [
                             'subject_type' => 'checkout',
@@ -1876,10 +1969,30 @@ $active  = basename($_SERVER['PHP_SELF']);
                             </div>
                         <?php endif; ?>
 
+                        <?php if (!empty($alreadyCheckedOut)): ?>
+                            <?php
+                                $acoTotal = 0;
+                                $acoTags = [];
+                                foreach ($alreadyCheckedOut as $_acoMid => $_acoItems) {
+                                    foreach ($_acoItems as $_acoItem) {
+                                        $acoTotal++;
+                                        $acoTags[] = $_acoItem['asset_tag'];
+                                    }
+                                }
+                            ?>
+                            <div class="alert alert-warning">
+                                <strong>Partial checkout in progress:</strong>
+                                <?= $acoTotal ?> item<?= $acoTotal !== 1 ? 's' : '' ?> already checked out
+                                (<?= h(implode(', ', $acoTags)) ?>).
+                                The remaining items still need to be assigned and checked out.
+                            </div>
+                        <?php endif; ?>
+
                         <?php foreach ($selectedItems as $item): ?>
                             <?php
                                 $mid     = (int)$item['model_id'];
                                 $qty     = (int)$item['qty'];
+                                $acoForModel = $alreadyCheckedOut[$mid] ?? [];
                                 $options = $modelAssets[$mid] ?? [];
                                 $imagePath = $item['image'] ?? '';
                                 $proxiedImage = $imagePath !== ''
@@ -1931,7 +2044,30 @@ $active  = basename($_SERVER['PHP_SELF']);
                                                     <?php endif; ?>
                                                 <?php else: ?>
                                                     <div class="d-flex flex-column gap-2">
+                                                        <?php
+                                                            $acoSlotIdx = 0; // track which already-checked-out items we've rendered
+                                                        ?>
                                                         <?php for ($i = 0; $i < $qty; $i++): ?>
+                                                            <?php if (isset($acoForModel[$acoSlotIdx])): ?>
+                                                                <?php
+                                                                    $acoItem = $acoForModel[$acoSlotIdx];
+                                                                    $acoLabel = $acoItem['asset_tag'];
+                                                                    if ($acoItem['asset_name'] !== '') {
+                                                                        $acoLabel .= ' – ' . $acoItem['asset_name'];
+                                                                    }
+                                                                    $acoSlotIdx++;
+                                                                ?>
+                                                                <div class="d-flex gap-2 align-items-center">
+                                                                    <input type="text"
+                                                                           class="form-control bg-success-subtle text-success border-success"
+                                                                           value="<?= h($acoLabel) ?>"
+                                                                           disabled>
+                                                                    <input type="hidden"
+                                                                           name="selected_assets[<?= $mid ?>][]"
+                                                                           value="<?= (int)$acoItem['asset_id'] ?>">
+                                                                    <span class="badge bg-success">Checked out</span>
+                                                                </div>
+                                                            <?php else: ?>
                                                             <div class="d-flex gap-2 align-items-center">
                                                                 <?php
                                                                     $slotSelectedId = $presetSelections[$mid][$i] ?? 0;
@@ -1939,8 +2075,13 @@ $active  = basename($_SERVER['PHP_SELF']);
                                                                     $slotOverride = ($slotSelectedId > 0 && isset($authOverrides[$slotSelectedId]))
                                                                         ? $authOverrides[$slotSelectedId]
                                                                         : '';
+                                                                    $statusWarnings = $_SESSION['scan_status_warnings'][$selectedReservationId] ?? [];
+                                                                    $slotStatusWarn = ($slotSelectedId > 0 && isset($statusWarnings[$slotSelectedId]))
+                                                                        ? $statusWarnings[$slotSelectedId]
+                                                                        : '';
+                                                                    $slotHasWarning = $slotOverride !== '' || $slotStatusWarn !== '';
                                                                 ?>
-                                                                <select class="form-select<?= $slotOverride !== '' ? ' border-warning' : '' ?>"
+                                                                <select class="form-select<?= $slotHasWarning ? ' border-danger' : '' ?>"
                                                                         name="selected_assets[<?= $mid ?>][]"
                                                                         data-model-select="<?= $mid ?>">
                                                                     <option value="">-- Select asset --</option>
@@ -1960,6 +2101,11 @@ $active  = basename($_SERVER['PHP_SELF']);
                                                                 <?php if ($slotOverride !== ''): ?>
                                                                     <span class="badge bg-warning text-dark" title="<?= h($slotOverride) ?>">Override</span>
                                                                 <?php endif; ?>
+                                                                <?php if ($slotStatusWarn !== ''): ?>
+                                                                    <span class="badge bg-danger" title="<?= h($slotStatusWarn) ?>">
+                                                                        <?= h($slotStatusWarn) ?>
+                                                                    </span>
+                                                                <?php endif; ?>
                                                                 <?php $removeOneDeletes = $selectedTotalQty <= 1; ?>
                                                                 <button type="submit"
                                                                         name="remove_slot"
@@ -1969,6 +2115,7 @@ $active  = basename($_SERVER['PHP_SELF']);
                                                                     Remove
                                                                 </button>
                                                             </div>
+                                                            <?php endif; ?>
                                                         <?php endfor; ?>
                                                     </div>
                                                     <?php if (count($options) < $qty && !empty($modelUnavailable[$mid]['count'])): ?>
@@ -2002,6 +2149,26 @@ $active  = basename($_SERVER['PHP_SELF']);
                                 Rebook <?= $totalRebookQty ?> unavailable item(s) as new reservation
                             </button>
                             <br>
+                        <?php endif; ?>
+                        <?php
+                            $allStatusWarnings = $_SESSION['scan_status_warnings'][$selectedReservationId] ?? [];
+                            if (!empty($allStatusWarnings)):
+                        ?>
+                            <div class="alert alert-danger mb-3">
+                                <strong>Some scanned assets may fail checkout:</strong>
+                                <ul class="mb-0 mt-1">
+                                    <?php foreach ($allStatusWarnings as $_warnAid => $_warnMsg): ?>
+                                        <?php
+                                            $warnTag = '';
+                                            $injected = $_SESSION['scan_injected_assets'][$selectedReservationId] ?? [];
+                                            if (isset($injected[$_warnAid])) {
+                                                $warnTag = $injected[$_warnAid]['asset_tag'] ?? '';
+                                            }
+                                        ?>
+                                        <li><?= h($warnTag !== '' ? $warnTag . ': ' . $_warnMsg : $_warnMsg) ?></li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            </div>
                         <?php endif; ?>
                         <button type="submit" name="mode" value="reservation_checkout" class="btn btn-primary">
                             Check out selected assets for this reservation
