@@ -135,6 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             unset($_SESSION['reservation_selected_assets']);
             unset($_SESSION['scan_injected_assets']);
             unset($_SESSION['scan_auth_overrides']);
+            unset($_SESSION['scan_status_warnings']);
         }
     }
 }
@@ -287,6 +288,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'select_
     $_SESSION['reservation_selected_assets'] = [];
     unset($_SESSION['scan_injected_assets']);
     unset($_SESSION['scan_auth_overrides']);
+    unset($_SESSION['scan_status_warnings']);
     header('Location: ' . $selfUrl);
     exit;
 }
@@ -960,6 +962,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['scan_auth_overrides'][$resId][$assetId] = $overrideLabel;
                 }
 
+                // Persist status warnings (not deployable, assigned, etc.)
+                if (!empty($scanWarnings)) {
+                    if (!isset($_SESSION['scan_status_warnings'])) {
+                        $_SESSION['scan_status_warnings'] = [];
+                    }
+                    if (!isset($_SESSION['scan_status_warnings'][$resId])) {
+                        $_SESSION['scan_status_warnings'][$resId] = [];
+                    }
+                    $_SESSION['scan_status_warnings'][$resId][$assetId] = implode('; ', $scanWarnings);
+                }
+
                 $label = $modelName !== '' ? "{$assetTag} ({$modelName})" : $assetTag;
                 if ($scanWarning !== '') {
                     $scanWarnings[] = $scanWarning;
@@ -1181,6 +1194,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 unset($_SESSION['reservation_selected_assets'][$selectedReservationId]);
                 unset($_SESSION['scan_injected_assets']);
                 unset($_SESSION['scan_auth_overrides']);
+                unset($_SESSION['scan_status_warnings']);
             }
 
             if (empty($checkoutErrors) && !empty($assetsToCheckout)) {
@@ -1384,6 +1398,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                         unset($_SESSION['scan_injected_assets']);
                         unset($_SESSION['scan_auth_overrides']);
+                        unset($_SESSION['scan_status_warnings']);
 
                         activity_log_event('checkout_created', 'Checkout created from reservation', [
                             'subject_type' => 'checkout',
@@ -2060,8 +2075,13 @@ $active  = basename($_SERVER['PHP_SELF']);
                                                                     $slotOverride = ($slotSelectedId > 0 && isset($authOverrides[$slotSelectedId]))
                                                                         ? $authOverrides[$slotSelectedId]
                                                                         : '';
+                                                                    $statusWarnings = $_SESSION['scan_status_warnings'][$selectedReservationId] ?? [];
+                                                                    $slotStatusWarn = ($slotSelectedId > 0 && isset($statusWarnings[$slotSelectedId]))
+                                                                        ? $statusWarnings[$slotSelectedId]
+                                                                        : '';
+                                                                    $slotHasWarning = $slotOverride !== '' || $slotStatusWarn !== '';
                                                                 ?>
-                                                                <select class="form-select<?= $slotOverride !== '' ? ' border-warning' : '' ?>"
+                                                                <select class="form-select<?= $slotHasWarning ? ' border-danger' : '' ?>"
                                                                         name="selected_assets[<?= $mid ?>][]"
                                                                         data-model-select="<?= $mid ?>">
                                                                     <option value="">-- Select asset --</option>
@@ -2080,6 +2100,11 @@ $active  = basename($_SERVER['PHP_SELF']);
                                                                 </select>
                                                                 <?php if ($slotOverride !== ''): ?>
                                                                     <span class="badge bg-warning text-dark" title="<?= h($slotOverride) ?>">Override</span>
+                                                                <?php endif; ?>
+                                                                <?php if ($slotStatusWarn !== ''): ?>
+                                                                    <span class="badge bg-danger" title="<?= h($slotStatusWarn) ?>">
+                                                                        <?= h($slotStatusWarn) ?>
+                                                                    </span>
                                                                 <?php endif; ?>
                                                                 <?php $removeOneDeletes = $selectedTotalQty <= 1; ?>
                                                                 <button type="submit"
@@ -2124,6 +2149,26 @@ $active  = basename($_SERVER['PHP_SELF']);
                                 Rebook <?= $totalRebookQty ?> unavailable item(s) as new reservation
                             </button>
                             <br>
+                        <?php endif; ?>
+                        <?php
+                            $allStatusWarnings = $_SESSION['scan_status_warnings'][$selectedReservationId] ?? [];
+                            if (!empty($allStatusWarnings)):
+                        ?>
+                            <div class="alert alert-danger mb-3">
+                                <strong>Some scanned assets may fail checkout:</strong>
+                                <ul class="mb-0 mt-1">
+                                    <?php foreach ($allStatusWarnings as $_warnAid => $_warnMsg): ?>
+                                        <?php
+                                            $warnTag = '';
+                                            $injected = $_SESSION['scan_injected_assets'][$selectedReservationId] ?? [];
+                                            if (isset($injected[$_warnAid])) {
+                                                $warnTag = $injected[$_warnAid]['asset_tag'] ?? '';
+                                            }
+                                        ?>
+                                        <li><?= h($warnTag !== '' ? $warnTag . ': ' . $_warnMsg : $_warnMsg) ?></li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            </div>
                         <?php endif; ?>
                         <button type="submit" name="mode" value="reservation_checkout" class="btn btn-primary">
                             Check out selected assets for this reservation
