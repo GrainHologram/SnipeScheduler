@@ -1123,6 +1123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $selectedAssetsInput = $_POST['selected_assets'] ?? [];
             $assetsToCheckout    = [];
+            $skippedAssetWarnings = [];
 
             // Build set of asset IDs already checked out from a prior partial checkout
             $alreadyCheckedOutIds = [];
@@ -1132,6 +1133,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
+            // Build lookup of all scan-injected assets (may not be in the requestable filter)
+            $scanInjectedById = [];
+            $injectedForRes = $_SESSION['scan_injected_assets'][$selectedReservationId] ?? [];
+            foreach ($injectedForRes as $_injId => $_injAsset) {
+                $scanInjectedById[(int)$_injId] = $_injAsset;
+            }
+
             // Validate selections against required quantities
             foreach ($selectedItems as $item) {
                 $mid    = (int)$item['model_id'];
@@ -1139,29 +1147,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $choices = $modelAssets[$mid] ?? [];
                 $choicesById = [];
                 foreach ($choices as $c) {
-                    if (!empty($c['requestable'])) {
-                        $choicesById[(int)($c['id'] ?? 0)] = $c;
-                    }
+                    $choicesById[(int)($c['id'] ?? 0)] = $c;
                 }
 
                 $selectedForModel = isset($selectedAssetsInput[$mid]) && is_array($selectedAssetsInput[$mid])
                     ? array_values($selectedAssetsInput[$mid])
                     : [];
 
-                if (count($selectedForModel) < $qty) {
-                    $checkoutErrors[] = "Please select {$qty} asset(s) for model {$item['name']}.";
-                    continue;
+                $missingSlots = $qty - count($selectedForModel);
+                // Count already-checked-out items for this model
+                $acoCount = count($alreadyCheckedOut[$mid] ?? []);
+                $missingSlots -= $acoCount;
+                if ($missingSlots > 0) {
+                    $skippedAssetWarnings[] = "{$missingSlots} unassigned slot(s) for {$item['name']} — will be skipped.";
                 }
 
                 $seen = [];
-                for ($i = 0; $i < $qty; $i++) {
+                for ($i = 0; $i < count($selectedForModel); $i++) {
                     $assetIdSel = (int)($selectedForModel[$i] ?? 0);
                     // Skip assets already checked out from a prior partial checkout
                     if ($assetIdSel > 0 && isset($alreadyCheckedOutIds[$assetIdSel])) {
                         continue;
                     }
-                    if ($assetIdSel <= 0 || !isset($choicesById[$assetIdSel])) {
-                        $checkoutErrors[] = "Invalid asset selection for model {$item['name']}.";
+                    if ($assetIdSel <= 0) {
+                        continue; // empty slot — skip, don't block
+                    }
+                    // Accept scan-injected assets even if not in the standard requestable list
+                    $assetData = $choicesById[$assetIdSel] ?? $scanInjectedById[$assetIdSel] ?? null;
+                    if (!$assetData) {
+                        $skippedAssetWarnings[] = "Unknown asset ID {$assetIdSel} for {$item['name']} — will be skipped.";
                         continue;
                     }
                     if (isset($seen[$assetIdSel])) {
@@ -1171,10 +1185,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $seen[$assetIdSel] = true;
                     $assetsToCheckout[] = [
                         'asset_id'   => $assetIdSel,
-                        'asset_tag'  => $choicesById[$assetIdSel]['asset_tag'] ?? ('ID ' . $assetIdSel),
+                        'asset_tag'  => $assetData['asset_tag'] ?? ('ID ' . $assetIdSel),
                         'model_id'   => $mid,
                         'model_name' => $item['name'] ?? '',
                     ];
+                }
+            }
+
+            // Surface skipped-asset warnings but don't block checkout
+            if (!empty($skippedAssetWarnings)) {
+                foreach ($skippedAssetWarnings as $sw) {
+                    $checkoutWarnings[] = $sw;
                 }
             }
 
@@ -1195,6 +1216,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 unset($_SESSION['scan_injected_assets']);
                 unset($_SESSION['scan_auth_overrides']);
                 unset($_SESSION['scan_status_warnings']);
+            }
+
+            if (empty($checkoutErrors) && empty($assetsToCheckout) && empty($alreadyCheckedOutIds)) {
+                $checkoutErrors[] = 'No valid assets selected for checkout. Please assign assets to at least one slot.';
             }
 
             if (empty($checkoutErrors) && !empty($assetsToCheckout)) {
