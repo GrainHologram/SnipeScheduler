@@ -47,11 +47,11 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'model_search') {
                 continue;
             }
             $mid = (int)($row['id'] ?? 0);
-            $name = $row['name'] ?? '';
+            $name = html_entity_decode($row['name'] ?? '', ENT_QUOTES, 'UTF-8');
             if ($mid <= 0 || $name === '') {
                 continue;
             }
-            $manu = $row['manufacturer']['name'] ?? '';
+            $manu = html_entity_decode($row['manufacturer']['name'] ?? '', ENT_QUOTES, 'UTF-8');
             $label = $manu !== '' ? $name . ' — ' . $manu : $name;
             $results[] = [
                 'id'    => $mid,
@@ -573,7 +573,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
     <link rel="stylesheet" href="assets/slot-picker.css">
     <?= layout_theme_styles() ?>
 </head>
@@ -1005,7 +1005,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 btn.dataset.label = labelText;
                 btn.dataset.image = item.image || '';
 
-                btn.addEventListener('click', () => {
+                btn.addEventListener('mousedown', (e) => {
+                    e.preventDefault(); // prevent blur from hiding suggestions before click
                     input.value = btn.dataset.label;
                     hidden.value = btn.dataset.id;
                     label.value = btn.dataset.label;

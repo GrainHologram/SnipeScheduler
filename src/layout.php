@@ -89,6 +89,28 @@ if (!function_exists('layout_adjust_lightness')) {
     }
 }
 
+if (!function_exists('layout_design_version')) {
+    /**
+     * Return the active design version (1 or 2). Driven by config['app']['design_version'].
+     */
+    function layout_design_version(?array $cfg = null): int
+    {
+        $config = layout_cached_config($cfg);
+        return (int)($config['app']['design_version'] ?? 1);
+    }
+}
+
+if (!function_exists('layout_stylesheet_url')) {
+    /**
+     * Return the stylesheet URL for the active design version.
+     * Usage in page templates: <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
+     */
+    function layout_stylesheet_url(?array $cfg = null): string
+    {
+        return layout_design_version($cfg) >= 2 ? 'assets/style-v2.css' : 'assets/style.css';
+    }
+}
+
 if (!function_exists('layout_primary_color')) {
     function layout_primary_color(?array $cfg = null): string
     {
@@ -335,6 +357,148 @@ if (!function_exists('layout_footer')) {
         if (!empty($_SESSION['user']['is_staff']) || !empty($_SESSION['user']['is_admin'])) {
             layout_feedback_modal();
         }
+
+        // Render active announcements
+        layout_announcements();
+    }
+}
+
+if (!function_exists('layout_announcements')) {
+    function layout_announcements(): void
+    {
+        global $pdo;
+        if (!isset($pdo)) {
+            return;
+        }
+
+        $isStaff = !empty($_SESSION['user']['is_staff']) || !empty($_SESSION['user']['is_admin']);
+        $isAdmin = !empty($_SESSION['user']['is_admin']);
+
+        // Determine which audiences this user can see
+        $audiences = ["'all'"];
+        if ($isStaff) {
+            $audiences[] = "'staff'";
+        }
+        if ($isAdmin) {
+            $audiences[] = "'admin'";
+        }
+        $audienceIn = implode(',', $audiences);
+
+        try {
+            $stmt = $pdo->prepare("
+                SELECT id, title, body
+                  FROM announcements
+                 WHERE start_datetime <= NOW()
+                   AND end_datetime > NOW()
+                   AND audience IN ({$audienceIn})
+                 ORDER BY created_at DESC
+            ");
+            $stmt->execute();
+            $announcements = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            return;
+        }
+
+        if (empty($announcements)) {
+            return;
+        }
+
+        // Encode announcements as JSON for JS rendering
+        $jsData = [];
+        foreach ($announcements as $a) {
+            $jsData[] = [
+                'id'    => (int)$a['id'],
+                'title' => $a['title'],
+                'body'  => $a['body'],
+            ];
+        }
+        ?>
+<div id="announcementBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1050;" onclick="dismissAnnouncement()"></div>
+<div id="announcementModal" style="display:none; position:fixed; inset:0; z-index:1055; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)dismissAnnouncement()">
+    <div style="max-width:550px; margin:0 auto; background:#fff; border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid #dee2e6;">
+            <h5 style="margin:0;" id="announcementTitle"></h5>
+            <button type="button" onclick="dismissAnnouncement()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
+        </div>
+        <div style="padding:1rem;" id="announcementBody"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:.75rem 1rem; border-top:1px solid #dee2e6;">
+            <span class="text-muted small" id="announcementCounter"></span>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="announcementNextBtn" onclick="nextAnnouncement()" style="display:none;">Next</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="dismissAnnouncement()">Got it</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    var announcements = <?= json_encode($jsData, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
+    var currentIdx = -1;
+    var undismissed = [];
+
+    // Filter to announcements not yet dismissed
+    for (var i = 0; i < announcements.length; i++) {
+        var key = 'snipesched_announcement_' + announcements[i].id;
+        if (!localStorage.getItem(key)) {
+            undismissed.push(announcements[i]);
+        }
+    }
+
+    if (undismissed.length === 0) return;
+
+    function show(idx) {
+        currentIdx = idx;
+        var a = undismissed[idx];
+        document.getElementById('announcementTitle').textContent = a.title;
+        document.getElementById('announcementBody').innerHTML = a.body;
+        var counter = document.getElementById('announcementCounter');
+        var nextBtn = document.getElementById('announcementNextBtn');
+        if (undismissed.length > 1) {
+            counter.textContent = (idx + 1) + ' of ' + undismissed.length;
+            nextBtn.style.display = idx < undismissed.length - 1 ? '' : 'none';
+        } else {
+            counter.textContent = '';
+            nextBtn.style.display = 'none';
+        }
+        document.getElementById('announcementBackdrop').style.display = 'block';
+        document.getElementById('announcementModal').style.display = 'block';
+        document.body.style.overflow = 'hidden';
+    }
+
+    window.dismissAnnouncement = function() {
+        if (currentIdx >= 0 && currentIdx < undismissed.length) {
+            localStorage.setItem('snipesched_announcement_' + undismissed[currentIdx].id, '1');
+        }
+        if (currentIdx < undismissed.length - 1) {
+            show(currentIdx + 1);
+        } else {
+            document.getElementById('announcementBackdrop').style.display = 'none';
+            document.getElementById('announcementModal').style.display = 'none';
+            document.body.style.overflow = '';
+        }
+    };
+
+    window.nextAnnouncement = function() {
+        // Skip without dismissing — user can see it again next visit
+        if (currentIdx < undismissed.length - 1) {
+            show(currentIdx + 1);
+        }
+    };
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && document.getElementById('announcementModal').style.display === 'block') {
+            dismissAnnouncement();
+        }
+    });
+
+    // Show first undismissed announcement on load
+    document.addEventListener('DOMContentLoaded', function() {
+        // Delay slightly so welcome modal can show first if applicable
+        setTimeout(function() { show(0); }, 300);
+    });
+})();
+</script>
+        <?php
     }
 }
 

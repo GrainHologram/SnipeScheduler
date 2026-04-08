@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS reservation_items (
     reservation_id INT UNSIGNED NOT NULL,
     model_id INT UNSIGNED NOT NULL,
     model_name_cache VARCHAR(255) NOT NULL,
+    kit_id INT UNSIGNED DEFAULT NULL,
+    kit_name_cache VARCHAR(255) DEFAULT NULL,
     quantity INT UNSIGNED NOT NULL DEFAULT 1,
     deleted_at DATETIME DEFAULT NULL,
 
@@ -322,3 +324,51 @@ CREATE TABLE IF NOT EXISTS user_discord_preferences (
 
 INSERT IGNORE INTO schema_version (version)
 VALUES ('v1.7.0');
+
+INSERT IGNORE INTO schema_version (version)
+VALUES ('v1.8.0');
+
+-- ------------------------------------------------------
+-- Unmatched checkins
+-- (assets checked in without a matching checkout_items record)
+-- ------------------------------------------------------
+CREATE TABLE IF NOT EXISTS unmatched_checkins (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    asset_id INT UNSIGNED NOT NULL,
+    asset_tag VARCHAR(255) NOT NULL,
+    asset_name VARCHAR(255) NOT NULL,
+    model_id INT UNSIGNED NOT NULL,
+    model_name VARCHAR(255) NOT NULL,
+    was_checked_out TINYINT(1) NOT NULL DEFAULT 1,
+    checked_in_from_user_id INT UNSIGNED DEFAULT NULL,
+    checked_in_from_user_name VARCHAR(255) DEFAULT NULL,
+    checked_in_by VARCHAR(255) DEFAULT NULL,
+    checkout_id INT UNSIGNED DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_unmatched_asset (asset_id),
+    KEY idx_unmatched_model (model_id),
+    KEY idx_unmatched_created (created_at),
+    KEY idx_unmatched_checkout (checkout_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO schema_version (version)
+VALUES ('v1.9.0');
+
+-- ------------------------------------------------------
+-- Announcements
+-- (timed messages shown to users via modal)
+-- ------------------------------------------------------
+CREATE TABLE IF NOT EXISTS announcements (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    body TEXT NOT NULL,
+    audience ENUM('all','staff','admin') NOT NULL DEFAULT 'all',
+    start_datetime DATETIME NOT NULL,
+    end_datetime DATETIME NOT NULL,
+    created_by VARCHAR(255) DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_announcements_active (start_datetime, end_datetime)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO schema_version (version)
+VALUES ('v2.0.0');

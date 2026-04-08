@@ -37,9 +37,9 @@ if ($reservationId > 0) {
         exit;
     }
 
-    // Fetch reservation items with model details (including category)
+    // Fetch reservation items with model details (including category and kit origin)
     $stmt = $pdo->prepare("
-        SELECT model_id, quantity
+        SELECT model_id, quantity, kit_id, kit_name_cache
         FROM reservation_items
         WHERE reservation_id = :rid AND deleted_at IS NULL
         ORDER BY model_id
@@ -47,8 +47,11 @@ if ($reservationId > 0) {
     $stmt->execute([':rid' => $reservationId]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Build items grouped by category
-    $categories = []; // categoryName => [items]
+    // Build items grouped by category (all items) and by kit origin
+    $categories       = []; // categoryName => [items]  (backwards compat)
+    $kits             = []; // kitName => [items with category]
+    $nonKitCategories = []; // categoryName => [items]  (non-kit only)
+
     foreach ($rows as $row) {
         $modelId = (int)($row['model_id'] ?? 0);
         $qty     = (int)($row['quantity'] ?? 0);
@@ -63,29 +66,52 @@ if ($reservationId > 0) {
         $catName   = html_entity_decode($model['category']['name'] ?? 'Other', ENT_QUOTES, 'UTF-8');
         $modelName = html_entity_decode($model['name'] ?? ('Model #' . $modelId), ENT_QUOTES, 'UTF-8');
 
-        if (!isset($categories[$catName])) {
-            $categories[$catName] = [];
-        }
-        $categories[$catName][] = [
+        $itemData = [
             'model_name' => $modelName,
             'quantity'   => $qty,
         ];
+
+        // All-items categories (backwards compat)
+        if (!isset($categories[$catName])) {
+            $categories[$catName] = [];
+        }
+        $categories[$catName][] = $itemData;
+
+        // Kit vs non-kit grouping
+        $kitId   = $row['kit_id'] ?? null;
+        $kitName = $row['kit_name_cache'] ?? null;
+
+        if ($kitId !== null && $kitName !== null) {
+            if (!isset($kits[$kitName])) {
+                $kits[$kitName] = [];
+            }
+            $kits[$kitName][] = array_merge($itemData, ['category' => $catName]);
+        } else {
+            if (!isset($nonKitCategories[$catName])) {
+                $nonKitCategories[$catName] = [];
+            }
+            $nonKitCategories[$catName][] = $itemData;
+        }
     }
 
-    // Sort categories alphabetically
+    // Sort all groupings alphabetically
     ksort($categories);
+    ksort($kits);
+    ksort($nonKitCategories);
 
     echo json_encode([
-        'type'           => 'reservation',
-        'reservation_id' => $reservationId,
-        'name'           => $reservation['name'] ?? '',
-        'user_name'      => $reservation['user_name'] ?? '',
-        'user_email'     => $reservation['user_email'] ?? '',
-        'start_datetime' => app_format_datetime($reservation['start_datetime'] ?? ''),
-        'end_datetime'   => app_format_datetime($reservation['end_datetime'] ?? ''),
-        'status'         => $reservation['status'] ?? '',
-        'categories'     => $categories,
-        'app_name'       => $appName,
+        'type'               => 'reservation',
+        'reservation_id'     => $reservationId,
+        'name'               => $reservation['name'] ?? '',
+        'user_name'          => $reservation['user_name'] ?? '',
+        'user_email'         => $reservation['user_email'] ?? '',
+        'start_datetime'     => app_format_datetime($reservation['start_datetime'] ?? ''),
+        'end_datetime'       => app_format_datetime($reservation['end_datetime'] ?? ''),
+        'status'             => $reservation['status'] ?? '',
+        'categories'         => $categories,
+        'kits'               => $kits,
+        'non_kit_categories' => $nonKitCategories,
+        'app_name'           => $appName,
     ]);
     exit;
 }

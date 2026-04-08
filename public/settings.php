@@ -781,7 +781,7 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
     <title>Admin – SnipeScheduler</title>
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
     <?= layout_theme_styles($config) ?>
 </head>
 <body class="p-4">
@@ -833,9 +833,12 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
             <li class="nav-item">
                 <a class="nav-link" href="feedback.php">Feedback</a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link" href="announcements.php">Announcements</a>
+            </li>
         </ul>
 
-        <form method="post" action="<?= h($active) ?>" class="row g-3 settings-form" id="settings-form">
+        <form method="post" action="settings.php" class="row g-3 settings-form" id="settings-form">
             <div class="col-12">
                 <div class="card" id="admin-settings">
                     <div class="card-body">
