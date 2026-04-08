@@ -5,6 +5,7 @@ require_once SRC_PATH . '/layout.php';
 require_once SRC_PATH . '/config_writer.php';
 require_once SRC_PATH . '/snipeit_client.php';
 require_once SRC_PATH . '/email.php';
+require_once SRC_PATH . '/notifications.php';
 
 $active  = 'activity_log.php'; // keep Admin nav highlighted
 $isAdmin = !empty($currentUser['is_admin']);
@@ -470,6 +471,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $qzTray['paper_width']         = in_array((int)$pwRaw, [30, 42], true) ? (int)$pwRaw : 42;
     $qzTray['auto_print_checkout'] = isset($_POST['qz_auto_print']);
 
+    // Notifications
+    $notifications = $config['notifications'] ?? [];
+    $notifications['discord_webhook_url'] = $post('notifications_discord_webhook_url', $notifications['discord_webhook_url'] ?? '');
+    $notifEvents = $notifications['events'] ?? [];
+    $allNotifEvents = ['checkout', 'checkin', 'reservation_submitted', 'reservation_cancelled', 'reservation_missed', 'overdue_reminder', 'overdue_escalation'];
+    foreach ($allNotifEvents as $evt) {
+        $notifEvents[$evt] = [
+            'email'   => isset($_POST["notif_event_{$evt}_email"]),
+            'discord' => isset($_POST["notif_event_{$evt}_discord"]),
+        ];
+    }
+    $notifications['events'] = $notifEvents;
+
+    // Discord Bot
+    $discordBot = $config['discord_bot'] ?? [];
+    $discordBot['oauth_client_id'] = $post('discord_bot_oauth_client_id', $discordBot['oauth_client_id'] ?? '');
+    $discordBot['oauth_redirect_uri'] = $post('discord_bot_oauth_redirect_uri', $discordBot['oauth_redirect_uri'] ?? '');
+    $discordBot['dm_enabled'] = isset($_POST['discord_bot_dm_enabled']);
+    $botTokenInput = $_POST['discord_bot_token'] ?? '';
+    $botSecretInput = $_POST['discord_bot_oauth_client_secret'] ?? '';
+    if ($useRawSecrets) {
+        $discordBot['bot_token'] = $botTokenInput;
+        $discordBot['oauth_client_secret'] = $botSecretInput;
+    } else {
+        $discordBot['bot_token'] = $botTokenInput === '' ? ($loadedConfig['discord_bot']['bot_token'] ?? '') : $botTokenInput;
+        $discordBot['oauth_client_secret'] = $botSecretInput === '' ? ($loadedConfig['discord_bot']['oauth_client_secret'] ?? '') : $botSecretInput;
+    }
+
     $newConfig = $config;
     $newConfig['db_booking'] = $db;
     $newConfig['ldap']       = $ldap;
@@ -483,6 +512,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $newConfig['checkout_limits'] = $checkoutLimits;
     $newConfig['qz_tray']        = $qzTray;
     $newConfig['smtp']          = $smtp;
+    $newConfig['notifications'] = $notifications;
+    $newConfig['discord_bot']   = $discordBot;
 
     // Keep posted values in the form
     $config        = $newConfig;
@@ -520,6 +551,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $messages[] = layout_test_ldap($ldap);
         } catch (Throwable $e) {
             $errors[] = 'LDAP test failed: ' . $e->getMessage();
+        }
+    } elseif ($action === 'test_discord') {
+        require_once SRC_PATH . '/discord.php';
+        try {
+            $webhookUrl = trim($notifications['discord_webhook_url'] ?? '');
+            if ($webhookUrl === '') {
+                throw new Exception('Discord webhook URL is empty.');
+            }
+            $embed = build_discord_embed(
+                'SnipeScheduler Test',
+                'This is a test notification from SnipeScheduler settings.',
+                DISCORD_COLOR_GREEN,
+                [
+                    ['name' => 'Status', 'value' => 'Connected', 'inline' => true],
+                    ['name' => 'Source', 'value' => 'Settings page', 'inline' => true],
+                ]
+            );
+            // Send directly using the posted URL (config may not be saved yet)
+            $payload = json_encode(['content' => '', 'embeds' => [$embed]], JSON_UNESCAPED_UNICODE);
+            $ctx = stream_context_create(['http' => [
+                'method'  => 'POST',
+                'header'  => "Content-Type: application/json\r\n",
+                'content' => $payload,
+                'timeout' => 10,
+                'ignore_errors' => true,
+            ]]);
+            $result = @file_get_contents($webhookUrl, false, $ctx);
+            $status = $http_response_header[0] ?? '';
+            if (strpos($status, '204') !== false || strpos($status, '200') !== false) {
+                $messages[] = 'Discord test notification sent successfully.';
+            } else {
+                throw new Exception('Discord webhook returned: ' . $status);
+            }
+        } catch (Throwable $e) {
+            $errors[] = 'Discord test failed: ' . $e->getMessage();
+        }
+    } elseif ($action === 'test_discord_bot') {
+        require_once SRC_PATH . '/discord.php';
+        try {
+            $testToken = $discordBot['bot_token'] ?? '';
+            if ($testToken === '') {
+                throw new Exception('Discord bot token is empty.');
+            }
+            // Test bot token by fetching bot user info
+            $ctx = stream_context_create(['http' => [
+                'method'  => 'GET',
+                'header'  => "Authorization: Bot {$testToken}\r\nContent-Type: application/json\r\n",
+                'timeout' => 10,
+                'ignore_errors' => true,
+            ]]);
+            $result = @file_get_contents('https://discord.com/api/v10/users/@me', false, $ctx);
+            $status = $http_response_header[0] ?? '';
+            if (strpos($status, '200') !== false) {
+                $botUser = json_decode($result, true);
+                $botName = $botUser['username'] ?? 'Unknown';
+                $messages[] = 'Discord bot connected: ' . $botName;
+            } else {
+                throw new Exception('Discord API returned: ' . $status);
+            }
+        } catch (Throwable $e) {
+            $errors[] = 'Discord bot test failed: ' . $e->getMessage();
         }
     } elseif ($action === 'test_smtp') {
         try {
@@ -1044,6 +1136,127 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
                             <div class="small text-muted" id="smtp-test-result"></div>
                             <button type="button" class="btn btn-outline-primary btn-sm" data-test-action="test_smtp" data-target="smtp-test-result">Test SMTP</button>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-1">Notifications</h5>
+                        <p class="text-muted small mb-3">Configure Discord webhook and per-event notification channels.</p>
+                        <div class="row g-3">
+                            <div class="col-md-8">
+                                <label class="form-label">Discord webhook URL</label>
+                                <input type="url" name="notifications_discord_webhook_url" class="form-control" value="<?= h($cfg(['notifications', 'discord_webhook_url'], '')) ?>" placeholder="https://discord.com/api/webhooks/...">
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end gap-2">
+                                <div class="small text-muted" id="discord-test-result"></div>
+                                <button type="button" class="btn btn-outline-primary btn-sm" data-test-action="test_discord" data-target="discord-test-result">Test Discord</button>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <label class="form-label fw-semibold">Event channels</label>
+                            <p class="text-muted small mb-2">Toggle which channels fire for each event type.</p>
+                            <table class="table table-sm table-bordered mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Event</th>
+                                        <th class="text-center" style="width:80px;">Email</th>
+                                        <th class="text-center" style="width:80px;">Discord</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php
+                                    $notifEventLabels = [
+                                        'checkout'              => 'Checkout',
+                                        'checkin'               => 'Check-in',
+                                        'reservation_submitted' => 'Reservation submitted',
+                                        'reservation_cancelled' => 'Reservation cancelled',
+                                        'reservation_missed'    => 'Reservation missed',
+                                        'overdue_reminder'      => 'Overdue reminder',
+                                        'overdue_escalation'    => 'Overdue escalation',
+                                    ];
+                                    foreach ($notifEventLabels as $evtKey => $evtLabel):
+                                        $evtCfg = $cfg(['notifications', 'events', $evtKey], ['email' => true, 'discord' => true]);
+                                        $emailChecked   = !empty($evtCfg['email']) ? 'checked' : '';
+                                        $discordChecked = !empty($evtCfg['discord']) ? 'checked' : '';
+                                    ?>
+                                    <tr>
+                                        <td><?= h($evtLabel) ?></td>
+                                        <td class="text-center"><input type="checkbox" name="notif_event_<?= $evtKey ?>_email" <?= $emailChecked ?>></td>
+                                        <td class="text-center"><input type="checkbox" name="notif_event_<?= $evtKey ?>_discord" <?= $discordChecked ?>></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="mt-4 pt-3 border-top">
+                            <h6 class="fw-semibold mb-2">Discord Bot (DM Notifications)</h6>
+                            <p class="text-muted small mb-3">Configure a Discord bot to send direct messages to users who link their accounts. Separate from the staff webhook above.</p>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Bot token</label>
+                                    <input type="password" name="discord_bot_token" class="form-control" placeholder="Leave blank to keep existing" autocomplete="new-password">
+                                </div>
+                                <div class="col-md-6 d-flex align-items-end gap-2">
+                                    <div class="small text-muted" id="discord-bot-test-result"></div>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" data-test-action="test_discord_bot" data-target="discord-bot-test-result">Test Bot</button>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">OAuth Client ID</label>
+                                    <input type="text" name="discord_bot_oauth_client_id" class="form-control" value="<?= h($cfg(['discord_bot', 'oauth_client_id'], '')) ?>">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">OAuth Client Secret</label>
+                                    <input type="password" name="discord_bot_oauth_client_secret" class="form-control" placeholder="Leave blank to keep existing" autocomplete="new-password">
+                                </div>
+                                <div class="col-md-8">
+                                    <label class="form-label">OAuth Redirect URI <span class="text-muted small">(blank = auto-detect)</span></label>
+                                    <input type="text" name="discord_bot_oauth_redirect_uri" class="form-control" value="<?= h($cfg(['discord_bot', 'oauth_redirect_uri'], '')) ?>" placeholder="Auto-detected">
+                                </div>
+                                <div class="col-md-4 d-flex align-items-end">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="discord_bot_dm_enabled" name="discord_bot_dm_enabled" <?= !empty($cfg(['discord_bot', 'dm_enabled'], false)) ? 'checked' : '' ?>>
+                                        <label class="form-check-label" for="discord_bot_dm_enabled">DM enabled</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <?php
+                        $overdueTiers = $cfg(['overdue', 'tiers'], []);
+                        if (!empty($overdueTiers)):
+                        ?>
+                        <div class="mt-3">
+                            <label class="form-label fw-semibold">Overdue escalation tiers</label>
+                            <p class="text-muted small mb-2">Configured in <code>config.php</code>. Tiers determine when and how overdue notifications escalate.</p>
+                            <table class="table table-sm table-bordered mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Tier</th>
+                                        <th>Hours overdue</th>
+                                        <th>Label</th>
+                                        <th class="text-center">User email</th>
+                                        <th class="text-center">Staff email</th>
+                                        <th class="text-center">Staff Discord</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($overdueTiers as $ti => $tier): ?>
+                                    <tr>
+                                        <td><?= $ti ?></td>
+                                        <td><?= (int)($tier['hours_overdue'] ?? 0) ?></td>
+                                        <td><?= h($tier['label'] ?? '') ?></td>
+                                        <td class="text-center"><?= !empty($tier['user_email']) ? '&#10003;' : '&mdash;' ?></td>
+                                        <td class="text-center"><?= !empty($tier['staff_email']) ? '&#10003;' : '&mdash;' ?></td>
+                                        <td class="text-center"><?= !empty($tier['staff_discord']) ? '&#10003;' : '&mdash;' ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>

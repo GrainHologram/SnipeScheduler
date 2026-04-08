@@ -14,6 +14,7 @@ require_once SRC_PATH . '/booking_helpers.php';
 require_once SRC_PATH . '/snipeit_client.php';
 require_once SRC_PATH . '/checkout_rules.php';
 require_once SRC_PATH . '/email.php';
+require_once SRC_PATH . '/notifications.php';
 require_once SRC_PATH . '/layout.php';
 
 $config     = load_config();
@@ -1454,10 +1455,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ];
                         if ($userEmail !== '') {
                             layout_send_notification($userEmail, $userName, 'Your reservation has been checked out', $bodyLines);
+                            // Discord DM
+                            $dmData = get_user_discord_dm_data($userEmail);
+                            if (!empty($dmData['discord_user_id'])) {
+                                send_notification('user', 'checkout', [
+                                    'user_email' => $userEmail,
+                                    'user_name'  => $userName,
+                                    'subject'    => '',
+                                    'body_lines' => [],
+                                    'discord_dm_event_key' => 'checkout_created',
+                                    'discord_embeds' => [build_discord_embed(
+                                        'Reservation Checked Out',
+                                        "Reservation #{$selectedReservationId} has been checked out.",
+                                        DISCORD_COLOR_GREEN,
+                                        [
+                                            ['name' => 'Items', 'value' => $assetLines, 'inline' => false],
+                                            ['name' => 'Return by', 'value' => $dueDisplay, 'inline' => true],
+                                        ]
+                                    )],
+                                ] + $dmData);
+                            }
                         }
                         if ($staffEmail !== '') {
                             layout_send_notification($staffEmail, $staffName !== '' ? $staffName : $staffEmail, 'You checked out a reservation', $bodyLines);
                         }
+
+                        // Discord notification
+                        send_notification('staff', 'checkout', [
+                            'staff_email' => $staffEmail,
+                            'staff_name'  => $staffName !== '' ? $staffName : $staffEmail,
+                            'subject'     => 'Reservation checked out',
+                            'body_lines'  => $bodyLines,
+                            'discord_embeds' => [build_discord_embed(
+                                'Reservation Checkout',
+                                "Reservation #{$selectedReservationId} checked out to **{$userName}**",
+                                DISCORD_COLOR_GREEN,
+                                [
+                                    ['name' => 'Items', 'value' => $assetLines, 'inline' => false],
+                                    ['name' => 'Return by', 'value' => $dueDisplay, 'inline' => true],
+                                    ['name' => 'Staff', 'value' => $staffName !== '' ? $staffName : ($staffEmail ?: 'Unknown'), 'inline' => true],
+                                ]
+                            )],
+                        ]);
 
                         // Clear selected reservation to avoid repeat
                         unset($_SESSION['selected_reservation_id']);
@@ -1570,6 +1609,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 'assets'         => $assetTags,
                                 'note'           => $note,
                             ],
+                        ]);
+
+                        // Discord DM to user
+                        $bulkUserEmail = $user['email'] ?? '';
+                        if ($bulkUserEmail !== '') {
+                            $dmData = get_user_discord_dm_data($bulkUserEmail);
+                            if (!empty($dmData['discord_user_id'])) {
+                                $bulkAssetListDm = implode(', ', array_filter($assetTags));
+                                send_notification('user', 'checkout', [
+                                    'user_email' => $bulkUserEmail,
+                                    'user_name'  => $userName,
+                                    'subject'    => '',
+                                    'body_lines' => [],
+                                    'discord_dm_event_key' => 'checkout_created',
+                                    'discord_embeds' => [build_discord_embed(
+                                        'Assets Checked Out',
+                                        count($assetTags) . " asset(s) checked out to you.",
+                                        DISCORD_COLOR_GREEN,
+                                        [
+                                            ['name' => 'Assets', 'value' => $bulkAssetListDm ?: 'N/A', 'inline' => false],
+                                        ]
+                                    )],
+                                ] + $dmData);
+                            }
+                        }
+
+                        // Discord notification
+                        $bulkAssetList = implode(', ', array_filter($assetTags));
+                        send_notification('staff', 'checkout', [
+                            'staff_email' => $currentUser['email'] ?? '',
+                            'staff_name'  => trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? '')),
+                            'subject'     => 'Bulk checkout completed',
+                            'body_lines'  => ["Checked out " . count($assetTags) . " asset(s) to {$userName}"],
+                            'discord_embeds' => [build_discord_embed(
+                                'Bulk Checkout',
+                                "**{$userName}** — " . count($assetTags) . " asset(s) checked out",
+                                DISCORD_COLOR_GREEN,
+                                [
+                                    ['name' => 'Assets', 'value' => $bulkAssetList ?: 'N/A', 'inline' => false],
+                                ]
+                            )],
                         ]);
 
                         $checkoutAssets = [];

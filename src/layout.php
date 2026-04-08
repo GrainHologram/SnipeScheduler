@@ -171,6 +171,7 @@ if (!function_exists('layout_render_nav')) {
             ['href' => 'activity_log.php',   'label' => 'Admin',               'staff' => false, 'admin_only' => true],
             ['href' => '#', 'label' => 'Feedback', 'staff' => true, 'onclick' => 'openFeedbackModal(); return false;', 'class' => 'app-nav-feedback'],
             ['href' => 'my_bookings.php',    'label' => 'My Reservations',     'staff' => false, 'right' => true],
+            ['href' => 'my_account.php',     'label' => 'My Account',          'staff' => false, 'right' => true],
         ];
 
         $html = '<nav class="app-nav">';
@@ -196,7 +197,56 @@ if (!function_exists('layout_render_nav')) {
         }
         $html .= '</nav>';
 
+        $html .= layout_discord_link_banner();
+
         return $html;
+    }
+}
+
+if (!function_exists('layout_discord_link_banner')) {
+    /**
+     * Render a dismissible banner prompting unlinked users to connect their Discord account.
+     */
+    function layout_discord_link_banner(): string
+    {
+        try {
+            $cfg = load_config();
+        } catch (\Throwable $e) {
+            return '';
+        }
+
+        $botCfg = $cfg['discord_bot'] ?? [];
+        if (empty($botCfg['dm_enabled']) || empty($botCfg['bot_token'])) {
+            return '';
+        }
+        if (trim($botCfg['oauth_client_id'] ?? '') === '' || trim($botCfg['oauth_client_secret'] ?? '') === '') {
+            return '';
+        }
+
+        if (!empty($_SESSION['user']['discord_user_id'])) {
+            return '';
+        }
+
+        $userId = (int)($_SESSION['user']['id'] ?? 0);
+        $storageKey = 'discord_banner_dismissed_' . $userId;
+
+        return '<div id="discordLinkBanner" class="alert alert-info alert-dismissible fade show mb-0" role="alert" style="border-radius:0; display:none;">'
+            . 'Link your Discord account to receive instant notifications. '
+            . '<a href="my_account.php" class="alert-link">Go to My Account</a>'
+            . '<button type="button" class="btn-close" id="discordBannerDismiss" aria-label="Close"></button>'
+            . '</div>'
+            . '<script>'
+            . '(function(){'
+            . 'var k=' . json_encode($storageKey) . ';'
+            . 'var b=document.getElementById("discordLinkBanner");'
+            . 'if(!b)return;'
+            . 'if(localStorage.getItem(k))return;'
+            . 'b.style.display="";'
+            . 'document.getElementById("discordBannerDismiss").addEventListener("click",function(){'
+            . 'localStorage.setItem(k,"1");b.style.display="none";'
+            . '});'
+            . '})();'
+            . '</script>';
     }
 }
 

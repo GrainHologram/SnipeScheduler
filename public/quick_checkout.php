@@ -9,6 +9,7 @@ require_once SRC_PATH . '/checkout_rules.php';
 require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/activity_log.php';
 require_once SRC_PATH . '/email.php';
+require_once SRC_PATH . '/notifications.php';
 require_once SRC_PATH . '/layout.php';
 require_once SRC_PATH . '/opening_hours.php';
 
@@ -535,6 +536,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ];
                         if ($userEmail !== '') {
                             layout_send_notification($userEmail, $userName, 'Assets checked out', $bodyLines);
+                            // Discord DM
+                            $dmData = get_user_discord_dm_data($userEmail);
+                            if (!empty($dmData['discord_user_id'])) {
+                                send_notification('user', 'checkout', [
+                                    'user_email' => $userEmail,
+                                    'user_name'  => $userName,
+                                    'subject'    => '',
+                                    'body_lines' => [],
+                                    'discord_dm_event_key' => 'checkout_created',
+                                    'discord_embeds' => [build_discord_embed(
+                                        'Assets Checked Out',
+                                        'Your assets have been checked out.',
+                                        DISCORD_COLOR_GREEN,
+                                        [
+                                            ['name' => 'Assets', 'value' => $assetLines, 'inline' => false],
+                                            ['name' => 'Return by', 'value' => $dueDisplay, 'inline' => true],
+                                        ]
+                                    )],
+                                ] + $dmData);
+                            }
                         }
                         if ($staffEmail !== '') {
                             $staffBody = array_merge(
@@ -545,6 +566,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             );
                             layout_send_notification($staffEmail, $staffDisplayName, 'You checked out assets', $staffBody);
                         }
+
+                        // Discord notification
+                        send_notification('staff', 'checkout', [
+                            'staff_email' => $staffEmail,
+                            'staff_name'  => $staffDisplayName,
+                            'subject'     => 'Quick checkout completed',
+                            'body_lines'  => $bodyLines,
+                            'discord_embeds' => [build_discord_embed(
+                                'Quick Checkout',
+                                "**{$userName}** checked out " . count($assetTags) . " asset(s)",
+                                DISCORD_COLOR_GREEN,
+                                [
+                                    ['name' => 'Assets', 'value' => $assetLines, 'inline' => false],
+                                    ['name' => 'Return by', 'value' => $dueDisplay, 'inline' => true],
+                                    ['name' => 'Staff', 'value' => $staffDisplayName, 'inline' => true],
+                                ]
+                            )],
+                        ]);
 
                         $checkoutAssets = [];
                     }

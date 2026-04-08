@@ -21,10 +21,14 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_login_at DATETIME DEFAULT NULL,
+    discord_user_id VARCHAR(64) DEFAULT NULL,
+    discord_dm_enabled TINYINT(1) NOT NULL DEFAULT 1,
+    discord_embed_style ENUM('rich','plain') NOT NULL DEFAULT 'rich',
 
     PRIMARY KEY (id),
     UNIQUE KEY uq_users_user_id (user_id),
-    UNIQUE KEY uq_users_email (email)
+    UNIQUE KEY uq_users_email (email),
+    UNIQUE KEY uq_users_discord (discord_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------
@@ -288,6 +292,38 @@ CREATE TABLE IF NOT EXISTS feedback (
 
 INSERT IGNORE INTO schema_version (version)
 VALUES ('v1.5.0');
+
+-- ------------------------------------------------------
+-- Notification log (overdue escalation tracking)
+-- ------------------------------------------------------
+CREATE TABLE IF NOT EXISTS notification_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    checkout_id INT NOT NULL,
+    checkout_item_id INT NULL,
+    user_email VARCHAR(255) NOT NULL,
+    escalation_tier TINYINT NOT NULL DEFAULT 0,
+    channel ENUM('email','discord') NOT NULL,
+    sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_checkout_tier (checkout_id, escalation_tier),
+    INDEX idx_user_email (user_email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO schema_version (version)
+VALUES ('v1.6.0');
+
+-- ------------------------------------------------------
+-- User Discord DM preferences
+-- ------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_discord_preferences (
+    user_id INT UNSIGNED NOT NULL,
+    event_key VARCHAR(64) NOT NULL,
+    enabled TINYINT(1) NOT NULL DEFAULT 1,
+    PRIMARY KEY (user_id, event_key),
+    CONSTRAINT fk_udp_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO schema_version (version)
+VALUES ('v1.7.0');
 
 INSERT IGNORE INTO schema_version (version)
 VALUES ('v1.8.0');
