@@ -46,7 +46,7 @@ const data = new SlashCommandBuilder()
 // ---------------------------------------------------------------------------
 
 async function execute(interaction) {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: 64 }); // ephemeral
 
   let rows;
   try {

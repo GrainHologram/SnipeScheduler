@@ -81,7 +81,7 @@ async function execute(interaction) {
 // ---------------------------------------------------------------------------
 
 async function modalSubmit(interaction, client) {
-  await interaction.deferReply({ ephemeral: false });
+  await interaction.deferReply({ flags: 64 }); // ephemeral
 
   // --- Extract field values ---
   const itemName = interaction.fields.getTextInputValue('pr-item-name').trim();
