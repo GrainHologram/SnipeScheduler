@@ -746,7 +746,7 @@ $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
             </li>
         </ul>
 
-        <form method="post" action="<?= h($active) ?>" class="row g-3 settings-form" id="settings-form">
+        <form method="post" action="settings.php" class="row g-3 settings-form" id="settings-form">
             <div class="col-12">
                 <div class="card" id="admin-settings">
                     <div class="card-body">
