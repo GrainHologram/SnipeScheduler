@@ -158,6 +158,9 @@ $nowUtc = gmdate('Y-m-d H:i:s');
             <li class="nav-item">
                 <a class="nav-link active" href="announcements.php">Announcements</a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link" href="purchase_requests.php">Purchase Requests</a>
+            </li>
         </ul>
 
         <?php if (!empty($messages)): ?>
