@@ -235,6 +235,9 @@ if ($editOverrideId > 0) {
             <li class="nav-item">
                 <a class="nav-link" href="feedback.php">Feedback</a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link" href="announcements.php">Announcements</a>
+            </li>
         </ul>
 
         <?php if ($flashMessage): ?>
