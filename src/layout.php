@@ -170,6 +170,7 @@ if (!function_exists('layout_render_nav')) {
             ['href' => 'quick_checkin.php',  'label' => 'Quick Checkin',       'staff' => true],
             ['href' => 'activity_log.php',   'label' => 'Admin',               'staff' => false, 'admin_only' => true],
             ['href' => '#', 'label' => 'Feedback', 'staff' => true, 'onclick' => 'openFeedbackModal(); return false;', 'class' => 'app-nav-feedback'],
+            ['href' => 'purchase_request_submit.php', 'label' => 'Purchase Requests', 'staff' => false, 'right' => true],
             ['href' => 'my_bookings.php',    'label' => 'My Reservations',     'staff' => false, 'right' => true],
             ['href' => 'my_account.php',     'label' => 'My Account',          'staff' => false, 'right' => true],
         ];
