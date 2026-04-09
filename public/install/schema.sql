@@ -400,6 +400,7 @@ CREATE TABLE IF NOT EXISTS purchase_requests (
 
     -- Admin-only fields
     importance      ENUM('low','medium','high','critical') DEFAULT NULL,
+    estimated_cost  DECIMAL(10,2) DEFAULT NULL,
     decision_comments TEXT DEFAULT NULL,
     decided_by_name VARCHAR(255) DEFAULT NULL,
     decided_at      DATETIME DEFAULT NULL,
