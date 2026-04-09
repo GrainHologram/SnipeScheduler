@@ -54,10 +54,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'update_status') {
-        $requestId   = (int)($_POST['request_id'] ?? 0);
-        $newStatus   = trim($_POST['status'] ?? '');
-        $importance  = trim($_POST['importance'] ?? '');
-        $comments    = trim($_POST['decision_comments'] ?? '');
+        $requestId     = (int)($_POST['request_id'] ?? 0);
+        $newStatus     = trim($_POST['status'] ?? '');
+        $importance    = trim($_POST['importance'] ?? '');
+        $estimatedCost = trim($_POST['estimated_cost'] ?? '');
+        $comments      = trim($_POST['decision_comments'] ?? '');
 
         if ($requestId > 0 && array_key_exists($newStatus, $statusLabels)) {
             $decidedBy = null;
@@ -67,10 +68,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $decidedAt = gmdate('Y-m-d H:i:s');
             }
 
+            $costValue = null;
+            if ($estimatedCost !== '') {
+                $parsed = filter_var($estimatedCost, FILTER_VALIDATE_FLOAT);
+                if ($parsed !== false && $parsed >= 0) {
+                    $costValue = round($parsed, 2);
+                }
+            }
+
             $stmt = $pdo->prepare("
                 UPDATE purchase_requests
                    SET status            = :status,
                        importance        = :importance,
+                       estimated_cost    = :cost,
                        decision_comments = :comments,
                        decided_by_name   = :decided_by,
                        decided_at        = :decided_at
@@ -79,6 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([
                 ':status'     => $newStatus,
                 ':importance' => ($importance !== '' && array_key_exists($importance, $importanceLabels)) ? $importance : null,
+                ':cost'       => $costValue,
                 ':comments'   => $comments !== '' ? $comments : null,
                 ':decided_by' => $decidedBy,
                 ':decided_at' => $decidedAt,
@@ -315,6 +326,7 @@ try {
                                     <th>Qty</th>
                                     <th>Status</th>
                                     <th>Importance</th>
+                                    <th>Est. Cost</th>
                                     <th style="min-width:100px;">Actions</th>
                                 </tr>
                             </thead>
@@ -389,9 +401,16 @@ try {
                                                 <span class="text-muted small">—</span>
                                             <?php endif; ?>
                                         </td>
+                                        <td class="text-nowrap">
+                                            <?php if ($row['estimated_cost'] !== null): ?>
+                                                $<?= h(number_format((float)$row['estimated_cost'], 2)) ?>
+                                            <?php else: ?>
+                                                <span class="text-muted small">—</span>
+                                            <?php endif; ?>
+                                        </td>
                                         <td>
                                             <button type="button" class="btn btn-sm btn-outline-primary"
-                                                    onclick="openManageModal(<?= (int)$row['id'] ?>, <?= h(json_encode($row['status'])) ?>, <?= h(json_encode($row['importance'] ?? '')) ?>, <?= h(json_encode($row['decision_comments'] ?? '')) ?>)">
+                                                    onclick="openManageModal(<?= (int)$row['id'] ?>, <?= h(json_encode($row['status'])) ?>, <?= h(json_encode($row['importance'] ?? '')) ?>, <?= h(json_encode($row['estimated_cost'] ?? '')) ?>, <?= h(json_encode($row['decision_comments'] ?? '')) ?>)">
                                                 Manage
                                             </button>
                                         </td>
@@ -479,6 +498,12 @@ try {
                 </div>
 
                 <div class="mb-3">
+                    <label class="form-label">Estimated Cost ($)</label>
+                    <input type="number" name="estimated_cost" id="manageCost" class="form-control"
+                           step="0.01" min="0" placeholder="0.00">
+                </div>
+
+                <div class="mb-3">
                     <label class="form-label">Decision Comments</label>
                     <textarea name="decision_comments" id="manageComments" class="form-control" rows="3" placeholder="Internal notes about this decision..."></textarea>
                 </div>
@@ -501,11 +526,12 @@ try {
 </div>
 
 <script>
-function openManageModal(id, status, importance, comments) {
+function openManageModal(id, status, importance, cost, comments) {
     document.getElementById('manageRequestId').value = id;
     document.getElementById('manageDeleteId').value = id;
     document.getElementById('manageStatus').value = status;
     document.getElementById('manageImportance').value = importance || '';
+    document.getElementById('manageCost').value = cost || '';
     document.getElementById('manageComments').value = comments || '';
     document.getElementById('manageBackdrop').style.display = 'block';
     document.getElementById('manageModal').style.display = 'block';
