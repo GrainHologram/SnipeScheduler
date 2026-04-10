@@ -21,10 +21,14 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_login_at DATETIME DEFAULT NULL,
+    discord_user_id VARCHAR(64) DEFAULT NULL,
+    discord_dm_enabled TINYINT(1) NOT NULL DEFAULT 1,
+    discord_embed_style ENUM('rich','plain') NOT NULL DEFAULT 'rich',
 
     PRIMARY KEY (id),
     UNIQUE KEY uq_users_user_id (user_id),
-    UNIQUE KEY uq_users_email (email)
+    UNIQUE KEY uq_users_email (email),
+    UNIQUE KEY uq_users_discord (discord_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------
@@ -289,5 +293,128 @@ CREATE TABLE IF NOT EXISTS feedback (
 INSERT IGNORE INTO schema_version (version)
 VALUES ('v1.5.0');
 
+-- ------------------------------------------------------
+-- Notification log (overdue escalation tracking)
+-- ------------------------------------------------------
+CREATE TABLE IF NOT EXISTS notification_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    checkout_id INT NOT NULL,
+    checkout_item_id INT NULL,
+    user_email VARCHAR(255) NOT NULL,
+    escalation_tier TINYINT NOT NULL DEFAULT 0,
+    channel ENUM('email','discord') NOT NULL,
+    sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_checkout_tier (checkout_id, escalation_tier),
+    INDEX idx_user_email (user_email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO schema_version (version)
+VALUES ('v1.6.0');
+
+-- ------------------------------------------------------
+-- User Discord DM preferences
+-- ------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_discord_preferences (
+    user_id INT UNSIGNED NOT NULL,
+    event_key VARCHAR(64) NOT NULL,
+    enabled TINYINT(1) NOT NULL DEFAULT 1,
+    PRIMARY KEY (user_id, event_key),
+    CONSTRAINT fk_udp_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO schema_version (version)
+VALUES ('v1.7.0');
+
 INSERT IGNORE INTO schema_version (version)
 VALUES ('v1.8.0');
+
+-- ------------------------------------------------------
+-- Unmatched checkins
+-- (assets checked in without a matching checkout_items record)
+-- ------------------------------------------------------
+CREATE TABLE IF NOT EXISTS unmatched_checkins (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    asset_id INT UNSIGNED NOT NULL,
+    asset_tag VARCHAR(255) NOT NULL,
+    asset_name VARCHAR(255) NOT NULL,
+    model_id INT UNSIGNED NOT NULL,
+    model_name VARCHAR(255) NOT NULL,
+    was_checked_out TINYINT(1) NOT NULL DEFAULT 1,
+    checked_in_from_user_id INT UNSIGNED DEFAULT NULL,
+    checked_in_from_user_name VARCHAR(255) DEFAULT NULL,
+    checked_in_by VARCHAR(255) DEFAULT NULL,
+    checkout_id INT UNSIGNED DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_unmatched_asset (asset_id),
+    KEY idx_unmatched_model (model_id),
+    KEY idx_unmatched_created (created_at),
+    KEY idx_unmatched_checkout (checkout_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO schema_version (version)
+VALUES ('v1.9.0');
+
+-- ------------------------------------------------------
+-- Announcements
+-- (timed messages shown to users via modal)
+-- ------------------------------------------------------
+CREATE TABLE IF NOT EXISTS announcements (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    body TEXT NOT NULL,
+    audience ENUM('all','staff','admin') NOT NULL DEFAULT 'all',
+    start_datetime DATETIME NOT NULL,
+    end_datetime DATETIME NOT NULL,
+    created_by VARCHAR(255) DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_announcements_active (start_datetime, end_datetime)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO schema_version (version)
+VALUES ('v2.0.0');
+
+-- ------------------------------------------------------
+-- Purchase Requests
+-- (equipment purchase requests from Discord bot and web)
+-- ------------------------------------------------------
+CREATE TABLE IF NOT EXISTS purchase_requests (
+    id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+
+    -- Submitter identity
+    submitter_name  VARCHAR(255) NOT NULL,
+    submitter_email VARCHAR(255) DEFAULT NULL,
+    user_id         VARCHAR(64)  DEFAULT NULL,
+    discord_user_id VARCHAR(64)  DEFAULT NULL,
+    source          ENUM('discord','web') NOT NULL DEFAULT 'discord',
+
+    -- Request fields
+    item_name       VARCHAR(255) NOT NULL,
+    description     TEXT NOT NULL,
+    department      VARCHAR(255) NOT NULL DEFAULT '',
+    item_url        VARCHAR(2048) DEFAULT NULL,
+    quantity        INT UNSIGNED NOT NULL DEFAULT 1,
+    is_faculty      TINYINT(1) NOT NULL DEFAULT 0,
+
+    -- Status workflow (active: open, approved, held; terminal: purchased, denied, duplicate)
+    status          ENUM('open','approved','held','purchased','denied','duplicate') NOT NULL DEFAULT 'open',
+
+    -- Admin-only fields
+    importance      ENUM('low','medium','high','critical') DEFAULT NULL,
+    estimated_cost  DECIMAL(10,2) DEFAULT NULL,
+    decision_comments TEXT DEFAULT NULL,
+    decided_by_name VARCHAR(255) DEFAULT NULL,
+    decided_at      DATETIME DEFAULT NULL,
+
+    -- Timestamps
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    KEY idx_pr_status (status),
+    KEY idx_pr_discord_user (discord_user_id),
+    KEY idx_pr_user_id (user_id),
+    KEY idx_pr_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO schema_version (version)
+VALUES ('v2.1.0');

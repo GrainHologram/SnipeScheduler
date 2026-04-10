@@ -3,6 +3,7 @@ require_once __DIR__ . '/../src/bootstrap.php';
 require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/auth.php';
 require_once SRC_PATH . '/activity_log.php';
+require_once SRC_PATH . '/notifications.php';
 
 $reservationId = (int)($_POST['reservation_id'] ?? 0);
 $email         = trim($_POST['email'] ?? '');
@@ -53,6 +54,32 @@ activity_log_event('reservation_cancelled', 'Reservation cancelled', [
     'metadata'     => [
         'email' => $email,
     ],
+]);
+
+// Notifications
+$userName = $res['user_name'] ?? $email;
+$dmData = get_user_discord_dm_data($email);
+send_notification('user', 'reservation_cancelled', [
+    'user_email' => $email,
+    'user_name'  => $userName,
+    'subject'    => 'Reservation cancelled',
+    'body_lines' => [
+        "Reservation #{$reservationId} has been cancelled.",
+    ],
+    'discord_embeds' => [build_discord_embed(
+        'Reservation Cancelled',
+        "Reservation #{$reservationId} has been cancelled.",
+        DISCORD_COLOR_GREY,
+        []
+    )],
+] + $dmData);
+send_notification('staff', 'reservation_cancelled', [
+    'discord_embeds' => [build_discord_embed(
+        'Reservation Cancelled',
+        "**{$userName}** cancelled reservation #{$reservationId}",
+        DISCORD_COLOR_GREY,
+        []
+    )],
 ]);
 
 header('Location: my_bookings.php?email=' . urlencode($email) . '&cancelled=1');

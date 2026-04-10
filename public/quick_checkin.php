@@ -8,6 +8,7 @@ require_once SRC_PATH . '/snipeit_client.php';
 require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/activity_log.php';
 require_once SRC_PATH . '/email.php';
+require_once SRC_PATH . '/notifications.php';
 require_once SRC_PATH . '/layout.php';
 require_once SRC_PATH . '/booking_helpers.php';
 
@@ -282,6 +283,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $noteText .= ' Staff note: ' . $note;
                         }
                         add_asset_note($assetId, $noteText);
+
+                        // Record unmatched checkin (asset was not checked out)
+                        $detUserForUnmatched = $_SESSION['quick_checkin_detected_user'] ?? null;
+                        $umStmt = $pdo->prepare("
+                            INSERT INTO unmatched_checkins
+                                (asset_id, asset_tag, asset_name, model_id, model_name,
+                                 was_checked_out, checked_in_from_user_id, checked_in_from_user_name,
+                                 checked_in_by, checkout_id)
+                            VALUES (:aid, :atag, :aname, :mid, :mname,
+                                    0, :uid, :uname, :staff, NULL)
+                        ");
+                        $umStmt->execute([
+                            ':aid'   => $assetId,
+                            ':atag'  => $assetTag,
+                            ':aname' => $asset['name'] ?? '',
+                            ':mid'   => (int)($asset['model_id'] ?? 0),
+                            ':mname' => $asset['model'] ?? '',
+                            ':uid'   => $detUserForUnmatched ? (int)$detUserForUnmatched['id'] : null,
+                            ':uname' => $detUserForUnmatched ? ($detUserForUnmatched['name'] ?? '') : null,
+                            ':staff' => $staffDisplayName,
+                        ]);
+
                         $messages[] = "Noted asset {$assetTag} (not checked out).";
 
                         $summaryLabel = 'Not checked out';
@@ -310,6 +333,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $ciUpd = $pdo->prepare("UPDATE checkout_items SET checked_in_at = NOW() WHERE id = :id");
                             $ciUpd->execute([':id' => (int)$ciRow['id']]);
                             recompute_checkout_status($pdo, (int)$ciRow['checkout_id']);
+                        } else {
+                            // No matching checkout_items row — record as unmatched checkin
+                            // Find user's open checkout if any
+                            $umCheckoutId = null;
+                            if ($assignedId > 0) {
+                                $umCoStmt = $pdo->prepare("
+                                    SELECT id FROM checkouts
+                                     WHERE snipeit_user_id = :uid
+                                       AND status IN ('open','partial')
+                                     ORDER BY created_at DESC LIMIT 1
+                                ");
+                                $umCoStmt->execute([':uid' => $assignedId]);
+                                $umCoRow = $umCoStmt->fetch(PDO::FETCH_ASSOC);
+                                if ($umCoRow) {
+                                    $umCheckoutId = (int)$umCoRow['id'];
+                                }
+                            }
+                            $umStmt2 = $pdo->prepare("
+                                INSERT INTO unmatched_checkins
+                                    (asset_id, asset_tag, asset_name, model_id, model_name,
+                                     was_checked_out, checked_in_from_user_id, checked_in_from_user_name,
+                                     checked_in_by, checkout_id)
+                                VALUES (:aid, :atag, :aname, :mid, :mname,
+                                        1, :uid, :uname, :staff, :coid)
+                            ");
+                            $umStmt2->execute([
+                                ':aid'   => $assetId,
+                                ':atag'  => $assetTag,
+                                ':aname' => $asset['name'] ?? '',
+                                ':mid'   => (int)($asset['model_id'] ?? 0),
+                                ':mname' => $asset['model'] ?? '',
+                                ':uid'   => $assignedId > 0 ? $assignedId : null,
+                                ':uname' => $assignedName !== '' ? $assignedName : null,
+                                ':staff' => $staffDisplayName,
+                                ':coid'  => $umCheckoutId,
+                            ]);
                         }
 
                         if ($assignedEmail === '' && $assignedId > 0) {
@@ -493,6 +552,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $note !== '' ? ["Note: {$note}"] : []
                     );
                     layout_send_notification($email, $info['name'], 'Assets checked in', $bodyLines);
+                    // Discord DM
+                    $dmData = get_user_discord_dm_data($email);
+                    if (!empty($dmData['discord_user_id'])) {
+                        $assetList = implode(', ', $info['assets']);
+                        send_notification('user', 'checkin', [
+                            'user_email' => $email,
+                            'user_name'  => $info['name'],
+                            'subject'    => '',
+                            'body_lines' => [],
+                            'discord_dm_event_key' => 'checkout_returned',
+                            'discord_embeds' => [build_discord_embed(
+                                'Assets Checked In',
+                                'The following assets have been returned.',
+                                DISCORD_COLOR_BLUE,
+                                [
+                                    ['name' => 'Assets', 'value' => $assetList ?: 'N/A', 'inline' => false],
+                                ]
+                            )],
+                        ] + $dmData);
+                    }
                 }
                 // Notify staff performing check-in
                 if ($staffEmail !== '' && !empty($assetTags)) {
@@ -522,6 +601,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'checked_in_from' => $checkedInFrom,
                         'note'   => $note,
                     ],
+                ]);
+
+                // Discord notification
+                $checkinAssetList = implode(', ', array_filter($assetTags));
+                send_notification('staff', 'checkin', [
+                    'staff_email' => $staffEmail,
+                    'staff_name'  => $staffDisplayName,
+                    'subject'     => 'Assets checked in',
+                    'body_lines'  => $bodyLines ?? [],
+                    'discord_embeds' => [build_discord_embed(
+                        'Quick Check-in',
+                        count($assetTags) . " asset(s) checked in",
+                        DISCORD_COLOR_BLUE,
+                        [
+                            ['name' => 'Assets', 'value' => $checkinAssetList ?: 'N/A', 'inline' => false],
+                            ['name' => 'Staff', 'value' => $staffDisplayName ?: 'Unknown', 'inline' => true],
+                        ]
+                    )],
                 ]);
             }
             // Process deferred per-asset actions (notes, maintenance, status changes)

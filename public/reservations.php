@@ -14,6 +14,10 @@ if (!$isStaff) {
 }
 
 $allowedTabs = ['today', 'checked_out', 'history', 'checkout_history'];
+if ($isAdmin) {
+    $allowedTabs[] = 'unmatched';
+    $allowedTabs[] = 'kit_audit';
+}
 $tab         = $_GET['tab'] ?? 'today';
 if (!in_array($tab, $allowedTabs, true)) {
     $tab = 'today';
@@ -24,6 +28,8 @@ $tabMap = [
     'checked_out'      => __DIR__ . '/checked_out_assets.php',
     'history'          => __DIR__ . '/staff_reservations.php',
     'checkout_history' => __DIR__ . '/checkout_history.php',
+    'unmatched'        => __DIR__ . '/unmatched_checkins_report.php',
+    'kit_audit'        => __DIR__ . '/kit_audit_report.php',
 ];
 
 if (!defined('RESERVATIONS_EMBED')) {
@@ -125,6 +131,16 @@ if (!$tabFile || !is_file($tabFile)) {
                 <a class="nav-link <?= $tab === 'checkout_history' ? 'active' : '' ?>"
                    href="reservations.php?tab=checkout_history">Checkout History</a>
             </li>
+            <?php if ($isAdmin): ?>
+            <li class="nav-item">
+                <a class="nav-link <?= $tab === 'unmatched' ? 'active' : '' ?>"
+                   href="reservations.php?tab=unmatched">Unmatched Checkins</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link <?= $tab === 'kit_audit' ? 'active' : '' ?>"
+                   href="reservations.php?tab=kit_audit">Kit Audit</a>
+            </li>
+            <?php endif; ?>
         </ul>
 
         <div class="tab-content border border-top-0 p-3 bg-white reservations-shell">

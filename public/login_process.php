@@ -91,7 +91,7 @@ $redirectWithError = static function (string $message) {
     exit;
 };
 
-$upsertUser = static function (PDO $pdo, string $email, string $fullName): int {
+$upsertUser = static function (PDO $pdo, string $email, string $fullName): array {
     $userTable = 'users';
     $userIdCol = 'user_id';
 
@@ -117,7 +117,7 @@ $upsertUser = static function (PDO $pdo, string $email, string $fullName): int {
             ':name' => $fullName,
             ':id'   => $existing['id'],
         ]);
-        return (int)$existing['id'];
+        return ['id' => (int)$existing['id'], 'discord_user_id' => $existing['discord_user_id'] ?? null];
     }
 
     $userIdHex = sprintf('%u', crc32(strtolower($email)));
@@ -137,7 +137,7 @@ $upsertUser = static function (PDO $pdo, string $email, string $fullName): int {
         ':name'    => $fullName,
         ':email'   => $email,
     ]);
-    return (int)$pdo->lastInsertId();
+    return ['id' => (int)$pdo->lastInsertId(), 'discord_user_id' => null];
 };
 
 if ($provider === 'google') {
@@ -270,7 +270,9 @@ if ($provider === 'google') {
     }
 
     try {
-        $userId = $upsertUser($pdo, $email, $fullName);
+        $upsertResult = $upsertUser($pdo, $email, $fullName);
+        $userId = $upsertResult['id'];
+        $discordUserId = $upsertResult['discord_user_id'] ?? null;
     } catch (Throwable $e) {
         $redirectWithError($debugOn ? 'Login system is currently unavailable (database error): ' . $e->getMessage() : 'Login system is currently unavailable (database error).');
     }
@@ -288,6 +290,7 @@ if ($provider === 'google') {
         'display_name' => $fullName,
         'is_admin'     => $isAdmin,
         'is_staff'     => $isStaff,
+        'discord_user_id' => $discordUserId,
     ];
 
     require_once SRC_PATH . '/snipeit_client.php';
@@ -476,7 +479,9 @@ if ($provider === 'microsoft') {
     }
 
     try {
-        $userId = $upsertUser($pdo, $email, $fullName);
+        $upsertResult = $upsertUser($pdo, $email, $fullName);
+        $userId = $upsertResult['id'];
+        $discordUserId = $upsertResult['discord_user_id'] ?? null;
     } catch (Throwable $e) {
         $redirectWithError($debugOn ? 'Login system is currently unavailable (database error): ' . $e->getMessage() : 'Login system is currently unavailable (database error).');
     }
@@ -494,6 +499,7 @@ if ($provider === 'microsoft') {
         'display_name' => $fullName,
         'is_admin'     => $isAdmin,
         'is_staff'     => $isStaff,
+        'discord_user_id' => $discordUserId,
     ];
 
     require_once SRC_PATH . '/snipeit_client.php';
@@ -686,7 +692,9 @@ if ($isAdmin || $isCheckout) {
 // `user_id` must be UNIQUE, so we derive a stable numeric ID from email.
 // ------------------------------------------------------------------
 try {
-    $userId = $upsertUser($pdo, $mail, $fullName);
+    $upsertResult = $upsertUser($pdo, $mail, $fullName);
+    $userId = $upsertResult['id'];
+    $discordUserId = $upsertResult['discord_user_id'] ?? null;
 } catch (Throwable $e) {
     $redirectWithError($debugOn
         ? 'Login system is currently unavailable (database error): ' . $e->getMessage()
@@ -705,6 +713,7 @@ $_SESSION['user'] = [
     'display_name' => $fullName,
     'is_admin'     => $isAdmin,
     'is_staff'     => $isStaff,
+    'discord_user_id' => $discordUserId,
 ];
 
 require_once SRC_PATH . '/snipeit_client.php';

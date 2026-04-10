@@ -135,6 +135,60 @@ $deletedMsg = '';
 if (!empty($_GET['deleted'])) {
     $deletedMsg = 'Reservation #' . (int)$_GET['deleted'] . ' has been deleted.';
 }
+
+// Basket state for reuse confirmation (staff/admin)
+$currentBasket = $_SESSION['basket'] ?? [];
+$currentBasketCount = 0;
+foreach ($currentBasket as $q) {
+    $currentBasketCount += (int)$q;
+}
+$bookingOverride = $_SESSION['booking_user_override'] ?? null;
+$basketUserLabel = '';
+if ($bookingOverride) {
+    $overrideName = trim(($bookingOverride['first_name'] ?? '') . ' ' . ($bookingOverride['last_name'] ?? ''));
+    if ($overrideName === '') {
+        $overrideName = $bookingOverride['name'] ?? ($bookingOverride['email'] ?? '');
+    }
+    $basketUserLabel = $overrideName;
+}
+
+// Build per-reservation summary data for reuse modal (staff only)
+$reuseSummaries = [];
+if ($isStaff) {
+    foreach ($reservations as $res) {
+        $rid = (int)$res['id'];
+        $items = $allResItems[$rid] ?? [];
+        if (empty($items)) continue;
+        $itemLines = [];
+        foreach ($items as $item) {
+            $itemLines[] = (int)$item['qty'] . 'x ' . ($item['name'] ?? 'Unknown');
+        }
+        $reuseSummaries[$rid] = [
+            'user' => $res['user_name'] ?? '',
+            'items' => $itemLines,
+        ];
+    }
+}
+
+// Build current basket item summary from kit names and model IDs
+$currentBasketSummary = [];
+$kitGroups = $_SESSION['basket_kit_groups'] ?? [];
+$kitNames  = $_SESSION['basket_kit_names'] ?? [];
+$kitModelIds = [];
+foreach ($kitGroups as $kid => $batches) {
+    foreach ($batches as $batch) {
+        foreach ($batch as $entry) {
+            $kitModelIds[(int)$entry['model_id']] = true;
+        }
+    }
+}
+foreach ($currentBasket as $mid => $qty) {
+    if (isset($kitModelIds[(int)$mid])) continue;
+    $currentBasketSummary[] = (int)$qty . 'x Model #' . (int)$mid;
+}
+foreach ($kitNames as $kid => $kname) {
+    $currentBasketSummary[] = h($kname);
+}
 ?>
 <!DOCTYPE html>
 <html>
@@ -593,6 +647,21 @@ if (!empty($_GET['deleted'])) {
                                 <?php endif; ?>
 
                                 <div class="d-flex justify-content-end gap-2 mt-3">
+                                    <?php if (!empty($items)): ?>
+                                        <?php if ($isStaff && ($currentBasketCount > 0 || $bookingOverride)): ?>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm"
+                                                    onclick="showReuseModal(<?= $resId ?>)">
+                                                Reuse items
+                                            </button>
+                                        <?php else: ?>
+                                            <form method="post" action="reuse_reservation.php">
+                                                <input type="hidden" name="reservation_id" value="<?= $resId ?>">
+                                                <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                    Reuse items
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
                                     <?php if ($status === 'pending'): ?>
                                         <a href="reservation_edit.php?id=<?= $resId ?>&from=my_bookings"
                                            class="btn btn-outline-primary btn-sm btn-action">
@@ -697,6 +766,21 @@ if (!empty($_GET['deleted'])) {
                                     <?php endif; ?>
 
                                     <div class="d-flex justify-content-end gap-2 mt-3">
+                                        <?php if (!empty($items)): ?>
+                                            <?php if ($isStaff && ($currentBasketCount > 0 || $bookingOverride)): ?>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm"
+                                                        onclick="showReuseModal(<?= $resId ?>)">
+                                                    Reuse items
+                                                </button>
+                                            <?php else: ?>
+                                                <form method="post" action="reuse_reservation.php">
+                                                    <input type="hidden" name="reservation_id" value="<?= $resId ?>">
+                                                    <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                        Reuse items
+                                                    </button>
+                                                </form>
+                                            <?php endif; ?>
+                                        <?php endif; ?>
                                         <?php
                                             $deletableStatuses = (load_config())['reservations']['deletable_statuses'] ?? ['pending', 'confirmed', 'cancelled', 'missed'];
                                             if (in_array($status, $deletableStatuses, true)):
@@ -723,8 +807,84 @@ if (!empty($_GET['deleted'])) {
 
     </div>
 </div>
+<?php if ($isStaff && ($currentBasketCount > 0 || $bookingOverride)): ?>
+<!-- Reuse confirmation modal -->
+<div id="reuseBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1050;" onclick="closeReuseModal()"></div>
+<div id="reuseModal" style="display:none; position:fixed; inset:0; z-index:1055; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)closeReuseModal()">
+    <div style="max-width:480px; margin:0 auto; background:#fff; border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid #dee2e6;">
+            <h5 style="margin:0;">Replace current basket?</h5>
+            <button type="button" onclick="closeReuseModal()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
+        </div>
+        <div style="padding:1rem;">
+            <p class="mb-3">Your current basket will be <strong>replaced</strong> with the selected reservation's items.</p>
+            <div style="display:flex; gap:1rem;">
+                <div style="flex:1; min-width:0;">
+                    <div class="fw-semibold text-danger small mb-1">Current basket</div>
+                    <?php if ($bookingOverride && $basketUserLabel !== ''): ?>
+                        <div class="small mb-1"><strong>User:</strong> <?= h($basketUserLabel) ?></div>
+                    <?php endif; ?>
+                    <?php if ($currentBasketCount > 0): ?>
+                        <div class="small text-muted" id="reuseCurrentItems">
+                            <?php if (!empty($currentBasketSummary)): ?>
+                                <?php foreach ($currentBasketSummary as $line): ?>
+                                    <div><?= $line ?></div>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <?= $currentBasketCount ?> item<?= $currentBasketCount !== 1 ? 's' : '' ?>
+                            <?php endif; ?>
+                        </div>
+                    <?php else: ?>
+                        <div class="small text-muted">Empty</div>
+                    <?php endif; ?>
+                </div>
+                <div style="display:flex; align-items:center; font-size:1.25rem; color:#6c757d;">&rarr;</div>
+                <div style="flex:1; min-width:0;">
+                    <div class="fw-semibold text-success small mb-1">New items</div>
+                    <div class="small mb-1" id="reuseNewUser"></div>
+                    <div class="small text-muted" id="reuseNewItems"></div>
+                </div>
+            </div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:.5rem; padding:.75rem 1rem; border-top:1px solid #dee2e6;">
+            <button type="button" class="btn btn-outline-secondary" onclick="closeReuseModal()">Cancel</button>
+            <form method="post" action="reuse_reservation.php" id="reuseModalForm">
+                <input type="hidden" name="reservation_id" id="reuseModalResId" value="">
+                <button type="submit" class="btn btn-primary">Replace basket</button>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <?php layout_footer(); ?>
 <script>
+<?php if ($isStaff && ($currentBasketCount > 0 || $bookingOverride)): ?>
+var _reuseSummaries = <?= json_encode($reuseSummaries, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
+function showReuseModal(resId) {
+    document.getElementById('reuseModalResId').value = resId;
+    var data = _reuseSummaries[resId] || {};
+    var userEl = document.getElementById('reuseNewUser');
+    var itemsEl = document.getElementById('reuseNewItems');
+    userEl.innerHTML = data.user ? '<strong>User:</strong> ' + _esc(data.user) : '';
+    var lines = data.items || [];
+    itemsEl.innerHTML = lines.map(function(l) { return '<div>' + _esc(l) + '</div>'; }).join('');
+    document.getElementById('reuseBackdrop').style.display = 'block';
+    document.getElementById('reuseModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+}
+function closeReuseModal() {
+    document.getElementById('reuseBackdrop').style.display = 'none';
+    document.getElementById('reuseModal').style.display = 'none';
+    document.body.style.overflow = '';
+}
+function _esc(s) {
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(s));
+    return d.innerHTML;
+}
+<?php endif; ?>
+
 function togglePastReservations() {
     var container = document.getElementById('past-reservations');
     var btn = document.getElementById('toggle-past-btn');

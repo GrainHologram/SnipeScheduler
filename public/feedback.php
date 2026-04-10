@@ -181,6 +181,12 @@ try {
             <li class="nav-item">
                 <a class="nav-link active" href="feedback.php">Feedback</a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link" href="announcements.php">Announcements</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="purchase_requests.php">Purchase Requests</a>
+            </li>
         </ul>
 
         <div class="card">
