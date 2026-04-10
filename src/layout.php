@@ -291,6 +291,19 @@ if (!function_exists('layout_render_topbar')) {
             $html .= '<span class="app-topbar-sep">›</span>';
             $html .= '<span class="app-topbar-subtitle">' . htmlspecialchars($subtitle, ENT_QUOTES, 'UTF-8') . '</span>';
         }
+        if ($active === 'catalogue.php') {
+            $html .= '<div class="cat-topbar-view">';
+            $html .= '<button type="button" class="cat-topbar-view-btn cat-view-toggle" id="cat-view-btn-top" aria-haspopup="true" aria-expanded="false">';
+            $html .= '<i class="bi bi-list-ul" id="cat-view-icon-top" aria-hidden="true"></i>';
+            $html .= '<span id="cat-view-label-top">List</span>';
+            $html .= '<svg class="cat-toggle-chevron ms-1" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+            $html .= '</button>';
+            $html .= '<div class="cat-view-menu" id="cat-view-menu-top" hidden>';
+            $html .= '<button type="button" class="cat-view-option" data-view="list"><i class="bi bi-list-ul" aria-hidden="true"></i> List</button>';
+            $html .= '<button type="button" class="cat-view-option" data-view="grid"><i class="bi bi-grid" aria-hidden="true"></i> Grid</button>';
+            $html .= '</div>';
+            $html .= '</div>';
+        }
         if ($active === 'catalogue.php' || $active === 'my_bookings.php') {
             $html .= '<a href="basket.php" class="app-topbar-basket"><i class="bi bi-basket" aria-hidden="true"></i> View Basket</a>';
         }

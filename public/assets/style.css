@@ -93,7 +93,12 @@ input[type="checkbox"] {
 .my-bookings-panel-box,
 .panel-empty-state,
 .panel-empty-icon,
-.panel-empty-text {
+.panel-empty-text,
+.cat-sidebar-user-card,
+.cat-sidebar-window-display,
+.cat-sidebar-section-divider,
+#windowModalBackdrop,
+#windowModal {
     display: none;
 }
 

@@ -146,10 +146,29 @@ v2 uses a fixed left sidebar for navigation and a fixed top bar for page context
 - `--sidebar-width: 200px` — width of the left nav sidebar.
 - `--topbar-height: 52px` — height of the fixed top bar.
 - `--mobile-nav-height: 52px` — height of the top nav bar on mobile (≤768px).
+- `--catalogue-sidebar-width: 200px` — width of the catalogue filter sidebar (catalogue page only).
 
 `body.p-4` overrides Bootstrap's padding: `padding-left: var(--sidebar-width)`, `padding-top: var(--topbar-height)`, `padding-right: 0`, `padding-bottom: 0`. `.page-shell` has `padding: 0.75rem 0`. This gives equal spacing on all sides of the content area.
 
+On `body.page-catalogue`, an additional `padding-left: calc(var(--sidebar-width) + var(--catalogue-sidebar-width))` shifts normal-flow content right to clear the catalogue filter sidebar. At 960px breakpoint this adjusts to use `--sidebar-collapsed-width`; at 599px the catalogue sidebar reflows inline (static positioning).
+
+**`.catalogue-main` is `position: fixed`** (same coordinate system as `.catalogue-filter-sidebar`): `left: calc(var(--sidebar-width) + var(--catalogue-sidebar-width))`, `top: var(--topbar-height)`, `right: 0`, `bottom: 0`. This gives it an explicit pixel-perfect height so its flex children can scroll. At 960px its `left` adjusts to `--sidebar-collapsed-width + --catalogue-sidebar-width`; at 599px it reverts to `position: static`. `body.page-catalogue { overflow: hidden }` prevents body scrolling at desktop/tablet — all content lives in fixed containers.
+
 On mobile (≤768px), the sidebar becomes a fixed horizontal top bar with horizontal scroll. The `.app-topbar` shifts to `top: var(--mobile-nav-height)`.
+
+#### Design v2 Nav Collapse Behaviour
+
+The topbar hamburger button (`.app-topbar-hamburger`) is **always visible** across all viewport widths and serves a different role at each breakpoint:
+
+| Viewport | Behaviour |
+|---|---|
+| ≥960px | Toggles `body.nav-is-collapsed` — collapses/expands the sidebar between full (200px) and icon-only (52px). State is persisted in `localStorage` under the key `v2NavCollapsed`. |
+| 600–959px | Opens/closes a full-width sidebar overlay (`app-nav--expanded`) showing labels, "Wrap It" brand, and user card. Outside-click and Escape close it. |
+| ≤599px | Opens/closes the mobile drawer (`app-nav--open`). |
+
+`body.nav-is-collapsed` (set only at ≥960px) mirrors the CSS icon-only styles of the 600–959px breakpoint: 52px wide, icons centred, labels/brand/user card/section headers hidden, hover tooltips via `::after content: attr(title)`. Catalogue filter sidebar and content panel shift left accordingly using `var(--sidebar-collapsed-width)`.
+
+`.app-nav-hamburger` (the in-sidebar hamburger) is **hidden at all viewports** — the topbar hamburger is the sole nav toggle control.
 
 #### Design v2 Navigation Structure (`layout_render_nav()`)
 
@@ -184,6 +203,7 @@ Called on every page immediately after `layout_render_nav()`. Hidden in v1 via `
 - `.page-subtitle` — page description text
 - `.top-bar` — the old user/actions bar (user info moved to sidebar user card)
 - `.catalogue-tab-nav` — Equipment/Kits Bootstrap nav tabs (navigation moved to sidebar)
+- `#catalogue-window-form` — booking window form (pickers moved to `#windowModal`; form stays in DOM for hidden inputs + `form.submit()`)
 
 #### Elements hidden in v1 (`style.css`)
 
@@ -194,6 +214,10 @@ Called on every page immediately after `layout_render_nav()`. Hidden in v1 via `
 - `.app-nav-feedback-glyph` — v2 feedback icon button (v1 uses the full nav link instead)
 - `.my-bookings-panels`, `.my-bookings-panel`, `.my-bookings-panel-title`, `.my-bookings-panel-box` — v2 two-panel layout for `my_bookings.php`
 - `.panel-empty-state`, `.panel-empty-icon`, `.panel-empty-text` — v2 empty-state glyph components
+- `.cat-sidebar-user-card` — v2 Selected User sidebar card
+- `.cat-sidebar-window-display` — v2 booking window display button
+- `.cat-sidebar-section-divider` — v2 divider between booking controls and filter section
+- `#windowModalBackdrop`, `#windowModal` — v2 booking window modal
 
 #### Colour System (`style-v2.css`)
 
@@ -208,7 +232,8 @@ All colours are defined as CSS custom properties in the `:root` block at the top
 | Accent aliases | `--accent`, `--accent-2` |
 | Warm accent | `--accent-warm`, `--accent-warm-dark`, `--accent-warm-light`, `--accent-warm-rgb` |
 | Status | `--status-info`, `--status-success`, `--badge-secondary`, `--badge-danger` |
-| Layout | `--sidebar-width`, `--topbar-height`, `--mobile-nav-height` |
+| Layout | `--sidebar-width`, `--topbar-height`, `--mobile-nav-height`, `--catalogue-sidebar-width` |
+| Catalogue category | `--cat-option-bg`, `--cat-option-hover-bg`, `--cat-option-selected-bg` |
 | Utility | `--loading-text`, `--filter-btn`, `--shadow-soft` |
 | Bootstrap overrides | `--bs-body-color`, `--bs-card-bg`, `--bs-list-group-bg`, etc. |
 
@@ -236,8 +261,25 @@ After any frontend changes are made, run **both** agents before considering the 
 
 Some pages output different HTML depending on `$designVersion`. When editing these pages, changes must be made to both branches:
 
+**`public/catalogue.php`** — detects `$designVersion = (int)(($config['app']['design_version'] ?? 1))` (uses the already-loaded `$config`). Body class `page-catalogue` is added in v2.
+- **v2 branch** (equipment sidebar): Sort select (above Category, class `cat-rounded-select`) + custom category toggle dropdown (`#cat-toggle-btn` / `#cat-dropdown`). Sidebar form header reads "FILTERS". Search input removed from sidebar (moved to `.catalogue-search-bar` in the main area).
+- **v2 branch** (kits sidebar): `#kits-filter-form` is hidden via `.catalogue-filter-sidebar #kits-filter-form { display: none }` in `style-v2.css`. The form stays in the DOM for hidden inputs; its search input and visible row are gated with `$designVersion < 2`.
+- **v1 branch**: original Category `<select name="category">` then Sort `<select name="sort">` — completely unchanged. Both filter forms include the search input.
+- **v2 sidebar top controls** (both equipment and kits tabs): Before the filter form, both sidebars render (gated `$designVersion >= 2`):
+  1. **Selected User card** (`.cat-sidebar-user-card`, staff-only): header section with "SELECTED USER" label + user name/badges (if `$bookingOverride` set), divider (`<hr class="cat-sidebar-user-divider">`), then a search area (`.cat-sidebar-user-body`) containing the typeahead input (`#booking_user_input`, `role="combobox"`) and suggestions popover (`#booking_user_suggestions`, `role="listbox"`). When a user is selected, a Clear button submits `booking_user_revert=1`. IDs (`booking_user_form`, `booking_user_input`, etc.) are safe to reuse across tabs because equipment and kits are mutually exclusive PHP branches — never both in the DOM simultaneously.
+  2. **Booking window button** (`.cat-sidebar-window-display`, `#window-display-btn`): shows formatted pick-up/return datetime or placeholder text. `aria-haspopup="dialog"`. `data-open-on-load="1"` if `$windowError !== ''`. Clicking opens `#windowModal`.
+  3. **Section divider** (`<hr class="cat-sidebar-section-divider">`) between booking controls and filter form.
+- **Booking window modal** (`#windowModal` / `#windowModalBackdrop`, gated `$designVersion >= 2`, rendered after the kit-contents modal): contains `#window-start-picker`, `#window-end-picker`, `#window-today-btn`, bypass checkboxes (staff/admin gated). SlotPicker initialises against these elements at `DOMContentLoaded` — `display:none` on the modal does not prevent DOM presence. Auto-submit on both dates triggers a full page reload; the modal disappears naturally. `#catalogue-window-form` stays in the DOM (hidden via CSS) so its hidden inputs and `form.submit()` continue to work.
+- **Category multi-select**: `$_GET['category']` accepts both scalar (`?category=N`) and array (`?category[]=N`) inputs. `$categoriesSelected` (int array) is the canonical value. When multiple categories are selected, `get_bookable_models()` is called with no category filter and `$perPage=500`, then results are filtered PHP-side and paginated. The window form uses `<input name="category[]">` hidden inputs.
+- **Category dropdown** (`#cat-dropdown`): block-level panel toggled via `hidden` attribute. Each option is a `<label class="cat-option">` wrapping a visually hidden `<input class="cat-checkbox" type="checkbox">` (CSS: `position: absolute; opacity: 0; width/height: 0`). The checkbox stays in DOM for form submission. Selected state is applied via `.cat-option:has(:checked)` CSS — no JS state needed. A `change` listener on the dropdown updates the toggle button count label. Escape key closes and returns focus to the toggle button; outside-click-to-close is intentionally absent.
+- **Catalogue filter sidebar** (`.catalogue-filter-sidebar`): fixed-position sidebar — `left: var(--sidebar-width)`, `top: var(--topbar-height)`, black background, no border-right. Contains the sidebar top controls (user card, window button, divider) then Sort + Category for equipment; sidebar top controls then empty filter area for kits.
+- **Search bar** (`.catalogue-search-bar`): static element, `flex-shrink: 0`, at the top of the fixed `.catalogue-main` flex column. Contains a `.catalogue-search-capsule` (rounded rectangle, full width). The `<input name="q">` uses the HTML `form=` attribute to associate with its tab's filter form. JS `searchInput` selector is `document.querySelector('.catalogue-search-capsule input[name="q"]')` with fallback for v1. Not sticky — `.catalogue-main` is `position: fixed` so the search bar is always visible at the top of the content area.
+- **Scrollable content area** (`.catalogue-scroll-area`): `flex: 1; min-height: 0; overflow-y: auto` inside `.catalogue-main`. Styled as a rounded rectangle (`border-radius: 0.75rem`, `border: 1px solid var(--border)`, `background: var(--bg)`). Contains the model/kit cards grid and pagination. Reverts to `position: static; overflow-y: visible; border: none` on mobile (≤599px).
+- The `$baseQuery` array used for pagination links uses `$categoriesSelected` (array) for the `category` key, not `$categoryRaw`, so multi-category selection survives page navigation.
+
 **`public/my_bookings.php`** — detects `$designVersion = (int)((load_config())['app']['design_version'] ?? 1)`.
 - **v2 branch** (`$designVersion >= 2`): renders a two-column `.my-bookings-panels` grid with `.my-bookings-panel-box` inset boxes, both panels visible simultaneously. Body class `page-my-gear` enables full-height flex layout. Page title "My Gear". Empty states use `.panel-empty-state` with Bootstrap Icon glyphs.
+- **Scroll model (v2)**: At >900px (side-by-side), `body.page-my-gear` is locked to `height: 100dvh; overflow: hidden` and each `.my-bookings-panel-box` scrolls independently (`overflow-y: auto`). `min-height: 0` is required throughout the flex chain so panels can shrink. At ≤900px (stacked), the body reverts to `height: 100%; overflow-y: auto` to restore normal body scrolling — **not** `height: auto`, because `html { height: 100%; overflow: hidden }` makes the body the scroll container; `height: auto` would cause the body to overflow the html element and get clipped.
 - **v1 branch** (`else`): renders the original Bootstrap tab layout (`.reservations-subtabs`) with `?tab=reservations` / `?tab=checked_out` URL routing. Page title "My Reservations". Empty states use Bootstrap `.alert.alert-info` boxes.
 - The checked-out items query runs for all v2 loads, but only when `$tab === 'checked_out'` in v1.
 - A `$checkoutItemsByModel[checkout_id][model_id][]` batch query runs for v2 only (gated on `$designVersion >= 2`), fetching `checkout_items` rows for all linked checkouts to enable per-model asset tag display in the items table.
