@@ -37,7 +37,7 @@ async function execute(interaction) {
   try {
     [rows] = await pool.execute(
       `SELECT id, item_name, submitter_name, department, quantity,
-              status, importance, estimated_cost, is_faculty, created_at
+              status, importance, estimated_cost, is_faculty, created_at, item_url
        FROM purchase_requests
        WHERE status IN ('open', 'approved', 'held')
        ORDER BY
@@ -104,8 +104,23 @@ async function execute(interaction) {
     ? ` · Est. total: **$${totalCost.toFixed(2)}**`
     : '';
 
+  // Build links embed for rows with URLs
+  const embeds = [];
+  const linksRows = rows.filter((r) => r.item_url);
+  if (linksRows.length > 0) {
+    const linkLines = linksRows.map(
+      (r) => `**#${r.id}** [${r.item_name}](${r.item_url})`
+    );
+    const linksEmbed = new EmbedBuilder()
+      .setColor(0x6366f1)
+      .setTitle('Item Links')
+      .setDescription(linkLines.join('\n'));
+    embeds.push(linksEmbed);
+  }
+
   await interaction.editReply({
     content: summary + costSummary + '\n' + lines.join('\n'),
+    embeds,
   });
 }
 
