@@ -58,6 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $newStatus     = trim($_POST['status'] ?? '');
         $importance    = trim($_POST['importance'] ?? '');
         $estimatedCost = trim($_POST['estimated_cost'] ?? '');
+        $itemUrl       = trim($_POST['item_url'] ?? '');
         $comments      = trim($_POST['decision_comments'] ?? '');
 
         if ($requestId > 0 && array_key_exists($newStatus, $statusLabels)) {
@@ -76,11 +77,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
+            $urlValue = null;
+            if ($itemUrl !== '' && filter_var($itemUrl, FILTER_VALIDATE_URL)) {
+                $urlValue = $itemUrl;
+            }
+
             $stmt = $pdo->prepare("
                 UPDATE purchase_requests
                    SET status            = :status,
                        importance        = :importance,
                        estimated_cost    = :cost,
+                       item_url          = :item_url,
                        decision_comments = :comments,
                        decided_by_name   = :decided_by,
                        decided_at        = :decided_at
@@ -90,6 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':status'     => $newStatus,
                 ':importance' => ($importance !== '' && array_key_exists($importance, $importanceLabels)) ? $importance : null,
                 ':cost'       => $costValue,
+                ':item_url'   => $urlValue,
                 ':comments'   => $comments !== '' ? $comments : null,
                 ':decided_by' => $decidedBy,
                 ':decided_at' => $decidedAt,
@@ -410,7 +418,7 @@ try {
                                         </td>
                                         <td>
                                             <button type="button" class="btn btn-sm btn-outline-primary"
-                                                    onclick="openManageModal(<?= (int)$row['id'] ?>, <?= h(json_encode($row['status'])) ?>, <?= h(json_encode($row['importance'] ?? '')) ?>, <?= h(json_encode($row['estimated_cost'] ?? '')) ?>, <?= h(json_encode($row['decision_comments'] ?? '')) ?>)">
+                                                    onclick="openManageModal(<?= (int)$row['id'] ?>, <?= h(json_encode($row['status'])) ?>, <?= h(json_encode($row['importance'] ?? '')) ?>, <?= h(json_encode($row['estimated_cost'] ?? '')) ?>, <?= h(json_encode($row['item_url'] ?? '')) ?>, <?= h(json_encode($row['decision_comments'] ?? '')) ?>)">
                                                 Manage
                                             </button>
                                         </td>
@@ -504,6 +512,12 @@ try {
                 </div>
 
                 <div class="mb-3">
+                    <label class="form-label">Item URL</label>
+                    <input type="url" name="item_url" id="manageUrl" class="form-control"
+                           maxlength="2048" placeholder="https://...">
+                </div>
+
+                <div class="mb-3">
                     <label class="form-label">Decision Comments</label>
                     <textarea name="decision_comments" id="manageComments" class="form-control" rows="3" placeholder="Internal notes about this decision..."></textarea>
                 </div>
@@ -526,12 +540,13 @@ try {
 </div>
 
 <script>
-function openManageModal(id, status, importance, cost, comments) {
+function openManageModal(id, status, importance, cost, url, comments) {
     document.getElementById('manageRequestId').value = id;
     document.getElementById('manageDeleteId').value = id;
     document.getElementById('manageStatus').value = status;
     document.getElementById('manageImportance').value = importance || '';
     document.getElementById('manageCost').value = cost || '';
+    document.getElementById('manageUrl').value = url || '';
     document.getElementById('manageComments').value = comments || '';
     document.getElementById('manageBackdrop').style.display = 'block';
     document.getElementById('manageModal').style.display = 'block';
