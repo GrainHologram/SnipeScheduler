@@ -491,13 +491,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $discordBot['dm_enabled'] = isset($_POST['discord_bot_dm_enabled']);
     $botTokenInput = $_POST['discord_bot_token'] ?? '';
     $botSecretInput = $_POST['discord_bot_oauth_client_secret'] ?? '';
-    if ($useRawSecrets) {
-        $discordBot['bot_token'] = $botTokenInput;
-        $discordBot['oauth_client_secret'] = $botSecretInput;
-    } else {
-        $discordBot['bot_token'] = $botTokenInput === '' ? ($loadedConfig['discord_bot']['bot_token'] ?? '') : $botTokenInput;
-        $discordBot['oauth_client_secret'] = $botSecretInput === '' ? ($loadedConfig['discord_bot']['oauth_client_secret'] ?? '') : $botSecretInput;
-    }
+    $discordBot['bot_token'] = $botTokenInput === '' ? ($loadedConfig['discord_bot']['bot_token'] ?? '') : $botTokenInput;
+    $discordBot['oauth_client_secret'] = $botSecretInput === '' ? ($loadedConfig['discord_bot']['oauth_client_secret'] ?? '') : $botSecretInput;
 
     $newConfig = $config;
     $newConfig['db_booking'] = $db;
