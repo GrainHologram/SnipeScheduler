@@ -5,10 +5,12 @@ const { REST, Routes } = require('discord.js');
 
 const purchaseRequest = require('./commands/purchase-request');
 const myRequests = require('./commands/my-requests');
+const listRequests = require('./commands/list-requests');
 
 const commands = [
   purchaseRequest.data.toJSON(),
   myRequests.data.toJSON(),
+  listRequests.data.toJSON(),
 ];
 
 const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
