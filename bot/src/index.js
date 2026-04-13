@@ -5,6 +5,7 @@ const { Client, GatewayIntentBits, Collection } = require('discord.js');
 
 const purchaseRequest = require('./commands/purchase-request');
 const myRequests = require('./commands/my-requests');
+const listRequests = require('./commands/list-requests');
 
 const client = new Client({
   intents: [
@@ -17,6 +18,7 @@ const client = new Client({
 client.commands = new Collection();
 client.commands.set(purchaseRequest.data.name, purchaseRequest);
 client.commands.set(myRequests.data.name, myRequests);
+client.commands.set(listRequests.data.name, listRequests);
 
 client.once('ready', () => {
   console.log(`Logged in as ${client.user.tag}`);
