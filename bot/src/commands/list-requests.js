@@ -67,13 +67,17 @@ async function execute(interaction) {
     padRight('Dept', 16) +
     padRight('Qty', 5) +
     padRight('Cost', 10) +
+    padRight('Ext', 12) +
     'Submitter'
   );
-  lines.push('-'.repeat(90));
+  lines.push('-'.repeat(102));
 
   for (const row of rows) {
     const cost = row.estimated_cost !== null
       ? '$' + Number(row.estimated_cost).toFixed(2)
+      : '—';
+    const ext = row.estimated_cost !== null
+      ? '$' + (Number(row.estimated_cost) * row.quantity).toFixed(2)
       : '—';
     const faculty = row.is_faculty ? ' [F]' : '';
 
@@ -84,6 +88,7 @@ async function execute(interaction) {
       padRight(truncate(row.department, 14), 16) +
       padRight(String(row.quantity), 5) +
       padRight(cost, 10) +
+      padRight(ext, 12) +
       truncate(row.submitter_name, 20) + faculty
     );
   }
