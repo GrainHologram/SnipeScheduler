@@ -252,7 +252,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $renewUserId = (int)($assetInfo['assigned_to_id'] ?? 0);
                 $renewModelId = (int)($assetInfo['model_id'] ?? 0);
 
-                if ($clCfg['enabled'] && $renewUserId > 0) {
+                if ($clCfg['enabled'] && $renewUserId > 0 && !$isAdmin) {
                     $newExpectedDt = new DateTime($normalized, app_get_timezone());
                     $renewErr = validate_renewal_duration(
                         $renewUserId,
@@ -369,7 +369,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $bulkAssetMap[(int)$bar['asset_id']] = $bar;
             }
 
-            if ($clCfg['enabled']) {
+            if ($clCfg['enabled'] && !$isAdmin) {
                 foreach ($bulkAssetIds as $aid) {
                     $info = $bulkAssetMap[$aid] ?? null;
                     if ($info === null) {
