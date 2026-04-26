@@ -45,9 +45,9 @@ $ownsReservation = $currentSnipeId !== ''
     && isset($reservation['snipeit_user_id'])
     && (string)$reservation['snipeit_user_id'] === $currentSnipeId;
 
-if (!$isStaff && !$ownsReservation) {
+if (!$isAdmin && !$ownsReservation) {
     http_response_code(403);
-    echo 'Access denied.';
+    echo 'Only admins or the reservation owner can delete reservations.';
     exit;
 }
 

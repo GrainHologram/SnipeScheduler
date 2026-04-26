@@ -372,7 +372,7 @@ foreach ($kitNames as $kid => $kname) {
                                     ?>
                                     <form method="post"
                                           action="delete_reservation.php"
-                                          onsubmit="return confirm('Delete this reservation and all its items? This cannot be undone.');">
+                                          onsubmit="return confirm('Delete reservation #<?= $resId ?>?\n\nThis will permanently remove the reservation and all its items. This cannot be undone.');">
                                         <input type="hidden" name="reservation_id" value="<?= $resId ?>">
                                         <button type="submit" class="btn btn-outline-danger btn-sm">
                                             Delete reservation
@@ -485,7 +485,7 @@ foreach ($kitNames as $kid => $kname) {
                                         ?>
                                         <form method="post"
                                               action="delete_reservation.php"
-                                              onsubmit="return confirm('Delete this reservation and all its items? This cannot be undone.');">
+                                              onsubmit="return confirm('Delete reservation #<?= $resId ?>?\n\nThis will permanently remove the reservation and all its items. This cannot be undone.');">
                                             <input type="hidden" name="reservation_id" value="<?= $resId ?>">
                                             <button type="submit" class="btn btn-outline-danger btn-sm">
                                                 Delete reservation
