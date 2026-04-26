@@ -597,6 +597,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $willDeleteReservation = $totalQtyBefore <= 1;
                 }
 
+                if ($willDeleteReservation && !$isAdmin) {
+                    throw new RuntimeException('Only admins can delete reservations. You can cancel it instead.');
+                }
                 if ($willDeleteReservation && ($_POST['confirm_delete'] ?? '') !== '1') {
                     throw new RuntimeException('Confirmation required to delete the reservation.');
                 }

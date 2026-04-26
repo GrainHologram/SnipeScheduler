@@ -263,11 +263,11 @@ $active  = 'staff_reservations.php'; // Treat detail view as part of booking his
 
             <?php
                 $deletableStatuses = (load_config())['reservations']['deletable_statuses'] ?? ['pending', 'confirmed', 'cancelled', 'missed'];
-                if (in_array($reservation['status'] ?? '', $deletableStatuses, true)):
+                if ($isAdmin && in_array($reservation['status'] ?? '', $deletableStatuses, true)):
             ?>
             <form method="post"
                   action="delete_reservation.php"
-                  onsubmit="return confirm('Delete this booking and all its items? This cannot be undone.');">
+                  onsubmit="return confirm('Delete reservation #<?= (int)$id ?> for <?= h($reservation['user_name'] ?? 'unknown') ?>?\n\nThis will permanently remove the reservation and all its items. This cannot be undone.');">
                 <input type="hidden" name="reservation_id" value="<?= (int)$id ?>">
                 <button class="btn btn-outline-danger" type="submit">
                     Delete this booking
