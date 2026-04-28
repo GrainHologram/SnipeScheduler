@@ -1013,7 +1013,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 <input type="hidden" name="booking_user_name" id="booking_user_name">
                 <input type="search" id="booking_user_input" name="user_lookup"
                        class="form-control form-control-sm cat-sidebar-user-search"
-                       placeholder="Search by name or email"
+                       placeholder="Search name or email"
                        autocomplete="off"
                        role="combobox"
                        aria-autocomplete="list"
@@ -1209,7 +1209,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
         </div>
         <?php endif; ?>
 
-        <?php if ($designVersion >= 2): ?><div class="catalogue-scroll-area"><?php endif; ?>
+        <?php if ($designVersion >= 2): ?><?php if ($staffNoUserSelected): ?><div class="catalogue-hud-label">Select User to Checkout Items</div><?php endif; ?><div class="catalogue-scroll-area<?php if ($staffNoUserSelected): ?> catalogue-no-user<?php endif; ?>"><?php endif; ?>
 
         <?php if (empty($models) && !$modelErr): ?>
             <div class="alert alert-info">
@@ -1302,10 +1302,25 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
 
                             // "Now" mode: use live cache count for currently checked-out assets.
                             if (array_key_exists($modelId, $checkedOutCounts)) {
-                                $activeCheckedOut = $checkedOutCounts[$modelId];
+                                $cacheCheckedOut = $checkedOutCounts[$modelId];
                             } else {
-                                $activeCheckedOut = count_checked_out_assets_by_model($modelId);
+                                $cacheCheckedOut = count_checked_out_assets_by_model($modelId);
                             }
+                            // Also query checkout_items for open/partial checkouts tracked locally —
+                            // the cache can be stale if the sync cron hasn't run since the last checkout.
+                            $coNowStmt = $pdo->prepare("
+                                SELECT COUNT(*) AS co_qty
+                                FROM checkout_items ci
+                                JOIN checkouts c ON c.id = ci.checkout_id
+                                WHERE ci.model_id = :mid
+                                  AND ci.checked_in_at IS NULL
+                                  AND c.status IN ('open','partial')
+                            ");
+                            $coNowStmt->execute([':mid' => $modelId]);
+                            $localCheckedOut = (int)(($coNowStmt->fetch(PDO::FETCH_ASSOC))['co_qty'] ?? 0);
+                            // Use the higher of the two sources: cache covers Snipe-IT-direct checkouts,
+                            // checkout_items covers locally-tracked checkouts when the cache is stale.
+                            $activeCheckedOut = max($cacheCheckedOut, $localCheckedOut);
                             $booked = $pendingQty + $activeCheckedOut;
                         }
                         $freeNow = max(0, $assetCount - $booked);
@@ -1317,113 +1332,6 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         $maxQty     = 0;
                         $isRequestable = $assetCount > 0;
                     }
-                    // Fetch schedule info for this model (conflicting, prior, next reservations)
-                    $scheduleConflicts = [];
-                    $schedulePrior = null;
-                    $scheduleNext = null;
-                    try {
-                        if ($windowActive) {
-                            // Conflicting reservations in the selected window
-                            $schedStmt = $pdo->prepare("
-                                SELECT r.id, r.user_name, r.status, r.start_datetime, r.end_datetime,
-                                       COALESCE(SUM(ri.quantity), 0) AS qty
-                                FROM reservations r
-                                JOIN reservation_items ri ON ri.reservation_id = r.id
-                                WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed')
-                                  AND r.start_datetime < :end
-                                  AND r.end_datetime > :start
-                                GROUP BY r.id
-                                ORDER BY r.start_datetime ASC
-                                LIMIT 10
-                            ");
-                            $schedStmt->execute([':mid' => $modelId, ':start' => $windowStartIso, ':end' => $windowEndIso]);
-
-                            // Prior reservation (ends before window start)
-                            $priorStmt = $pdo->prepare("
-                                SELECT r.start_datetime, r.end_datetime, r.status,
-                                       COALESCE(SUM(ri.quantity), 0) AS qty
-                                FROM reservations r
-                                JOIN reservation_items ri ON ri.reservation_id = r.id
-                                WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed')
-                                  AND r.end_datetime <= :start
-                                GROUP BY r.id
-                                ORDER BY r.end_datetime DESC
-                                LIMIT 1
-                            ");
-                            $priorStmt->execute([':mid' => $modelId, ':start' => $windowStartIso]);
-
-                            // Next reservation (starts after window end)
-                            $nextStmt = $pdo->prepare("
-                                SELECT r.start_datetime, r.end_datetime, r.status,
-                                       COALESCE(SUM(ri.quantity), 0) AS qty
-                                FROM reservations r
-                                JOIN reservation_items ri ON ri.reservation_id = r.id
-                                WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed')
-                                  AND r.start_datetime >= :end
-                                GROUP BY r.id
-                                ORDER BY r.start_datetime ASC
-                                LIMIT 1
-                            ");
-                            $nextStmt->execute([':mid' => $modelId, ':end' => $windowEndIso]);
-                        } else {
-                            // "Now" mode — overlapping reservations
-                            $schedStmt = $pdo->prepare("
-                                SELECT r.id, r.user_name, r.status, r.start_datetime, r.end_datetime,
-                                       COALESCE(SUM(ri.quantity), 0) AS qty
-                                FROM reservations r
-                                JOIN reservation_items ri ON ri.reservation_id = r.id
-                                WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed')
-                                  AND r.start_datetime <= :now
-                                  AND r.end_datetime > :now
-                                GROUP BY r.id
-                                ORDER BY r.start_datetime ASC
-                                LIMIT 10
-                            ");
-                            $schedStmt->execute([':mid' => $modelId, ':now' => $nowIso]);
-
-                            // Prior reservation (ended before now)
-                            $priorStmt = $pdo->prepare("
-                                SELECT r.start_datetime, r.end_datetime, r.status,
-                                       COALESCE(SUM(ri.quantity), 0) AS qty
-                                FROM reservations r
-                                JOIN reservation_items ri ON ri.reservation_id = r.id
-                                WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed')
-                                  AND r.end_datetime <= :now
-                                GROUP BY r.id
-                                ORDER BY r.end_datetime DESC
-                                LIMIT 1
-                            ");
-                            $priorStmt->execute([':mid' => $modelId, ':now' => $nowIso]);
-
-                            // Next reservation (starts after now)
-                            $nextStmt = $pdo->prepare("
-                                SELECT r.start_datetime, r.end_datetime, r.status,
-                                       COALESCE(SUM(ri.quantity), 0) AS qty
-                                FROM reservations r
-                                JOIN reservation_items ri ON ri.reservation_id = r.id
-                                WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed')
-                                  AND r.start_datetime > :now
-                                GROUP BY r.id
-                                ORDER BY r.start_datetime ASC
-                                LIMIT 1
-                            ");
-                            $nextStmt->execute([':mid' => $modelId, ':now' => $nowIso]);
-                        }
-
-                        $scheduleConflicts = $schedStmt->fetchAll(PDO::FETCH_ASSOC);
-                        $schedulePrior = $priorStmt->fetch(PDO::FETCH_ASSOC) ?: null;
-                        $scheduleNext = $nextStmt->fetch(PDO::FETCH_ASSOC) ?: null;
-                    } catch (Throwable $e) {
-                        // Non-fatal — schedule info is supplementary
-                    }
-                    $hasScheduleInfo = !empty($scheduleConflicts) || $schedulePrior || $scheduleNext;
-
                     $notes      = $model['notes'] ?? '';
                     if (is_array($notes)) {
                         $notes = $notes['text'] ?? '';
@@ -1450,10 +1358,10 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     }
                     ?>
                     <div class="col-md-4">
-                        <div class="card h-100 model-card">
+                        <div class="card h-100 model-card<?= ($isRequestable && $freeNow > 0) ? '' : ' model-card--unavailable' ?>">
                             <?php if ($proxiedImage !== ''): ?>
                                 <div class="model-image-wrapper">
-                                    <a href="#" onclick="openModelHistory(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
+                                    <a href="#" onclick="<?= $designVersion >= 2 ? 'openModelDetail' : 'openModelHistory' ?>(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
                                         <img src="<?= htmlspecialchars($proxiedImage) ?>"
                                              alt=""
                                              class="model-image img-fluid">
@@ -1461,7 +1369,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                 </div>
                             <?php else: ?>
                                 <div class="model-image-wrapper model-image-wrapper--placeholder">
-                                    <a href="#" onclick="openModelHistory(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
+                                    <a href="#" onclick="<?= $designVersion >= 2 ? 'openModelDetail' : 'openModelHistory' ?>(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
                                         <div class="model-image-placeholder">
                                             No image
                                         </div>
@@ -1469,166 +1377,122 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                 </div>
                             <?php endif; ?>
 
+                            <?php
+                                $undeployInfo = $bulkStats ? $bulkStats['undeployable'] : ['undeployable_count' => 0, 'status_names' => []];
+                                $uCount   = $undeployInfo['undeployable_count'];
+                                $uStatuses = $uCount > 0 ? implode(', ', $undeployInfo['status_names']) : '';
+                            ?>
                             <div class="card-body d-flex flex-column">
-                                <h5 class="card-title">
-                                    <a href="#" class="model-history-link" onclick="openModelHistory(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
-                                        <?= label_safe($name) ?>
-                                    </a>
-                                </h5>
-                                <p class="card-text small text-muted mb-2">
+                                <div class="model-nameline">
+                                    <h5 class="card-title">
+                                        <a href="#" class="model-history-link" onclick="<?= $designVersion >= 2 ? 'openModelDetail' : 'openModelHistory' ?>(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
+                                            <?= label_safe($name) ?>
+                                        </a>
+                                    </h5>
                                     <?php if ($manuName): ?>
-                                        <span><strong>Manufacturer:</strong> <?= label_safe($manuName) ?></span><br>
+                                        <span class="model-meta-manufacturer"><strong>Manufacturer:</strong> <?= label_safe($manuName) ?></span>
                                     <?php endif; ?>
-                                    <?php if ($catName): ?>
-                                        <span><strong>Category:</strong> <?= label_safe($catName) ?></span><br>
-                                    <?php endif; ?>
-                                    <?php if ($assetCount !== null): ?>
-                                        <span><strong>Requestable units:</strong> <?= $assetCount ?></span><br>
-                                    <?php endif; ?>
-                                    <span><strong><?= $windowActive ? 'Available for selected dates:' : 'Available now:' ?></strong> <?= $freeNow ?></span>
-                                    <?php if (!empty($notes)): ?>
-                                        <div class="mt-2 text-muted clamp-3">
-                                            <?= label_safe($notes) ?>
-                                        </div>
-                                    <?php endif; ?>
-                                    <?php
-                                        $undeployInfo = $bulkStats ? $bulkStats['undeployable'] : ['undeployable_count' => 0, 'status_names' => []];
-                                        if ($undeployInfo['undeployable_count'] > 0):
-                                            $uCount = $undeployInfo['undeployable_count'];
-                                            $uStatuses = implode(', ', $undeployInfo['status_names']);
-                                    ?>
-                                        <div class="mt-2">
-                                            <span class="badge bg-danger" title="<?= h($uStatuses) ?>"><?= $uCount ?> unit<?= $uCount !== 1 ? 's' : '' ?> unavailable (<?= h($uStatuses) ?>)</span>
-                                        </div>
-                                    <?php endif; ?>
-                                    <?php if (!empty($authReqs['certs'])): ?>
-                                        <div class="mt-1">
-                                            <?php foreach ($authReqs['certs'] as $certName): ?>
-                                                <span class="badge bg-warning text-dark"><?= h($certName) ?></span>
-                                            <?php endforeach; ?>
-                                        </div>
-                                    <?php endif; ?>
-                                    <?php if (!empty($authReqs['access_levels'])): ?>
-                                        <div class="mt-1">
-                                            <?php foreach ($authReqs['access_levels'] as $level): ?>
-                                                <span class="badge bg-info text-dark"><?= h($level) ?></span>
-                                            <?php endforeach; ?>
-                                        </div>
-                                    <?php endif; ?>
-                                </p>
-
-                                <?php if ($hasScheduleInfo): $utcTz = new DateTimeZone('UTC'); ?>
-                                    <div class="schedule-info mt-2 mb-2">
-                                        <button type="button"
-                                                class="btn btn-sm btn-outline-secondary w-100 schedule-toggle"
-                                                onclick="this.parentElement.classList.toggle('schedule-open')">
-                                            View schedule
-                                        </button>
-                                        <div class="schedule-details">
-                                            <?php if ($schedulePrior): ?>
-                                                <div class="schedule-entry schedule-prior">
-                                                    <span class="schedule-label">Previous:</span>
-                                                    <?= layout_status_badge($schedulePrior['status']) ?>
-                                                    <span class="schedule-qty"><?= (int)$schedulePrior['qty'] ?> unit<?= (int)$schedulePrior['qty'] !== 1 ? 's' : '' ?></span>
-                                                    <span class="schedule-dates">
-                                                        <?= h(app_format_datetime_local($schedulePrior['start_datetime'], null, $utcTz)) ?>
-                                                        – <?= h(app_format_datetime_local($schedulePrior['end_datetime'], null, $utcTz)) ?>
-                                                    </span>
-                                                </div>
-                                            <?php endif; ?>
-
-                                            <?php if (!empty($scheduleConflicts)): ?>
-                                                <div class="schedule-section-label">Conflicts:</div>
-                                                <?php foreach ($scheduleConflicts as $conflict): ?>
-                                                    <div class="schedule-entry schedule-conflict">
-                                                        <?= layout_status_badge($conflict['status']) ?>
-                                                        <span class="schedule-qty"><?= (int)$conflict['qty'] ?> unit<?= (int)$conflict['qty'] !== 1 ? 's' : '' ?></span>
-                                                        <span class="schedule-dates">
-                                                            <?= h(app_format_datetime_local($conflict['start_datetime'], null, $utcTz)) ?>
-                                                            – <?= h(app_format_datetime_local($conflict['end_datetime'], null, $utcTz)) ?>
-                                                        </span>
-                                                        <?php if ($isStaff && !empty($conflict['user_name'])): ?>
-                                                            <span class="schedule-user text-muted">(<?= h($conflict['user_name']) ?>)</span>
-                                                        <?php endif; ?>
-                                                    </div>
-                                                <?php endforeach; ?>
-                                            <?php endif; ?>
-
-                                            <?php if ($scheduleNext): ?>
-                                                <div class="schedule-entry schedule-next">
-                                                    <span class="schedule-label">Next:</span>
-                                                    <?= layout_status_badge($scheduleNext['status']) ?>
-                                                    <span class="schedule-qty"><?= (int)$scheduleNext['qty'] ?> unit<?= (int)$scheduleNext['qty'] !== 1 ? 's' : '' ?></span>
-                                                    <span class="schedule-dates">
-                                                        <?= h(app_format_datetime_local($scheduleNext['start_datetime'], null, $utcTz)) ?>
-                                                        – <?= h(app_format_datetime_local($scheduleNext['end_datetime'], null, $utcTz)) ?>
-                                                    </span>
-                                                </div>
-                                            <?php endif; ?>
-                                        </div>
+                                </div>
+                                <?php if (!empty($notes)): ?>
+                                <p class="card-text small text-muted mb-2">
+                                    <div class="model-meta-notes clamp-3">
+                                        <?= label_safe($notes) ?>
                                     </div>
+                                </p>
                                 <?php endif; ?>
 
-                                <form method="post"
-                                      action="basket_add.php"
-                                      class="mt-auto add-to-basket-form">
-                                    <input type="hidden" name="model_id" value="<?= $modelId ?>">
-                                    <?php if ($windowActive): ?>
-                                        <input type="hidden" name="start_datetime" value="<?= h($windowStartRaw) ?>">
-                                        <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
+                                <?php if ($catName || !empty($authReqs['certs']) || !empty($authReqs['access_levels']) || $uCount > 0): ?>
+                                <div class="model-card-tags">
+                                    <?php if ($catName): ?>
+                                        <span class="model-meta-category"><?= label_safe($catName) ?></span>
                                     <?php endif; ?>
+                                    <?php foreach ($authReqs['certs'] as $certName): ?>
+                                        <span class="model-cert-tag"><?= h($certName) ?></span>
+                                    <?php endforeach; ?>
+                                    <?php foreach ($authReqs['access_levels'] as $level): ?>
+                                        <span class="model-access-tag"><?= h($level) ?></span>
+                                    <?php endforeach; ?>
+                                    <?php if ($uCount > 0): ?>
+                                        <span class="model-unavailable-tag" title="<?= h($uStatuses) ?>"><?= $uCount ?> unit<?= $uCount !== 1 ? 's' : '' ?> unavailable</span>
+                                    <?php endif; ?>
+                                </div>
+                                <?php endif; ?>
 
-                                    <?php if ($staffNoUserSelected): ?>
-                                        <div class="alert alert-info small mb-0">Select a user above before adding to basket.</div>
-                                    <?php elseif ($accessBlocked): ?>
-                                        <div class="alert alert-warning small mb-0">
-                                            You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.
-                                        </div>
-                                        <button type="button"
-                                                class="btn btn-sm btn-secondary w-100 mt-2"
-                                                disabled>
-                                            Add to basket
-                                        </button>
-                                    <?php elseif ($authBlocked): ?>
-                                        <div class="alert alert-warning small mb-0">
-                                            <?php if (!empty($authMissing['certs'])): ?>
-                                                Requires certification: <?= h(implode(', ', $authMissing['certs'])) ?>
-                                            <?php else: ?>
-                                                Requires access level: <?= h(implode(', ', $authMissing['access_levels'] ?? [])) ?>
+                                <div class="model-card-right">
+                                    <div class="model-meta-availability">
+                                        <?php
+                                        if ($assetCount !== null && $freeNow <= 0) $availDotClass = 'model-avail-dot--red';
+                                        elseif ($assetCount !== null && $freeNow < $assetCount) $availDotClass = 'model-avail-dot--yellow';
+                                        else $availDotClass = 'model-avail-dot--green';
+                                        ?>
+                                        <?php if ($assetCount !== null): ?>
+                                            <span class="model-meta-requestable"><span class="model-avail-dot model-avail-dot--green"></span><strong>Requestable:</strong> <?= $assetCount ?></span>
+                                        <?php endif; ?>
+                                        <span class="model-meta-available"><span class="model-avail-dot <?= $availDotClass ?>"></span><strong><?= $windowActive ? 'Available (dates):' : 'Available:' ?></strong> <?= $freeNow ?></span>
+                                    </div>
+                                    <form method="post"
+                                          action="basket_add.php"
+                                          class="mt-auto add-to-basket-form">
+                                        <input type="hidden" name="model_id" value="<?= $modelId ?>">
+                                        <?php if ($windowActive): ?>
+                                            <input type="hidden" name="start_datetime" value="<?= h($windowStartRaw) ?>">
+                                            <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
+                                        <?php endif; ?>
+
+                                        <?php if ($staffNoUserSelected): ?>
+                                            <?php if ($designVersion < 2): ?>
+                                            <div class="alert alert-info small mb-0">Select a user above before adding to basket.</div>
                                             <?php endif; ?>
-                                        </div>
-                                        <button type="button"
-                                                class="btn btn-sm btn-secondary w-100 mt-2"
-                                                disabled>
-                                            Add to basket
-                                        </button>
-                                    <?php elseif ($isRequestable && $freeNow > 0): ?>
-                                        <div class="row g-2 align-items-center mb-2">
-                                            <div class="col-6">
-                                                <label class="form-label mb-0 small">Quantity</label>
-                                                <input type="number"
-                                                       name="quantity"
-                                                       class="form-control form-control-sm"
-                                                       value="1"
-                                                       min="1"
-                                                       max="<?= $maxQty ?>">
+                                        <?php elseif ($accessBlocked): ?>
+                                            <div class="alert alert-warning small mb-0">
+                                                You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.
                                             </div>
-                                        </div>
+                                            <button type="button"
+                                                    class="btn btn-sm btn-secondary w-100 mt-2"
+                                                    disabled>
+                                                Add to basket
+                                            </button>
+                                        <?php elseif ($authBlocked): ?>
+                                            <div class="alert alert-warning small mb-0">
+                                                <?php if (!empty($authMissing['certs'])): ?>
+                                                    Requires certification: <?= h(implode(', ', $authMissing['certs'])) ?>
+                                                <?php else: ?>
+                                                    Requires access level: <?= h(implode(', ', $authMissing['access_levels'] ?? [])) ?>
+                                                <?php endif; ?>
+                                            </div>
+                                            <button type="button"
+                                                    class="btn btn-sm btn-secondary w-100 mt-2"
+                                                    disabled>
+                                                Add to basket
+                                            </button>
+                                        <?php elseif ($isRequestable && $freeNow > 0): ?>
+                                            <div class="row g-2 align-items-center mb-2">
+                                                <div class="col-6">
+                                                    <label class="form-label mb-0 small">Quantity</label>
+                                                    <input type="number"
+                                                           name="quantity"
+                                                           class="form-control form-control-sm"
+                                                           value="1"
+                                                           min="1"
+                                                           max="<?= $maxQty ?>">
+                                                </div>
+                                            </div>
 
-                                        <button type="submit"
-                                                class="btn btn-sm btn-success w-100">
-                                            Add to basket
-                                        </button>
-                                    <?php else: ?>
-                                        <div class="alert alert-danger small mb-0">
-                                            <?php if (!$isRequestable): ?>
-                                                No requestable units available.
-                                            <?php else: ?>
-                                                <?= $windowActive ? 'No units available for selected dates.' : 'No units available right now.' ?>
-                                            <?php endif; ?>
-                                        </div>
-                                    <?php endif; ?>
-                                </form>
+                                            <button type="submit"
+                                                    class="btn btn-sm btn-success w-100">
+                                                Add to basket
+                                            </button>
+                                        <?php else: ?>
+                                            <div class="alert alert-danger small mb-0">
+                                                <?php if (!$isRequestable): ?>
+                                                    No requestable units available.
+                                                <?php else: ?>
+                                                    <?= $windowActive ? 'No units available for selected dates.' : 'No units available right now.' ?>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endif; ?>
+                                    </form>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1842,7 +1706,18 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                     $stmt->execute([':mid' => $mid, ':now' => $nowIso]);
                                     $pendingQty = (int)(($stmt->fetch(PDO::FETCH_ASSOC))['pending_qty'] ?? 0);
 
-                                    $activeCheckedOut = $checkedOutCounts[$mid] ?? count_checked_out_assets_by_model($mid);
+                                    $cacheCheckedOut = $checkedOutCounts[$mid] ?? count_checked_out_assets_by_model($mid);
+                                    $coNowStmt2 = $pdo->prepare("
+                                        SELECT COUNT(*) AS co_qty
+                                        FROM checkout_items ci
+                                        JOIN checkouts c ON c.id = ci.checkout_id
+                                        WHERE ci.model_id = :mid
+                                          AND ci.checked_in_at IS NULL
+                                          AND c.status IN ('open','partial')
+                                    ");
+                                    $coNowStmt2->execute([':mid' => $mid]);
+                                    $localCheckedOut = (int)(($coNowStmt2->fetch(PDO::FETCH_ASSOC))['co_qty'] ?? 0);
+                                    $activeCheckedOut = max($cacheCheckedOut, $localCheckedOut);
                                     $booked = $pendingQty + $activeCheckedOut;
                                 }
 
@@ -2084,7 +1959,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             </div>
             <?php endif; ?>
 
-            <?php if ($designVersion >= 2): ?><div class="catalogue-scroll-area"><?php endif; ?>
+            <?php if ($designVersion >= 2): ?><?php if ($staffNoUserSelected): ?><div class="catalogue-hud-label">Select User to Checkout Items</div><?php endif; ?><div class="catalogue-scroll-area<?php if ($staffNoUserSelected): ?> catalogue-no-user<?php endif; ?>"><?php endif; ?>
 
             <?php if ($windowActive): ?>
                 <div class="alert alert-info">
@@ -2150,7 +2025,9 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                     <?php endif; ?>
 
                                     <?php if ($staffNoUserSelected): ?>
+                                        <?php if ($designVersion < 2): ?>
                                         <div class="alert alert-info small mb-0">Select a user above before adding to basket.</div>
+                                        <?php endif; ?>
                                     <?php elseif ($accessBlocked): ?>
                                         <div class="alert alert-warning small mb-0">
                                             You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.
@@ -2926,7 +2803,11 @@ function revertToLoggedIn(e) {
 }
 });
 </script>
+<?php if ($designVersion < 2): ?>
 <?php layout_model_history_modal($isStaff); ?>
+<?php else: ?>
+<script>window._modelDetailIsStaff = <?= $isStaff ? 'true' : 'false' ?>;</script>
+<?php endif; ?>
 <?php if ($designVersion >= 2): ?>
 <script>
 // ---- View toggle (grid / list) — topbar (desktop) + sidebar (mobile) ----

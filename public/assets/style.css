@@ -98,7 +98,13 @@ input[type="checkbox"] {
 .cat-sidebar-window-display,
 .cat-sidebar-section-divider,
 #windowModalBackdrop,
-#windowModal {
+#windowModal,
+#discordLinkBanner,
+#announcementBackdrop,
+#announcementModal,
+.account-panel,
+.account-panel-backdrop,
+.catalogue-hud-label {
     display: none;
 }
 
@@ -1518,3 +1524,5 @@ form .form-select {
         size: landscape;
     }
 }
+
+.model-avail-dot { display: none; }

@@ -167,9 +167,9 @@ if (!function_exists('layout_render_nav')) {
 
         if ($designVersion >= 2) {
             $links = [
-                ['href' => 'index.php',        'label' => 'Dashboard',        'staff' => false, 'icon' => 'bi-speedometer2'],
-                ['href' => 'my_bookings.php',  'label' => 'My Gear',          'staff' => false, 'icon' => 'bi-calendar-check'],
-                ['href' => 'reservations.php', 'label' => 'Reservations',     'staff' => true,  'icon' => 'bi-calendar3'],
+                ['href' => 'index.php',       'label' => 'Dashboard', 'staff' => false, 'icon' => 'bi-speedometer2'],
+                ['href' => 'my_bookings.php', 'label' => 'My Gear',   'staff' => false, 'icon' => 'bi-calendar-check'],
+                ['href' => 'reservations.php',            'label' => 'Reservations',      'staff' => true,  'icon' => 'bi-calendar3'],
 
                 ['type' => 'header', 'label' => 'Catalogue',   'staff' => false],
                 ['href' => 'catalogue.php?tab=equipment&prefetch=1', 'label' => 'Equipment', 'staff' => false, 'tab' => 'equipment', 'icon' => 'bi-camera-video'],
@@ -191,7 +191,7 @@ if (!function_exists('layout_render_nav')) {
                 ['href' => 'quick_checkin.php',   'label' => 'Quick Checkin',   'staff' => true],
                 ['href' => 'activity_log.php',    'label' => 'Admin',           'staff' => false, 'admin_only' => true],
                 ['href' => '#',                   'label' => 'Feedback',        'staff' => true, 'onclick' => 'openFeedbackModal(); return false;', 'class' => 'app-nav-feedback'],
-                ['href' => 'my_bookings.php',     'label' => 'My Gear',         'staff' => false, 'right' => true],
+                ['href' => 'my_bookings.php',     'label' => 'My Reservations', 'staff' => false, 'right' => true],
             ];
         }
 
@@ -231,7 +231,7 @@ if (!function_exists('layout_render_nav')) {
             $ariaLabel = ' aria-label="' . $label . '" title="' . $label . '"';
             $html .= '<a href="' . $href . '" class="' . $classes . '"' . $style . $onclick . $ariaLabel . '>' . $icon . '<span class="app-nav-label">' . $label . '</span></a>';
         }
-        $html .= '<a href="#" class="app-nav-feedback-glyph" onclick="openFeedbackModal(); return false;" aria-label="Feedback" title="Submit Feedback"><i class="bi bi-chat-left-dots" aria-hidden="true"></i></a>';
+        $html .= '<a href="feedback_submit.php" class="app-nav-feedback-glyph" aria-label="Feedback" title="Submit Feedback"><i class="bi bi-chat-left-dots" aria-hidden="true"></i></a>';
 
         $user      = $_SESSION['user'] ?? [];
         $firstName = $user['first_name'] ?? '';
@@ -239,17 +239,30 @@ if (!function_exists('layout_render_nav')) {
         $fullName  = htmlspecialchars(trim($firstName . ' ' . $lastName), ENT_QUOTES, 'UTF-8');
         $email     = htmlspecialchars($user['email'] ?? '', ENT_QUOTES, 'UTF-8');
 
-        $html .= '<details class="app-nav-user">'
-               . '<summary class="app-nav-user-trigger" aria-label="User menu for ' . $fullName . '">'
+        $html .= '<button type="button" class="app-nav-user" id="accountPanelTrigger"'
+               . ' aria-label="Account settings for ' . $fullName . '"'
+               . ' aria-haspopup="dialog" aria-controls="accountPanel" aria-expanded="false">'
                . '<span class="app-nav-user-name">' . $fullName . '</span>'
                . '<span class="app-nav-user-email">' . $email . '</span>'
-               . '</summary>'
-               . '<div class="app-nav-user-popover">'
-               . '<a href="logout.php" class="app-nav-user-action">Log out</a>'
-               . '</div>'
-               . '</details>';
+               . '</button>';
 
         $html .= '</nav>';
+
+        if ($designVersion >= 2) {
+            $html .= '<div class="account-panel-backdrop" id="accountPanelBackdrop" aria-hidden="true"></div>'
+                   . '<aside class="account-panel" id="accountPanel" role="dialog" aria-modal="true" aria-label="My Account">'
+                   . '<div class="account-panel-header">'
+                   . '<span class="account-panel-title">My Account</span>'
+                   . '<button type="button" class="account-panel-close" id="accountPanelClose" aria-label="Close account panel">'
+                   . '<i class="bi bi-x-lg" aria-hidden="true"></i>'
+                   . '</button>'
+                   . '</div>'
+                   . '<div class="account-panel-body" id="accountPanelBody"></div>'
+                   . '<div class="account-panel-footer">'
+                   . '<a href="logout.php" class="btn btn-outline-danger btn-sm w-100">Log out</a>'
+                   . '</div>'
+                   . '</aside>';
+        }
 
         $html .= layout_discord_link_banner();
 
@@ -282,17 +295,22 @@ if (!function_exists('layout_render_topbar')) {
             'opening_hours.php'      => 'Opening Hours',
             'overdue_report.php'     => 'Overdue Report',
             'staff_checkout.php'     => 'Staff Checkout',
-            'staff_reservations.php' => 'Staff Reservations',
+            'staff_reservations.php'       => 'Staff Reservations',
+            'purchase_request_submit.php'  => 'Purchase Requests',
+            'my_account.php'               => 'My Account',
+            'feedback_submit.php'          => 'Feedback',
         ];
 
         $title = $titles[$active] ?? '';
         $html  = '<div class="app-topbar">';
         $html .= '<button class="app-topbar-hamburger" type="button" aria-label="Open navigation menu" aria-expanded="false" aria-controls="app-nav"><i class="bi bi-list" aria-hidden="true"></i></button>';
+        $html .= '<span class="app-topbar-crumbs" id="app-topbar-crumbs">';
         $html .= '<span class="app-topbar-title">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</span>';
         if ($subtitle !== '') {
-            $html .= '<span class="app-topbar-sep">›</span>';
-            $html .= '<span class="app-topbar-subtitle">' . htmlspecialchars($subtitle, ENT_QUOTES, 'UTF-8') . '</span>';
+            $html .= '<span class="app-topbar-sep" aria-hidden="true">›</span>';
+            $html .= '<span class="app-topbar-subtitle" id="app-topbar-crumb-1">' . htmlspecialchars($subtitle, ENT_QUOTES, 'UTF-8') . '</span>';
         }
+        $html .= '</span>';
         if ($active === 'catalogue.php') {
             $html .= '<div class="cat-topbar-view">';
             $html .= '<button type="button" class="cat-topbar-view-btn cat-view-toggle" id="cat-view-btn-top" aria-haspopup="true" aria-expanded="false">';
@@ -306,7 +324,7 @@ if (!function_exists('layout_render_topbar')) {
             $html .= '</div>';
             $html .= '</div>';
         }
-        if ($active === 'catalogue.php' || $active === 'my_bookings.php') {
+        if ($active === 'catalogue.php') {
             $html .= '<a href="basket.php" class="app-topbar-basket"><i class="bi bi-basket" aria-hidden="true"></i> View Basket</a>';
         }
         $html .= '</div>';
@@ -529,13 +547,13 @@ if (!function_exists('layout_announcements')) {
         ?>
 <div id="announcementBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1050;" onclick="dismissAnnouncement()"></div>
 <div id="announcementModal" style="display:none; position:fixed; inset:0; z-index:1055; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)dismissAnnouncement()">
-    <div style="max-width:550px; margin:0 auto; background:#fff; border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid #dee2e6;">
+    <div style="max-width:550px; margin:0 auto; background:var(--panel, #fff); border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid var(--border, #dee2e6);">
             <h5 style="margin:0;" id="announcementTitle"></h5>
             <button type="button" onclick="dismissAnnouncement()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
         </div>
         <div style="padding:1rem;" id="announcementBody"></div>
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:.75rem 1rem; border-top:1px solid #dee2e6;">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:.75rem 1rem; border-top:1px solid var(--border, #dee2e6);">
             <span class="text-muted small" id="announcementCounter"></span>
             <div class="d-flex gap-2">
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="announcementNextBtn" onclick="nextAnnouncement()" style="display:none;">Next</button>

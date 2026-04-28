@@ -140,17 +140,37 @@ try {
 
 // Fetch asset inventory from Snipe-IT API
 $assets = [];
+$requestableCount = 0;
+$availableCount = 0;
+$pulledForRepairCount = 0;
+
+$config = load_config();
+$repairStatusName = $config['snipeit']['repair_status_name'] ?? 'Pulled for Repair/Replace';
+
 try {
     $rawAssets = list_assets_by_model($modelId);
     foreach ($rawAssets as $a) {
-        // Non-staff: only show requestable assets
-        if (!$isStaff && empty($a['requestable'])) {
-            continue;
-        }
-
         $statusLabel = $a['status_label'] ?? [];
         $statusName = is_array($statusLabel) ? ($statusLabel['name'] ?? '') : '';
         $statusMeta = is_array($statusLabel) ? ($statusLabel['status_meta'] ?? '') : '';
+        $isRequestable = !empty($a['requestable']);
+        $isDeployable = is_asset_deployable($a);
+
+        // Compute aggregate counts across all assets (before staff/non-staff filter)
+        if ($isRequestable) {
+            $requestableCount++;
+            if ($isDeployable && $statusMeta !== 'deployed') {
+                $availableCount++;
+            }
+        }
+        if ($statusName === $repairStatusName) {
+            $pulledForRepairCount++;
+        }
+
+        // Non-staff: only show requestable assets
+        if (!$isStaff && !$isRequestable) {
+            continue;
+        }
 
         $asset = [
             'asset_id'   => (int)($a['id'] ?? 0),
@@ -158,7 +178,7 @@ try {
             'asset_name' => $a['name'] ?? '',
             'status'     => $statusName,
             'status_meta'=> $statusMeta,
-            'deployable' => is_asset_deployable($a),
+            'deployable' => $isDeployable,
         ];
 
         // Staff see who the asset is assigned to
@@ -176,14 +196,26 @@ try {
     // Assets unavailable — continue with empty list
 }
 
+$authRequirements = ['certs' => [], 'access_levels' => []];
+try {
+    $authRequirements = get_model_auth_requirements($modelId);
+} catch (Throwable $e) {
+    // Auth requirements unavailable — continue with empty
+}
+
 $result = [
-    'model_name'   => $modelName,
-    'model_image'  => $modelImage,
-    'manufacturer' => $manufacturer,
-    'category'     => $category,
-    'notes'        => $modelNotes,
-    'assets'       => $assets,
-    'is_staff'     => $isStaff,
+    'model_id'               => $modelId,
+    'model_name'             => $modelName,
+    'model_image'            => $modelImage,
+    'manufacturer'           => $manufacturer,
+    'category'               => $category,
+    'notes'                  => $modelNotes,
+    'assets'                 => $assets,
+    'is_staff'               => $isStaff,
+    'requestable_count'      => $requestableCount,
+    'available_count'        => $availableCount,
+    'pulled_for_repair_count'=> $pulledForRepairCount,
+    'auth_requirements'      => $authRequirements,
 ];
 
 // Staff-only sections

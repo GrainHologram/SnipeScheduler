@@ -6,10 +6,11 @@ require_once SRC_PATH . '/layout.php';
 require_once SRC_PATH . '/snipeit_client.php';
 require_once SRC_PATH . '/booking_helpers.php';
 
-$config  = load_config();
-$active  = basename($_SERVER['PHP_SELF']);
-$isAdmin = !empty($currentUser['is_admin']);
-$isStaff = !empty($currentUser['is_staff']) || $isAdmin;
+$config        = load_config();
+$active        = basename($_SERVER['PHP_SELF']);
+$isAdmin       = !empty($currentUser['is_admin']);
+$isStaff       = !empty($currentUser['is_staff']) || $isAdmin;
+$designVersion = (int)($config['app']['design_version'] ?? 1);
 
 // ── AJAX: user search (staff only) ──────────────────────────────────
 if ($isStaff && ($_GET['ajax'] ?? '') === 'user_search') {
@@ -240,7 +241,8 @@ foreach ($overdueGrouped as $email => $_grp) {
 
         <?php if ($isStaff): ?>
 
-        <!-- Quick user lookup -->
+        <!-- Quick user lookup (v1 only) -->
+        <?php if ($designVersion < 2): ?>
         <div class="card mb-3" style="overflow:visible; z-index:10;">
             <div class="card-body" style="overflow:visible;">
                 <div class="row g-2 align-items-end">
@@ -275,6 +277,7 @@ foreach ($overdueGrouped as $email => $_grp) {
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
         <!-- Summary stat cards -->
         <div class="row g-3 mb-3">
@@ -314,7 +317,179 @@ foreach ($overdueGrouped as $email => $_grp) {
             </div>
         </div>
 
-        <!-- Two-column layout -->
+        <?php if ($designVersion >= 2): ?>
+
+        <!-- v2: Pickups and Due Today side by side -->
+        <div class="row g-3 mb-3">
+            <!-- Upcoming pickups -->
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-semibold">Upcoming Pickups Today</div>
+                    <?php if (empty($pendingPickups)): ?>
+                        <div class="card-body text-muted">No pending pickups for today.</div>
+                    <?php else: ?>
+                        <?php $qzConfig = load_config()['qz_tray'] ?? []; ?>
+                        <div class="list-group list-group-flush">
+                            <?php foreach ($pickupsGrouped as $puEmail => $puGroup): ?>
+                                <?php
+                                    $firstRes = $puGroup['reservations'][0];
+                                    $earliestTime = app_format_time($firstRes['start_datetime']);
+                                    $puIsOverdue = isset($overdueUserEmails[$puEmail]);
+                                ?>
+                                <div class="list-group-item<?= $puIsOverdue ? ' list-group-item-warning' : '' ?>">
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        <span class="fw-semibold" style="min-width:0; flex:1;"><?= h($puGroup['user_name']) ?></span>
+                                        <?php if ($puIsOverdue): ?>
+                                            <span class="badge bg-danger flex-shrink-0">Overdue items</span>
+                                        <?php endif; ?>
+                                        <span class="text-muted small flex-shrink-0">Pickup <?= h($earliestTime) ?></span>
+                                        <?= layout_status_badge($firstRes['status']) ?>
+                                        <a href="reservations.php?tab=today&res=<?= (int)$firstRes['id'] ?>" class="btn btn-sm btn-outline-primary flex-shrink-0">Process</a>
+                                    </div>
+                                    <?php foreach ($puGroup['reservations'] as $pickup): ?>
+                                        <?php
+                                            $resItems = $pendingResItems[(int)$pickup['id']] ?? [];
+                                            $resLabel = $pickup['name'] ?: build_items_summary_text($resItems);
+                                            $totalQty = 0;
+                                            foreach ($resItems as $ri) { $totalQty += (int)($ri['qty'] ?? 0); }
+                                        ?>
+                                        <div class="d-flex align-items-center gap-2 ps-2" style="min-width:0;">
+                                            <span class="text-muted small" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1;">
+                                                <?= h($resLabel ?: '—') ?>
+                                            </span>
+                                            <?php if ($totalQty > 0): ?>
+                                                <a href="javascript:void(0)" onclick="showDashItems('reservation',<?= (int)$pickup['id'] ?>)"
+                                                   class="text-muted small flex-shrink-0" style="text-decoration:underline; cursor:pointer;">
+                                                    (<?= $totalQty ?> item<?= $totalQty !== 1 ? 's' : '' ?>)
+                                                </a>
+                                            <?php endif; ?>
+                                            <?php if (!empty($qzConfig['enabled'])): ?>
+                                                <button type="button" class="btn btn-sm btn-link text-muted p-0 flex-shrink-0"
+                                                        data-reservation-id="<?= (int)$pickup['id'] ?>"
+                                                        onclick="qzPrintReservationPickList(this)">
+                                                    <small>Pick List</small>
+                                                </button>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- Equipment due today -->
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-semibold">Equipment Due Today</div>
+                    <?php if (empty($dueToday)): ?>
+                        <div class="card-body text-muted">No equipment due back today.</div>
+                    <?php else: ?>
+                        <div class="list-group list-group-flush">
+                            <?php foreach ($dueTodayGrouped as $dtEmail => $dtGroup): ?>
+                                <?php
+                                    $earliestDue = $dtGroup['checkouts'][0]['end_datetime'];
+                                    $dueTime = app_format_time($earliestDue);
+                                ?>
+                                <div class="list-group-item">
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        <span class="fw-semibold" style="min-width:0; flex:1;"><?= h($dtGroup['user_name']) ?></span>
+                                        <span class="text-muted small flex-shrink-0">Due <?= h($dueTime) ?></span>
+                                        <?php if (!empty($dtGroup['snipeit_user_id'])): ?>
+                                            <a href="quick_checkin.php?user=<?= (int)$dtGroup['snipeit_user_id'] ?>" class="btn btn-sm btn-outline-primary flex-shrink-0">Checkin</a>
+                                        <?php endif; ?>
+                                    </div>
+                                    <?php foreach ($dtGroup['checkouts'] as $coRow): ?>
+                                        <?php
+                                            $coItems = $dueCheckoutItems[(int)$coRow['checkout_id']] ?? [];
+                                            $coName = $coRow['checkout_name'] ?: ($coRow['reservation_name'] ?: ($coRow['asset_name_cache'] ?: null));
+                                            if (!$coName && !empty($coItems)) {
+                                                $names = array_column($coItems, 'asset_name');
+                                                $coName = implode(', ', array_filter($names));
+                                            }
+                                            $coLabel = $coName ?: ($coRow['item_count'] . ' item' . ($coRow['item_count'] != 1 ? 's' : ''));
+                                            $itemCount = (int)$coRow['item_count'];
+                                        ?>
+                                        <div class="d-flex align-items-center gap-2 ps-2" style="min-width:0;">
+                                            <span class="text-muted small" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1;">
+                                                <?= h($coLabel) ?>
+                                            </span>
+                                            <?php if ($itemCount > 0): ?>
+                                                <a href="javascript:void(0)" onclick="showDashItems('checkout',<?= (int)$coRow['checkout_id'] ?>)"
+                                                   class="text-muted small flex-shrink-0" style="text-decoration:underline; cursor:pointer;">
+                                                    (<?= $itemCount ?> item<?= $itemCount !== 1 ? 's' : '' ?>)
+                                                </a>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
+        <!-- v2: Overdue full-width -->
+        <div class="card mb-3 <?= $overdueCount > 0 ? 'border-danger' : '' ?>">
+            <div class="card-header fw-semibold <?= $overdueCount > 0 ? 'bg-danger text-white' : '' ?>">
+                Overdue Items
+            </div>
+            <?php if (empty($overdueItems)): ?>
+                <div class="card-body text-muted">No overdue items.</div>
+            <?php else: ?>
+                <div class="list-group list-group-flush">
+                    <?php foreach ($overdueGrouped as $odEmail => $odGroup): ?>
+                        <?php
+                            $earliestOverdue = $odGroup['checkouts'][0]['end_datetime'];
+                            $overdueTime = app_format_datetime($earliestOverdue);
+                        ?>
+                        <div class="list-group-item">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <span class="fw-semibold" style="min-width:0; flex:1;"><?= h($odGroup['user_name']) ?></span>
+                                <span class="text-muted small flex-shrink-0">Due <?= h($overdueTime) ?></span>
+                                <?php if (!empty($odGroup['snipeit_user_id'])): ?>
+                                    <a href="quick_checkin.php?user=<?= (int)$odGroup['snipeit_user_id'] ?>" class="btn btn-sm btn-outline-danger flex-shrink-0">Checkin</a>
+                                <?php endif; ?>
+                            </div>
+                            <?php foreach ($odGroup['checkouts'] as $coRow): ?>
+                                <?php
+                                    $coItems = $overdueCheckoutItems[(int)$coRow['checkout_id']] ?? [];
+                                    $coName = $coRow['checkout_name'] ?: ($coRow['reservation_name'] ?: ($coRow['asset_name_cache'] ?: null));
+                                    if (!$coName && !empty($coItems)) {
+                                        $names = array_column($coItems, 'asset_name');
+                                        $coName = implode(', ', array_filter($names));
+                                    }
+                                    $coLabel = $coName ?: ($coRow['item_count'] . ' item' . ($coRow['item_count'] != 1 ? 's' : ''));
+                                    $itemCount = (int)$coRow['item_count'];
+                                ?>
+                                <div class="d-flex align-items-center gap-2 ps-2" style="min-width:0;">
+                                    <span class="text-muted small" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1;">
+                                        <?= h($coLabel) ?>
+                                    </span>
+                                    <?php if ($itemCount > 0): ?>
+                                        <a href="javascript:void(0)" onclick="showDashItems('overdue',<?= (int)$coRow['checkout_id'] ?>)"
+                                           class="text-muted small flex-shrink-0" style="text-decoration:underline; cursor:pointer;">
+                                            (<?= $itemCount ?> item<?= $itemCount !== 1 ? 's' : '' ?>)
+                                        </a>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+            <?php if ($overdueCount > 0): ?>
+                <div class="card-footer text-center">
+                    <a href="overdue_report.php" class="btn btn-sm btn-outline-danger">View Full Report</a>
+                </div>
+            <?php endif; ?>
+        </div>
+
+        <?php else: ?>
+
+        <!-- v1: Two-column layout -->
         <div class="row g-3">
             <!-- Left column -->
             <div class="col-md-7">
@@ -503,6 +678,8 @@ foreach ($overdueGrouped as $email => $_grp) {
             </div>
         </div>
 
+        <?php endif; ?>
+
         <!-- Items detail modal -->
         <div id="dashItemsBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1050;" onclick="closeDashItemsModal()"></div>
         <div id="dashItemsModal" style="display:none; position:fixed; inset:0; z-index:1055; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)closeDashItemsModal()">
@@ -552,11 +729,13 @@ foreach ($overdueGrouped as $email => $_grp) {
 
         <?php endif; ?>
 
+        <?php if ($designVersion < 2): ?>
         <div class="mt-4">
             <div class="alert alert-secondary mb-0">
                 Need help or something is missing from the catalogue? Please contact staff.
             </div>
         </div>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -618,7 +797,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 <?php endif; ?>
 
-<?php if ($isStaff): ?>
+<?php if ($isStaff && $designVersion < 2): ?>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var input = document.getElementById('dash_user_input');
