@@ -7,7 +7,6 @@ require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/layout.php';
 
 $config        = load_config();
-$designVersion = (int)(($config['app']['design_version'] ?? 1));
 $isAdmin  = !empty($currentUser['is_admin']);
 $isStaff  = !empty($currentUser['is_staff']) || $isAdmin;
 
@@ -651,7 +650,7 @@ $checkedOutCounts = [];
     <link rel="stylesheet" href="assets/slot-picker.css">
     <?= layout_theme_styles() ?>
 </head>
-<body class="p-4<?= $designVersion >= 2 ? ' page-catalogue' : '' ?>"
+<body class="p-4 page-catalogue"
       data-catalogue-overdue="<?= $blockCatalogueOverdue ? '1' : '0' ?>"
       data-date-format="<?= h(app_get_date_format()) ?>"
       data-time-format="<?= h(app_get_time_format()) ?>">
@@ -814,56 +813,6 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     }
                 }
             ?>
-            <?php if ($designVersion < 2): ?>
-            <div class="alert alert-info d-flex flex-column flex-md-row align-items-md-center justify-content-md-between booking-for-alert">
-                <div class="mb-2 mb-md-0">
-                    <?php if ($staffNoUserSelected): ?>
-                        <strong>No user selected</strong> — search to begin booking
-                    <?php else: ?>
-                        <strong>Booking for:</strong>
-                        <?= h($activeUser['email'] ?? '') ?>
-                        <?php if (!empty($activeUser['first_name'])): ?>
-                            (<?= h(trim(($activeUser['first_name'] ?? '') . ' ' . ($activeUser['last_name'] ?? ''))) ?>)
-                        <?php endif; ?>
-                        <?php if (!empty($userAccessLevels) || !empty($userCerts)): ?>
-                            <span class="ms-2">
-                                <?php foreach ($userAccessLevels as $level): ?>
-                                    <span class="badge bg-info text-dark"><?= h($level) ?></span>
-                                <?php endforeach; ?>
-                                <?php foreach ($userCerts as $cert): ?>
-                                    <span class="badge bg-warning text-dark"><?= h($cert) ?></span>
-                                <?php endforeach; ?>
-                            </span>
-                        <?php endif; ?>
-                    <?php endif; ?>
-                </div>
-                <form method="post" id="booking_user_form" class="d-flex gap-2 mb-0 flex-wrap position-relative" style="z-index: 9998;">
-                    <input type="hidden" name="mode" value="set_booking_user">
-                    <input type="hidden" name="booking_user_email" id="booking_user_email">
-                    <input type="hidden" name="booking_user_name" id="booking_user_name">
-                    <div class="position-relative">
-                        <input type="search"
-                               id="booking_user_input"
-                               name="user_lookup"
-                               class="form-control form-control-sm"
-                               placeholder="Start typing email or name"
-                               autocomplete="off"
-                               role="combobox"
-                               aria-autocomplete="list"
-                               aria-expanded="false"
-                               aria-controls="booking_user_suggestions">
-                        <div class="list-group position-absolute w-100"
-                             id="booking_user_suggestions"
-                             role="listbox"
-                             aria-label="User suggestions"
-                             style="z-index: 9999; max-height: 260px; overflow-y: auto; display: none; box-shadow: 0 12px 24px rgba(0,0,0,0.18);"></div>
-                    </div>
-                    <?php if ($bookingOverride): ?>
-                        <button class="btn btn-sm btn-outline-secondary" type="submit" name="booking_user_revert" value="1">Clear selected user</button>
-                    <?php endif; ?>
-                </form>
-            </div>
-            <?php endif; // $designVersion < 2 ?>
         <?php endif; // $isStaff ?>
 
         <?php if ($blockCatalogueOverdue): ?>
@@ -904,12 +853,6 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 }
             ?>
             <form class="filter-panel filter-panel--compact filter-panel--soft mb-3" method="get" action="catalogue.php" id="catalogue-window-form">
-                <?php if ($designVersion < 2): ?>
-                <div class="filter-panel__header d-flex align-items-center gap-3">
-                    <span class="filter-panel__dot"></span>
-                    <div class="filter-panel__title">RESERVATION WINDOW</div>
-                </div>
-                <?php endif; ?>
                 <input type="hidden" name="tab" value="<?= h($tab) ?>">
                 <input type="hidden" name="q" value="<?= h($searchRaw) ?>">
                 <?php foreach ($categoriesSelected as $_cid): ?><input type="hidden" name="category[]" value="<?= $_cid ?>"><?php endforeach; ?>
@@ -918,43 +861,6 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 <input type="hidden" name="start_datetime" id="window_start_datetime" value="<?= h($windowStartRaw) ?>">
                 <input type="hidden" name="end_datetime" id="window_end_datetime" value="<?= h($windowEndRaw) ?>">
                 <input type="hidden" name="window_clear" id="window_clear_flag" value="">
-                <?php if ($designVersion < 2): ?>
-                <div class="row g-3 align-items-end">
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Pick-up date &amp; time</label>
-                        <div id="window-start-picker"></div>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Return date &amp; time</label>
-                        <div id="window-end-picker"></div>
-                    </div>
-                    <div class="col-md-4 d-grid d-md-flex gap-2">
-                        <button class="btn btn-primary btn-lg w-100 flex-md-fill mt-3 mt-md-0 reservation-window-btn" type="button" id="window-today-btn">
-                            Today
-                        </button>
-                        <button class="btn btn-primary btn-lg w-100 flex-md-fill mt-3 mt-md-0 reservation-window-btn" type="submit">
-                            Update availability
-                        </button>
-                    </div>
-                </div>
-                <?php if ($isStaff): ?>
-                <div class="mt-2">
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input window-bypass-cap" type="checkbox" id="window-bypass-capacity">
-                        <label class="form-check-label" for="window-bypass-capacity">Bypass slot capacity</label>
-                    </div>
-                    <?php if ($isAdmin): ?>
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input window-bypass-closed" type="checkbox" id="window-bypass-closed">
-                        <label class="form-check-label" for="window-bypass-closed">Bypass closed hours</label>
-                    </div>
-                    <?php endif; ?>
-                </div>
-                <?php endif; ?>
-                <?php if ($windowError !== ''): ?>
-                    <div class="text-danger small mt-2"><?= h($windowError) ?></div>
-                <?php endif; ?>
-                <?php endif; // $designVersion < 2 ?>
             </form>
 
             <div class="catalogue-tab-nav">
@@ -983,8 +889,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             <?php endif; ?>
 
         <?php if ($tab === 'equipment'): ?>
-        <?php if ($designVersion >= 2): ?><div class="catalogue-layout"><aside class="catalogue-filter-sidebar" aria-label="Equipment filters"><?php endif; ?>
-        <?php if ($designVersion >= 2): ?>
+        <div class="catalogue-layout"><aside class="catalogue-filter-sidebar" aria-label="Equipment filters">
 
         <?php if ($isStaff): ?>
         <div class="cat-sidebar-user-card">
@@ -1057,13 +962,12 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
         </button>
 
         <hr class="cat-sidebar-section-divider">
-        <?php endif; // $designVersion >= 2 ?>
         <!-- Filters -->
 
         <form class="filter-panel mb-4" method="get" action="catalogue.php" id="catalogue-filter-form">
             <div class="filter-panel__header d-flex align-items-center gap-3">
                 <span class="filter-panel__dot"></span>
-                <div class="filter-panel__title"><?= $designVersion >= 2 ? 'FILTERS' : 'SEARCH' ?></div>
+                <div class="filter-panel__title">FILTERS</div>
             </div>
 
             <input type="hidden" name="tab" value="equipment">
@@ -1072,28 +976,8 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             <input type="hidden" name="prefetch" value="1">
 
             <div class="row g-3 align-items-end">
-                <?php if ($designVersion < 2): ?>
-                <div class="col-12 col-lg-5">
-                    <label class="form-label mb-1 fw-semibold">Search by name</label>
-                    <div class="input-group filter-search">
-                        <span class="input-group-text filter-search__icon" aria-hidden="true">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
-                                <line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                        </span>
-                        <input type="text"
-                               name="q"
-                               class="form-control form-control-lg filter-search__input"
-                               placeholder="Search by model name or manufacturer"
-                               value="<?= htmlspecialchars($searchRaw) ?>">
-                    </div>
-                </div>
-                <?php endif; // $designVersion < 2 — search row ?>
 
-                <?php if ($designVersion >= 2): ?>
-
-                <!-- v2: Sort + View toggle row, then Categories -->
+                <!-- Sort + View toggle row, then Categories -->
                 <div class="col-12">
                     <div class="cat-sort-view-row">
                         <div class="cat-sort-item">
@@ -1152,47 +1036,12 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     </div>
                 </div>
 
-                <?php else: ?>
-
-                <!-- v1: original order — Category then Sort -->
-                <div class="col-6 col-lg-3">
-                    <label class="form-label mb-1 fw-semibold">Category</label>
-                    <select name="category" class="form-select">
-                        <option value="">All categories</option>
-                        <?php foreach ($categories as $cat): ?>
-                            <?php
-                            $cid   = (int)($cat['id'] ?? 0);
-                            $cname = $cat['name'] ?? '';
-                            ?>
-                            <option value="<?= $cid ?>"
-                                <?= ($category === $cid) ? 'selected' : '' ?>>
-                                <?= label_safe($cname) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="col-6 col-lg-2">
-                    <label class="form-label mb-1 fw-semibold">Sort</label>
-                    <select name="sort" class="form-select">
-                        <option value="">Model name (A–Z)</option>
-                        <option value="name_asc"   <?= $sort === 'name_asc'   ? 'selected' : '' ?>>Model Name (Ascending)</option>
-                        <option value="name_desc"  <?= $sort === 'name_desc'  ? 'selected' : '' ?>>Model Name (Descending)</option>
-                        <option value="manu_asc"   <?= $sort === 'manu_asc'   ? 'selected' : '' ?>>Manufacturer (Ascending)</option>
-                        <option value="manu_desc"  <?= $sort === 'manu_desc'  ? 'selected' : '' ?>>Manufacturer (Descending)</option>
-                        <option value="units_asc"  <?= $sort === 'units_asc'  ? 'selected' : '' ?>>Units in Total (Ascending)</option>
-                        <option value="units_desc" <?= $sort === 'units_desc' ? 'selected' : '' ?>>Units in Total (Descending)</option>
-                    </select>
-                </div>
-
-                <?php endif; ?>
-
                 <div class="col-12 col-lg-2 d-grid">
                     <button class="btn btn-primary btn-lg" type="submit">Filter results</button>
                 </div>
             </div>
         </form>
-        <?php if ($designVersion >= 2): ?></aside><div class="catalogue-main">
+        </aside><div class="catalogue-main">
         <div class="catalogue-search-bar">
             <div class="catalogue-search-capsule">
                 <span class="search-icon" aria-hidden="true">
@@ -1207,9 +1056,8 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                        aria-label="Search by model name or manufacturer">
             </div>
         </div>
-        <?php endif; ?>
 
-        <?php if ($designVersion >= 2): ?><?php if ($staffNoUserSelected): ?><div class="catalogue-hud-label">Select User to Checkout Items</div><?php endif; ?><div class="catalogue-scroll-area<?php if ($staffNoUserSelected): ?> catalogue-no-user<?php endif; ?>"><?php endif; ?>
+        <?php if ($staffNoUserSelected): ?><div class="catalogue-hud-label">Select User to Checkout Items</div><?php endif; ?><div class="catalogue-scroll-area<?php if ($staffNoUserSelected): ?> catalogue-no-user<?php endif; ?>">
 
         <?php if (empty($models) && !$modelErr): ?>
             <div class="alert alert-info">
@@ -1361,7 +1209,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         <div class="card h-100 model-card<?= ($isRequestable && $freeNow > 0) ? '' : ' model-card--unavailable' ?>">
                             <?php if ($proxiedImage !== ''): ?>
                                 <div class="model-image-wrapper">
-                                    <a href="#" onclick="<?= $designVersion >= 2 ? 'openModelDetail' : 'openModelHistory' ?>(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
+                                    <a href="#" onclick="openModelDetail(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
                                         <img src="<?= htmlspecialchars($proxiedImage) ?>"
                                              alt=""
                                              class="model-image img-fluid">
@@ -1369,7 +1217,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                 </div>
                             <?php else: ?>
                                 <div class="model-image-wrapper model-image-wrapper--placeholder">
-                                    <a href="#" onclick="<?= $designVersion >= 2 ? 'openModelDetail' : 'openModelHistory' ?>(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
+                                    <a href="#" onclick="openModelDetail(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
                                         <div class="model-image-placeholder">
                                             No image
                                         </div>
@@ -1385,7 +1233,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                             <div class="card-body d-flex flex-column">
                                 <div class="model-nameline">
                                     <h5 class="card-title">
-                                        <a href="#" class="model-history-link" onclick="<?= $designVersion >= 2 ? 'openModelDetail' : 'openModelHistory' ?>(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
+                                        <a href="#" class="model-history-link" onclick="openModelDetail(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
                                             <?= label_safe($name) ?>
                                         </a>
                                     </h5>
@@ -1440,9 +1288,6 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                         <?php endif; ?>
 
                                         <?php if ($staffNoUserSelected): ?>
-                                            <?php if ($designVersion < 2): ?>
-                                            <div class="alert alert-info small mb-0">Select a user above before adding to basket.</div>
-                                            <?php endif; ?>
                                         <?php elseif ($accessBlocked): ?>
                                             <div class="alert alert-warning small mb-0">
                                                 You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.
@@ -1529,7 +1374,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             <?php endif; ?>
         <?php endif; ?>
 
-        <?php if ($designVersion >= 2): ?></div></div></div><?php endif; ?>
+        </div></div></div>
         <?php endif; // end equipment tab ?>
 
         <?php if ($tab === 'kits'): ?>
@@ -1819,8 +1664,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 No kits available. Equipment kits are configured in Snipe-IT.
             </div>
         <?php else: ?>
-            <?php if ($designVersion >= 2): ?><div class="catalogue-layout"><aside class="catalogue-filter-sidebar" aria-label="Kit filters"><?php endif; ?>
-            <?php if ($designVersion >= 2): ?>
+            <div class="catalogue-layout"><aside class="catalogue-filter-sidebar" aria-label="Kit filters">
 
             <?php if ($isStaff): ?>
             <div class="cat-sidebar-user-card">
@@ -1908,7 +1752,6 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     <button type="button" class="cat-view-option cat-option" data-view="grid"><i class="bi bi-grid" aria-hidden="true"></i> Grid</button>
                 </div>
             </div>
-            <?php endif; // $designVersion >= 2 ?>
             <form class="filter-panel mb-4" method="get" action="catalogue.php" id="kits-filter-form">
                 <div class="filter-panel__header d-flex align-items-center gap-3">
                     <span class="filter-panel__dot"></span>
@@ -1918,31 +1761,8 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 <input type="hidden" name="start_datetime" value="<?= h($windowStartRaw) ?>">
                 <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
                 <input type="hidden" name="prefetch" value="1">
-                <?php if ($designVersion < 2): ?>
-                <div class="row g-3 align-items-end">
-                    <div class="col-12 col-lg-8">
-                        <label class="form-label mb-1 fw-semibold">Search by name</label>
-                        <div class="input-group filter-search">
-                            <span class="input-group-text filter-search__icon" aria-hidden="true">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
-                                    <line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                </svg>
-                            </span>
-                            <input type="text"
-                                   name="q"
-                                   class="form-control filter-search__input"
-                                   value="<?= h($searchRaw) ?>"
-                                   placeholder="Search by kit or model name...">
-                        </div>
-                    </div>
-                    <div class="col-12 col-lg-2 d-grid">
-                        <button class="btn btn-primary btn-lg" type="submit">Filter results</button>
-                    </div>
-                </div>
-                <?php endif; ?>
             </form>
-            <?php if ($designVersion >= 2): ?></aside><div class="catalogue-main">
+            </aside><div class="catalogue-main">
             <div class="catalogue-search-bar">
                 <div class="catalogue-search-capsule">
                     <span class="search-icon" aria-hidden="true">
@@ -1957,9 +1777,8 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                            aria-label="Search by kit or model name">
                 </div>
             </div>
-            <?php endif; ?>
 
-            <?php if ($designVersion >= 2): ?><?php if ($staffNoUserSelected): ?><div class="catalogue-hud-label">Select User to Checkout Items</div><?php endif; ?><div class="catalogue-scroll-area<?php if ($staffNoUserSelected): ?> catalogue-no-user<?php endif; ?>"><?php endif; ?>
+            <?php if ($staffNoUserSelected): ?><div class="catalogue-hud-label">Select User to Checkout Items</div><?php endif; ?><div class="catalogue-scroll-area<?php if ($staffNoUserSelected): ?> catalogue-no-user<?php endif; ?>">
 
             <?php if ($windowActive): ?>
                 <div class="alert alert-info">
@@ -2025,9 +1844,6 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                     <?php endif; ?>
 
                                     <?php if ($staffNoUserSelected): ?>
-                                        <?php if ($designVersion < 2): ?>
-                                        <div class="alert alert-info small mb-0">Select a user above before adding to basket.</div>
-                                        <?php endif; ?>
                                     <?php elseif ($accessBlocked): ?>
                                         <div class="alert alert-warning small mb-0">
                                             You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.
@@ -2116,7 +1932,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             <?php endif; ?>
 
             <?php endif; // end non-empty kitCards ?>
-            <?php if ($designVersion >= 2): ?></div></div></div><?php endif; ?>
+            </div></div></div>
 
         <?php endif; ?>
         <?php endif; // end kits tab ?>
@@ -2198,8 +2014,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 <?php endif; ?>
 
-<?php if ($designVersion >= 2): ?>
-<!-- Booking Window Modal (v2) -->
+<!-- Booking Window Modal -->
 <div id="windowModalBackdrop"
      style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1070;"
      onclick="closeWindowModal()"></div>
@@ -2282,7 +2097,6 @@ function closeWindowModal() {
     if (trigger) trigger.focus();
 }
 </script>
-<?php endif; // $designVersion >= 2 ?>
 
 <div id="basket-toast"
      class="basket-toast"
@@ -2803,12 +2617,7 @@ function revertToLoggedIn(e) {
 }
 });
 </script>
-<?php if ($designVersion < 2): ?>
-<?php layout_model_history_modal($isStaff); ?>
-<?php else: ?>
 <script>window._modelDetailIsStaff = <?= $isStaff ? 'true' : 'false' ?>;</script>
-<?php endif; ?>
-<?php if ($designVersion >= 2): ?>
 <script>
 // ---- View toggle (grid / list) — topbar (desktop) + sidebar (mobile) ----
 (function () {
@@ -2889,7 +2698,6 @@ function revertToLoggedIn(e) {
     try { applyView(localStorage.getItem(storageKey) || defaultView); } catch (ex) { applyView(defaultView); }
 })();
 </script>
-<?php endif; ?>
 <?php layout_footer(); ?>
 </body>
 </html>

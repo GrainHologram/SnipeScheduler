@@ -1,71 +1,6 @@
 (function () {
 
-    // ── V1 legacy: collapsible top-nav on mobile ──────────────────────────────
-
-    var v1MobileQuery = window.matchMedia('(max-width: 768px)');
-
-    function v1CloseMenu(wrapper, toggle, labelEl) {
-        wrapper.classList.remove('is-open');
-        toggle.setAttribute('aria-expanded', 'false');
-        labelEl.textContent = 'Menu';
-    }
-
-    function v1EnhanceNav(nav) {
-        if (!nav || nav.dataset.navInit === '1') return;
-        nav.dataset.navInit = '1';
-
-        var wrapper = document.createElement('div');
-        wrapper.className = 'app-nav-shell has-toggle';
-
-        var toggle = document.createElement('button');
-        toggle.type = 'button';
-        toggle.className = 'app-nav-toggle';
-        toggle.setAttribute('aria-expanded', 'false');
-        toggle.setAttribute('aria-controls', nav.id || 'app-nav');
-
-        var icon = document.createElement('span');
-        icon.className = 'app-nav-toggle-icon';
-        icon.setAttribute('aria-hidden', 'true');
-
-        var label = document.createElement('span');
-        label.className = 'app-nav-toggle-label';
-        label.textContent = 'Menu';
-
-        toggle.appendChild(icon);
-        toggle.appendChild(label);
-
-        nav.parentNode.insertBefore(wrapper, nav);
-        wrapper.appendChild(toggle);
-        wrapper.appendChild(nav);
-
-        toggle.addEventListener('click', function () {
-            var isOpen = wrapper.classList.toggle('is-open');
-            toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-            label.textContent = isOpen ? 'Close menu' : 'Menu';
-        });
-
-        nav.querySelectorAll('a').forEach(function (link) {
-            link.addEventListener('click', function () {
-                if (v1MobileQuery.matches) {
-                    v1CloseMenu(wrapper, toggle, label);
-                }
-            });
-        });
-
-        var handleChange = function () {
-            if (!v1MobileQuery.matches) {
-                v1CloseMenu(wrapper, toggle, label);
-            }
-        };
-
-        if (v1MobileQuery.addEventListener) {
-            v1MobileQuery.addEventListener('change', handleChange);
-        } else if (v1MobileQuery.addListener) {
-            v1MobileQuery.addListener(handleChange);
-        }
-    }
-
-    // ── V2: three-state responsive sidebar ───────────────────────────────────
+    // ── Three-state responsive sidebar ───────────────────────────────────────
 
     var mobileQuery    = window.matchMedia('(max-width: 599px)');
     var collapsedQuery = window.matchMedia('(min-width: 600px) and (max-width: 959px)');
@@ -76,7 +11,7 @@
         ));
     }
 
-    function v2InitNav(nav) {
+    function initNav(nav) {
         if (!nav || nav.dataset.navInit === '1') return;
         nav.dataset.navInit = '1';
 
@@ -931,12 +866,7 @@
 
     document.addEventListener('DOMContentLoaded', function () {
         document.querySelectorAll('.app-nav').forEach(function (nav) {
-            var version = parseInt(nav.dataset.designVersion || '1', 10);
-            if (version >= 2) {
-                v2InitNav(nav);
-            } else {
-                v1EnhanceNav(nav);
-            }
+            initNav(nav);
         });
 
         // ── Account panel ─────────────────────────────────────────────────────────
