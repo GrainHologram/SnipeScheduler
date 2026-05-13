@@ -558,11 +558,11 @@ if (!empty($reservations)) {
                                         <?php endif; ?>
                                         <?php
                                             $deletableStatuses = (load_config())['reservations']['deletable_statuses'] ?? ['pending', 'confirmed', 'cancelled', 'missed'];
-                                            if (in_array($status, $deletableStatuses, true)):
+                                            if ($isAdmin && in_array($status, $deletableStatuses, true)):
                                         ?>
                                         <form method="post"
                                               action="delete_reservation.php"
-                                              onsubmit="return confirm('Delete this reservation and all its items? This cannot be undone.');">
+                                              onsubmit="return confirm('Delete reservation #<?= (int)$r['id'] ?> for <?= h($r['user_name'] ?? 'unknown') ?>?\n\nThis will permanently remove the reservation and all its items. This cannot be undone.');">
                                             <input type="hidden"
                                                    name="reservation_id"
                                                    value="<?= (int)$r['id'] ?>">
