@@ -223,80 +223,87 @@ foreach ($checkouts as $co) {
             }
         ?>
         <!-- Filters -->
-        <div class="border rounded-3 p-4 mb-4">
-            <form class="row g-2 mb-0 align-items-end" method="get" action="<?= h($actionUrl) ?>" id="checkout-history-filter-form">
-                <?php foreach ($baseQuery as $k => $v): ?>
-                    <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
-                <?php endforeach; ?>
-                <div class="col-12 col-lg">
+        <form method="get" action="<?= h($actionUrl) ?>" id="checkout-history-filter-form">
+        <?php foreach ($baseQuery as $k => $v): ?>
+            <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
+        <?php endforeach; ?>
+        <div class="border rounded-3 p-3 mb-3">
+            <div class="row g-2 align-items-end">
+            <div class="col-auto">
+                <input type="date"
+                       name="from"
+                       class="form-control form-control-lg"
+                       style="min-width: 160px;"
+                       value="<?= htmlspecialchars($fromRaw) ?>"
+                       placeholder="From date">
+            </div>
+            <div class="col-auto">
+                <input type="date"
+                       name="to"
+                       class="form-control form-control-lg"
+                       style="min-width: 160px;"
+                       value="<?= htmlspecialchars($toRaw) ?>"
+                       placeholder="To date">
+            </div>
+            <div class="col-auto">
+                <select name="status" class="form-select form-select-lg" style="min-width: 180px;">
+                    <option value="" <?= $statusFilter === null ? 'selected' : '' ?>>All statuses</option>
+                    <option value="open" <?= $statusFilter === 'open' ? 'selected' : '' ?>>Checked Out</option>
+                    <option value="partial" <?= $statusFilter === 'partial' ? 'selected' : '' ?>>Partial Return</option>
+                    <option value="closed" <?= $statusFilter === 'closed' ? 'selected' : '' ?>>Returned</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <select name="sort" class="form-select form-select-lg" aria-label="Sort checkouts" style="min-width: 240px;">
+                    <option value="start_desc" <?= $sort === 'start_desc' ? 'selected' : '' ?>>Start (newest first)</option>
+                    <option value="start_asc" <?= $sort === 'start_asc' ? 'selected' : '' ?>>Start (oldest first)</option>
+                    <option value="end_desc" <?= $sort === 'end_desc' ? 'selected' : '' ?>>End (latest first)</option>
+                    <option value="end_asc" <?= $sort === 'end_asc' ? 'selected' : '' ?>>End (soonest first)</option>
+                    <option value="user_asc" <?= $sort === 'user_asc' ? 'selected' : '' ?>>User (A-Z)</option>
+                    <option value="user_desc" <?= $sort === 'user_desc' ? 'selected' : '' ?>>User (Z-A)</option>
+                    <option value="status" <?= $sort === 'status' ? 'selected' : '' ?>>Status</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <select name="per_page" class="form-select form-select-lg" style="min-width: 140px;">
+                    <?php foreach ($perPageOptions as $opt): ?>
+                        <option value="<?= $opt ?>" <?= $perPage === $opt ? 'selected' : '' ?>><?= $opt ?> per page</option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-primary btn-lg" type="submit">Filter</button>
+            </div>
+            <div class="col-auto">
+                <?php
+                    $clearUrl = $pageBase;
+                    if (!empty($baseQuery)) {
+                        $clearUrl .= '?' . http_build_query($baseQuery);
+                    }
+                ?>
+                <a href="<?= h($clearUrl) ?>" class="btn btn-outline-secondary btn-lg">Clear</a>
+            </div>
+            </div>
+        </div>
+        </form>
+
+        <div class="res-history-body">
+            <div class="res-history-search-header">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-search text-muted flex-shrink-0"></i>
                     <input type="text"
                            name="q"
-                           class="form-control form-control-lg"
+                           form="checkout-history-filter-form"
+                           class="form-control"
                            placeholder="Search by user, asset tag, or asset name..."
                            value="<?= htmlspecialchars($qRaw) ?>">
                 </div>
-                <div class="col-auto">
-                    <input type="date"
-                           name="from"
-                           class="form-control form-control-lg"
-                           style="min-width: 160px;"
-                           value="<?= htmlspecialchars($fromRaw) ?>"
-                           placeholder="From date">
-                </div>
-                <div class="col-auto">
-                    <input type="date"
-                           name="to"
-                           class="form-control form-control-lg"
-                           style="min-width: 160px;"
-                           value="<?= htmlspecialchars($toRaw) ?>"
-                           placeholder="To date">
-                </div>
-                <div class="col-auto">
-                    <select name="status" class="form-select form-select-lg" style="min-width: 180px;">
-                        <option value="" <?= $statusFilter === null ? 'selected' : '' ?>>All statuses</option>
-                        <option value="open" <?= $statusFilter === 'open' ? 'selected' : '' ?>>Checked Out</option>
-                        <option value="partial" <?= $statusFilter === 'partial' ? 'selected' : '' ?>>Partial Return</option>
-                        <option value="closed" <?= $statusFilter === 'closed' ? 'selected' : '' ?>>Returned</option>
-                    </select>
-                </div>
-                <div class="col-auto">
-                    <select name="sort" class="form-select form-select-lg" aria-label="Sort checkouts" style="min-width: 240px;">
-                        <option value="start_desc" <?= $sort === 'start_desc' ? 'selected' : '' ?>>Start (newest first)</option>
-                        <option value="start_asc" <?= $sort === 'start_asc' ? 'selected' : '' ?>>Start (oldest first)</option>
-                        <option value="end_desc" <?= $sort === 'end_desc' ? 'selected' : '' ?>>End (latest first)</option>
-                        <option value="end_asc" <?= $sort === 'end_asc' ? 'selected' : '' ?>>End (soonest first)</option>
-                        <option value="user_asc" <?= $sort === 'user_asc' ? 'selected' : '' ?>>User (A-Z)</option>
-                        <option value="user_desc" <?= $sort === 'user_desc' ? 'selected' : '' ?>>User (Z-A)</option>
-                        <option value="status" <?= $sort === 'status' ? 'selected' : '' ?>>Status</option>
-                    </select>
-                </div>
-                <div class="col-auto">
-                    <select name="per_page" class="form-select form-select-lg" style="min-width: 180px;">
-                        <?php foreach ($perPageOptions as $opt): ?>
-                            <option value="<?= $opt ?>" <?= $perPage === $opt ? 'selected' : '' ?>>
-                                <?= $opt ?> per page
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-md-1 d-flex gap-2">
-                    <button class="btn btn-primary w-100" type="submit">Filter</button>
-                </div>
-                <div class="col-md-1 d-flex gap-2">
-                    <?php
-                        $clearUrl = $pageBase;
-                        if (!empty($baseQuery)) {
-                            $clearUrl .= '?' . http_build_query($baseQuery);
-                        }
-                    ?>
-                    <a href="<?= h($clearUrl) ?>" class="btn btn-outline-secondary w-100">Clear</a>
-                </div>
-            </form>
-        </div>
-
+            </div>
+            <div class="res-history-content">
         <?php if (empty($groups)): ?>
-            <div class="alert alert-info">
-                No checkout records found.
+            <div class="panel-empty-state">
+                <i class="bi bi-box-seam panel-empty-icon"></i>
+                <p class="panel-empty-text">No checkout records found.</p>
             </div>
         <?php else: ?>
             <?php foreach ($groups as $group): ?>
@@ -442,6 +449,8 @@ foreach ($checkouts as $co) {
                 </nav>
             <?php endif; ?>
         <?php endif; ?>
+            </div><!-- /.res-history-content -->
+        </div><!-- /.res-history-body -->
 
 <?php if (!$embedded): ?>
     </div>

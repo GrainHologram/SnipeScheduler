@@ -340,284 +340,293 @@ if (!empty($reservations)) {
             if (!empty($baseQuery)) {
                 $actionUrl .= '?' . http_build_query($baseQuery);
             }
+            $clearUrl = $pageBase;
+            if (!empty($baseQuery)) {
+                $clearUrl .= '?' . http_build_query($baseQuery);
+            }
         ?>
+        <form method="get" action="<?= h($actionUrl) ?>" id="reservation-history-filter-form">
+        <?php foreach ($baseQuery as $k => $v): ?>
+            <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
+        <?php endforeach; ?>
+
         <!-- Filters -->
-        <div class="border rounded-3 p-4 mb-4">
-            <form class="row g-2 mb-0 align-items-end" method="get" action="<?= h($actionUrl) ?>" id="reservation-history-filter-form">
-                <?php foreach ($baseQuery as $k => $v): ?>
-                    <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
-                <?php endforeach; ?>
-                <div class="col-12 col-lg">
+        <div class="border rounded-3 p-3 mb-3">
+            <div class="row g-2 align-items-end">
+            <div class="col-auto">
+                <input type="date"
+                       name="from"
+                       class="form-control form-control-lg"
+                       style="min-width: 160px;"
+                       value="<?= htmlspecialchars($fromRaw) ?>"
+                       placeholder="From date">
+            </div>
+            <div class="col-auto">
+                <input type="date"
+                       name="to"
+                       class="form-control form-control-lg"
+                       style="min-width: 160px;"
+                       value="<?= htmlspecialchars($toRaw) ?>"
+                       placeholder="To date">
+            </div>
+            <div class="col-auto">
+                <select name="sort" class="form-select form-select-lg" aria-label="Sort reservations" style="min-width: 240px;">
+                    <option value="start_desc" <?= $sort === 'start_desc' ? 'selected' : '' ?>>Start (newest first)</option>
+                    <option value="start_asc" <?= $sort === 'start_asc' ? 'selected' : '' ?>>Start (oldest first)</option>
+                    <option value="end_desc" <?= $sort === 'end_desc' ? 'selected' : '' ?>>End (latest first)</option>
+                    <option value="end_asc" <?= $sort === 'end_asc' ? 'selected' : '' ?>>End (soonest first)</option>
+                    <option value="user_asc" <?= $sort === 'user_asc' ? 'selected' : '' ?>>User (A–Z)</option>
+                    <option value="user_desc" <?= $sort === 'user_desc' ? 'selected' : '' ?>>User (Z–A)</option>
+                    <option value="status_asc" <?= $sort === 'status_asc' ? 'selected' : '' ?>>Status (A–Z)</option>
+                    <option value="status_desc" <?= $sort === 'status_desc' ? 'selected' : '' ?>>Status (Z–A)</option>
+                    <option value="id_desc" <?= $sort === 'id_desc' ? 'selected' : '' ?>>Reservation ID (high → low)</option>
+                    <option value="id_asc" <?= $sort === 'id_asc' ? 'selected' : '' ?>>Reservation ID (low → high)</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <select name="per_page" class="form-select form-select-lg" style="min-width: 140px;">
+                    <?php foreach ($perPageOptions as $opt): ?>
+                        <option value="<?= $opt ?>" <?= $perPage === $opt ? 'selected' : '' ?>><?= $opt ?> per page</option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-primary btn-lg" type="submit">Filter</button>
+            </div>
+            <div class="col-auto">
+                <a href="<?= h($clearUrl) ?>" class="btn btn-outline-secondary btn-lg">Clear</a>
+            </div>
+            </div>
+        </div>
+        </form>
+
+        <!-- Main body -->
+        <div class="res-history-body">
+            <div class="res-history-search-header">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-search text-muted flex-shrink-0"></i>
                     <input type="text"
                            name="q"
-                           class="form-control form-control-lg"
+                           form="reservation-history-filter-form"
+                           class="form-control"
                            placeholder="Search by user or items..."
                            value="<?= htmlspecialchars($qRaw) ?>">
                 </div>
-                <div class="col-auto">
-                    <input type="date"
-                           name="from"
-                           class="form-control form-control-lg"
-                           style="min-width: 160px;"
-                           value="<?= htmlspecialchars($fromRaw) ?>"
-                           placeholder="From date">
-                </div>
-                <div class="col-auto">
-                    <input type="date"
-                           name="to"
-                           class="form-control form-control-lg"
-                           style="min-width: 160px;"
-                           value="<?= htmlspecialchars($toRaw) ?>"
-                           placeholder="To date">
-                </div>
-                <div class="col-auto">
-                    <select name="sort" class="form-select form-select-lg" aria-label="Sort reservations" style="min-width: 240px;">
-                        <option value="start_desc" <?= $sort === 'start_desc' ? 'selected' : '' ?>>Start (newest first)</option>
-                        <option value="start_asc" <?= $sort === 'start_asc' ? 'selected' : '' ?>>Start (oldest first)</option>
-                        <option value="end_desc" <?= $sort === 'end_desc' ? 'selected' : '' ?>>End (latest first)</option>
-                        <option value="end_asc" <?= $sort === 'end_asc' ? 'selected' : '' ?>>End (soonest first)</option>
-                        <option value="user_asc" <?= $sort === 'user_asc' ? 'selected' : '' ?>>User (A–Z)</option>
-                        <option value="user_desc" <?= $sort === 'user_desc' ? 'selected' : '' ?>>User (Z–A)</option>
-                        <option value="status_asc" <?= $sort === 'status_asc' ? 'selected' : '' ?>>Status (A–Z)</option>
-                        <option value="status_desc" <?= $sort === 'status_desc' ? 'selected' : '' ?>>Status (Z–A)</option>
-                        <option value="id_desc" <?= $sort === 'id_desc' ? 'selected' : '' ?>>Reservation ID (high → low)</option>
-                        <option value="id_asc" <?= $sort === 'id_asc' ? 'selected' : '' ?>>Reservation ID (low → high)</option>
-                    </select>
-                </div>
-                <div class="col-auto">
-                    <select name="per_page" class="form-select form-select-lg" style="min-width: 180px;">
-                        <?php foreach ($perPageOptions as $opt): ?>
-                            <option value="<?= $opt ?>" <?= $perPage === $opt ? 'selected' : '' ?>>
-                                <?= $opt ?> per page
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-md-1 d-flex gap-2">
-                    <button class="btn btn-primary w-100" type="submit">Filter</button>
-                </div>
-                <div class="col-md-1 d-flex gap-2">
-                    <?php
-                        $clearUrl = $pageBase;
-                        if (!empty($baseQuery)) {
-                            $clearUrl .= '?' . http_build_query($baseQuery);
-                        }
-                    ?>
-                <a href="<?= h($clearUrl) ?>" class="btn btn-outline-secondary w-100">Clear</a>
             </div>
-        </form>
-        </div>
-
-        <?php if (empty($reservations)): ?>
-            <div class="alert alert-info">
-                There are no reservations matching your filters.
-            </div>
-        <?php else: ?>
-            <div class="table-responsive">
-                <table class="table table-sm table-striped align-middle reservation-history-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>User Name</th>
-                            <th>Items Reserved</th>
-                            <th>Start</th>
-                            <th>End</th>
-                            <th>Status</th>
-                            <th style="width: 180px;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($reservations as $r): ?>
-                            <?php
-                                $items      = $allResItems[(int)$r['id']] ?? [];
-                                $itemsLines = [];
-                                foreach ($items as $item) {
-                                    $name = $item['name'] ?? '';
-                                    $qty = isset($item['qty']) ? (int)$item['qty'] : 0;
-                                    if ($name === '' || $qty <= 0) {
-                                        continue;
-                                    }
-                                    $itemsLines[] = $qty > 1
-                                        ? sprintf('%s (%d)', $name, $qty)
-                                        : $name;
-                                }
-                                $itemsText = $itemsLines ? '<ul class="items-list"><li>' . implode('</li><li>', array_map('h', $itemsLines)) . '</li></ul>' : '';
-                                $modelsHtml = '';
-                                $status     = strtolower((string)($r['status'] ?? ''));
-                                if ($itemsText !== '') {
-                                    $modelsHtml = '<details class="items-section">'
-                                        . '<summary><strong>Models Reserved:</strong></summary>'
-                                        . '<div class="items-section-body items-section-body--scroll">' . $itemsText . '</div>'
-                                        . '</details>';
-                                }
-                                $assetsHtml = '';
-                                if (!empty($r['asset_name_cache'])) {
-                                    $assetRaw = (string)$r['asset_name_cache'];
-                                    $assetParts = preg_split('/,(?![^()]*\\))/', $assetRaw);
-                                    $assetParts = array_values(array_filter(array_map('trim', $assetParts), 'strlen'));
-                                    $assetLis = [];
-                                    $sourceParts = $assetParts ?: [$assetRaw];
-                                    foreach ($sourceParts as $part) {
-                                        $part = trim($part);
-                                        if ($part === '') {
+            <div class="res-history-content">
+            <?php if (empty($reservations)): ?>
+                <div class="panel-empty-state">
+                    <i class="bi bi-calendar-x panel-empty-icon"></i>
+                    <p class="panel-empty-text">No reservations match your filters.</p>
+                </div>
+            <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped align-middle reservation-history-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>User Name</th>
+                                <th>Items Reserved</th>
+                                <th>Start</th>
+                                <th>End</th>
+                                <th>Status</th>
+                                <th style="width: 180px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($reservations as $r): ?>
+                                <?php
+                                    $items      = $allResItems[(int)$r['id']] ?? [];
+                                    $itemsLines = [];
+                                    foreach ($items as $item) {
+                                        $name = $item['name'] ?? '';
+                                        $qty = isset($item['qty']) ? (int)$item['qty'] : 0;
+                                        if ($name === '' || $qty <= 0) {
                                             continue;
                                         }
-                                        $openPos = strpos($part, '(');
-                                        if ($openPos !== false) {
-                                            $tag = trim(substr($part, 0, $openPos));
-                                            $rest = trim(substr($part, $openPos));
-                                            $assetLis[] = '<strong>' . h($tag) . '</strong> ' . h($rest);
-                                        } else {
-                                            $assetLis[] = '<strong>' . h($part) . '</strong>';
-                                        }
+                                        $itemsLines[] = $qty > 1
+                                            ? sprintf('%s (%d)', $name, $qty)
+                                            : $name;
                                     }
-                                    $assetLines = $assetLis
-                                        ? '<ul class="items-list"><li>' . implode('</li><li>', $assetLis) . '</li></ul>'
-                                        : '';
-                                    $assetsHtml = '<details class="items-section mt-2">'
-                                        . '<summary><strong>Assets Assigned:</strong></summary>'
-                                        . '<div class="items-section-body">' . $assetLines . '</div>'
-                                        . '</details>';
-                                }
-                                $itemsText = $modelsHtml . $assetsHtml;
-                            ?>
-                            <tr>
-                                <td data-label="ID">
-                                    #<?= (int)$r['id'] ?>
-                                    <?php if (!empty($r['notes'])): ?>
-                                        <a href="reservation_detail.php?id=<?= (int)$r['id'] ?>" title="<?= h($r['notes']) ?>" class="text-muted ms-1" style="text-decoration:none"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5 0h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2zm0 1a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H5z"/><path d="M5.5 4h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1 0-1zm0 3h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1 0-1zm0 3h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1 0-1z"/></svg></a>
-                                    <?php endif; ?>
-                                    <?php if (!empty($r['name'])): ?>
-                                        <br><small class="text-muted"><?= h($r['name']) ?></small>
-                                    <?php endif; ?>
-                                </td>
-                                <td data-label="User Name"><?= h($r['user_name'] ?? '(Unknown)') ?></td>
-                                <td data-label="Items Reserved" class="items-cell">
-                                    <?= $itemsText !== '' ? '<div class="items-cell-content">' . $itemsText . '</div>' : '' ?>
-                                </td>
-                                <td data-label="Start"><?= display_datetime($r['start_datetime'] ?? '') ?></td>
-                                <td data-label="End"><?= display_datetime($r['end_datetime'] ?? '') ?></td>
-                                <td data-label="Status"><?= layout_status_badge($r['status'] ?? '') ?></td>
-                                <td data-label="Actions" class="actions-cell">
-                                    <div class="d-flex gap-2">
-                                        <a href="reservation_detail.php?id=<?= (int)$r['id'] ?>"
-                                           class="btn btn-sm btn-outline-secondary btn-action">
-                                            View
-                                        </a>
-                                        <?php if ($status === 'pending'): ?>
-                                            <a href="reservation_edit.php?id=<?= (int)$r['id'] ?><?= h($editSuffix) ?>"
-                                               class="btn btn-sm btn-outline-primary btn-action">
-                                                Edit
+                                    $itemsText = $itemsLines ? '<ul class="items-list"><li>' . implode('</li><li>', array_map('h', $itemsLines)) . '</li></ul>' : '';
+                                    $modelsHtml = '';
+                                    $status     = strtolower((string)($r['status'] ?? ''));
+                                    if ($itemsText !== '') {
+                                        $modelsHtml = '<details class="items-section">'
+                                            . '<summary><strong>Models Reserved:</strong></summary>'
+                                            . '<div class="items-section-body items-section-body--scroll">' . $itemsText . '</div>'
+                                            . '</details>';
+                                    }
+                                    $assetsHtml = '';
+                                    if (!empty($r['asset_name_cache'])) {
+                                        $assetRaw = (string)$r['asset_name_cache'];
+                                        $assetParts = preg_split('/,(?![^()]*\\))/', $assetRaw);
+                                        $assetParts = array_values(array_filter(array_map('trim', $assetParts), 'strlen'));
+                                        $assetLis = [];
+                                        $sourceParts = $assetParts ?: [$assetRaw];
+                                        foreach ($sourceParts as $part) {
+                                            $part = trim($part);
+                                            if ($part === '') {
+                                                continue;
+                                            }
+                                            $openPos = strpos($part, '(');
+                                            if ($openPos !== false) {
+                                                $tag = trim(substr($part, 0, $openPos));
+                                                $rest = trim(substr($part, $openPos));
+                                                $assetLis[] = '<strong>' . h($tag) . '</strong> ' . h($rest);
+                                            } else {
+                                                $assetLis[] = '<strong>' . h($part) . '</strong>';
+                                            }
+                                        }
+                                        $assetLines = $assetLis
+                                            ? '<ul class="items-list"><li>' . implode('</li><li>', $assetLis) . '</li></ul>'
+                                            : '';
+                                        $assetsHtml = '<details class="items-section mt-2">'
+                                            . '<summary><strong>Assets Assigned:</strong></summary>'
+                                            . '<div class="items-section-body">' . $assetLines . '</div>'
+                                            . '</details>';
+                                    }
+                                    $itemsText = $modelsHtml . $assetsHtml;
+                                ?>
+                                <tr>
+                                    <td data-label="ID">
+                                        #<?= (int)$r['id'] ?>
+                                        <?php if (!empty($r['notes'])): ?>
+                                            <a href="reservation_detail.php?id=<?= (int)$r['id'] ?>" title="<?= h($r['notes']) ?>" class="text-muted ms-1" style="text-decoration:none"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5 0h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2zm0 1a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H5z"/><path d="M5.5 4h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1 0-1zm0 3h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1 0-1zm0 3h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1 0-1z"/></svg></a>
+                                        <?php endif; ?>
+                                        <?php if (!empty($r['name'])): ?>
+                                            <br><small class="text-muted"><?= h($r['name']) ?></small>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td data-label="User Name"><?= h($r['user_name'] ?? '(Unknown)') ?></td>
+                                    <td data-label="Items Reserved" class="items-cell">
+                                        <?= $itemsText !== '' ? '<div class="items-cell-content">' . $itemsText . '</div>' : '' ?>
+                                    </td>
+                                    <td data-label="Start"><?= display_datetime($r['start_datetime'] ?? '') ?></td>
+                                    <td data-label="End"><?= display_datetime($r['end_datetime'] ?? '') ?></td>
+                                    <td data-label="Status"><?= layout_status_badge($r['status'] ?? '') ?></td>
+                                    <td data-label="Actions" class="actions-cell">
+                                        <div class="d-flex gap-2">
+                                            <a href="reservation_detail.php?id=<?= (int)$r['id'] ?>"
+                                               class="btn btn-sm btn-outline-secondary btn-action">
+                                                View
                                             </a>
-                                        <?php endif; ?>
-                                        <?php
-                                            $startsToday = ($r['start_datetime'] ?? '') >= $todayUtcStart
-                                                        && ($r['start_datetime'] ?? '') <= $todayUtcEnd;
-                                            if (in_array($status, ['pending', 'confirmed'], true) && $startsToday):
-                                        ?>
+                                            <?php if ($status === 'pending'): ?>
+                                                <a href="reservation_edit.php?id=<?= (int)$r['id'] ?><?= h($editSuffix) ?>"
+                                                   class="btn btn-sm btn-outline-primary btn-action">
+                                                    Edit
+                                                </a>
+                                            <?php endif; ?>
                                             <?php
-                                                $processUrl = $todayPageBase;
-                                                if (!empty($todayBaseQuery)) {
-                                                    $processUrl .= '?' . http_build_query($todayBaseQuery);
-                                                }
+                                                $startsToday = ($r['start_datetime'] ?? '') >= $todayUtcStart
+                                                            && ($r['start_datetime'] ?? '') <= $todayUtcEnd;
+                                                if (in_array($status, ['pending', 'confirmed'], true) && $startsToday):
                                             ?>
-                                            <form method="post" action="<?= h($processUrl) ?>" class="d-inline">
-                                                <input type="hidden" name="mode" value="select_reservation">
-                                                <input type="hidden" name="reservation_id" value="<?= (int)$r['id'] ?>">
-                                                <?php foreach ($todayBaseQuery as $k => $v): ?>
-                                                    <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
-                                                <?php endforeach; ?>
-                                                <button type="submit" class="btn btn-sm btn-outline-success btn-action">
-                                                    Process
+                                                <?php
+                                                    $processUrl = $todayPageBase;
+                                                    if (!empty($todayBaseQuery)) {
+                                                        $processUrl .= '?' . http_build_query($todayBaseQuery);
+                                                    }
+                                                ?>
+                                                <form method="post" action="<?= h($processUrl) ?>" class="d-inline">
+                                                    <input type="hidden" name="mode" value="select_reservation">
+                                                    <input type="hidden" name="reservation_id" value="<?= (int)$r['id'] ?>">
+                                                    <?php foreach ($todayBaseQuery as $k => $v): ?>
+                                                        <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
+                                                    <?php endforeach; ?>
+                                                    <button type="submit" class="btn btn-sm btn-outline-success btn-action">
+                                                        Process
+                                                    </button>
+                                                </form>
+                                            <?php endif; ?>
+                                            <?php if ($status === 'missed'): ?>
+                                                <form method="post" action="<?= h($actionUrl) ?>">
+                                                    <input type="hidden" name="action" value="restore_missed">
+                                                    <input type="hidden" name="reservation_id" value="<?= (int)$r['id'] ?>">
+                                                    <?php if ($qRaw !== ''): ?>
+                                                        <input type="hidden" name="q" value="<?= h($qRaw) ?>">
+                                                    <?php endif; ?>
+                                                    <?php if ($fromRaw !== ''): ?>
+                                                        <input type="hidden" name="from" value="<?= h($fromRaw) ?>">
+                                                    <?php endif; ?>
+                                                    <?php if ($toRaw !== ''): ?>
+                                                        <input type="hidden" name="to" value="<?= h($toRaw) ?>">
+                                                    <?php endif; ?>
+                                                    <input type="hidden" name="per_page" value="<?= (int)$perPage ?>">
+                                                    <input type="hidden" name="page" value="<?= (int)$page ?>">
+                                                    <input type="hidden" name="sort" value="<?= h($sort) ?>">
+                                                    <?php foreach ($baseQuery as $k => $v): ?>
+                                                        <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
+                                                    <?php endforeach; ?>
+                                                    <button class="btn btn-sm btn-outline-success btn-action" type="submit">
+                                                        Restore
+                                                    </button>
+                                                </form>
+                                            <?php endif; ?>
+                                            <?php
+                                                $deletableStatuses = (load_config())['reservations']['deletable_statuses'] ?? ['pending', 'confirmed', 'cancelled', 'missed'];
+                                                if ($isAdmin && in_array($status, $deletableStatuses, true)):
+                                            ?>
+                                            <form method="post"
+                                                  action="delete_reservation.php"
+                                                  onsubmit="return confirm('Delete reservation #<?= (int)$r['id'] ?> for <?= h($r['user_name'] ?? 'unknown') ?>?\n\nThis will permanently remove the reservation and all its items. This cannot be undone.');">
+                                                <input type="hidden"
+                                                       name="reservation_id"
+                                                       value="<?= (int)$r['id'] ?>">
+                                                <button class="btn btn-sm btn-outline-danger btn-action" type="submit">
+                                                    Delete
                                                 </button>
                                             </form>
-                                        <?php endif; ?>
-                                        <?php if ($status === 'missed'): ?>
-                                            <form method="post" action="<?= h($actionUrl) ?>">
-                                                <input type="hidden" name="action" value="restore_missed">
-                                                <input type="hidden" name="reservation_id" value="<?= (int)$r['id'] ?>">
-                                                <?php if ($qRaw !== ''): ?>
-                                                    <input type="hidden" name="q" value="<?= h($qRaw) ?>">
-                                                <?php endif; ?>
-                                                <?php if ($fromRaw !== ''): ?>
-                                                    <input type="hidden" name="from" value="<?= h($fromRaw) ?>">
-                                                <?php endif; ?>
-                                                <?php if ($toRaw !== ''): ?>
-                                                    <input type="hidden" name="to" value="<?= h($toRaw) ?>">
-                                                <?php endif; ?>
-                                                <input type="hidden" name="per_page" value="<?= (int)$perPage ?>">
-                                                <input type="hidden" name="page" value="<?= (int)$page ?>">
-                                                <input type="hidden" name="sort" value="<?= h($sort) ?>">
-                                                <?php foreach ($baseQuery as $k => $v): ?>
-                                                    <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
-                                                <?php endforeach; ?>
-                                                <button class="btn btn-sm btn-outline-success btn-action" type="submit">
-                                                    Restore
-                                                </button>
-                                            </form>
-                                        <?php endif; ?>
-                                        <?php
-                                            $deletableStatuses = (load_config())['reservations']['deletable_statuses'] ?? ['pending', 'confirmed', 'cancelled', 'missed'];
-                                            if ($isAdmin && in_array($status, $deletableStatuses, true)):
-                                        ?>
-                                        <form method="post"
-                                              action="delete_reservation.php"
-                                              onsubmit="return confirm('Delete reservation #<?= (int)$r['id'] ?> for <?= h($r['user_name'] ?? 'unknown') ?>?\n\nThis will permanently remove the reservation and all its items. This cannot be undone.');">
-                                            <input type="hidden"
-                                                   name="reservation_id"
-                                                   value="<?= (int)$r['id'] ?>">
-                                            <button class="btn btn-sm btn-outline-danger btn-action" type="submit">
-                                                Delete
-                                            </button>
-                                        </form>
-                                        <?php endif; ?>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-            <?php if ($totalPages > 1): ?>
-                <?php
-                    $pagerBase = $pageBase;
-                    $pagerQuery = array_merge($baseQuery, [
-                        'q' => $qRaw,
-                        'from' => $fromRaw,
-                        'to' => $toRaw,
-                        'per_page' => $perPage,
-                        'sort' => $sort,
-                    ]);
-                ?>
-                <nav class="mt-3">
-                    <ul class="pagination justify-content-center">
-                        <?php
-                            $prevPage = max(1, $page - 1);
-                            $nextPage = min($totalPages, $page + 1);
-                            $pagerQuery['page'] = $prevPage;
-                            $prevUrl = $pagerBase . '?' . http_build_query($pagerQuery);
-                            $pagerQuery['page'] = $nextPage;
-                            $nextUrl = $pagerBase . '?' . http_build_query($pagerQuery);
-                        ?>
-                        <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
-                            <a class="page-link" href="<?= h($prevUrl) ?>">Previous</a>
-                        </li>
-                        <?php for ($p = 1; $p <= $totalPages; $p++): ?>
+                                            <?php endif; ?>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <?php if ($totalPages > 1): ?>
+                    <?php
+                        $pagerBase = $pageBase;
+                        $pagerQuery = array_merge($baseQuery, [
+                            'q' => $qRaw,
+                            'from' => $fromRaw,
+                            'to' => $toRaw,
+                            'per_page' => $perPage,
+                            'sort' => $sort,
+                        ]);
+                    ?>
+                    <nav class="mt-3">
+                        <ul class="pagination justify-content-center">
                             <?php
-                                $pagerQuery['page'] = $p;
-                                $pageUrl = $pagerBase . '?' . http_build_query($pagerQuery);
+                                $prevPage = max(1, $page - 1);
+                                $nextPage = min($totalPages, $page + 1);
+                                $pagerQuery['page'] = $prevPage;
+                                $prevUrl = $pagerBase . '?' . http_build_query($pagerQuery);
+                                $pagerQuery['page'] = $nextPage;
+                                $nextUrl = $pagerBase . '?' . http_build_query($pagerQuery);
                             ?>
-                            <li class="page-item <?= $p === $page ? 'active' : '' ?>">
-                                <a class="page-link" href="<?= h($pageUrl) ?>"><?= $p ?></a>
+                            <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                                <a class="page-link" href="<?= h($prevUrl) ?>">Previous</a>
                             </li>
-                        <?php endfor; ?>
-                        <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
-                            <a class="page-link" href="<?= h($nextUrl) ?>">Next</a>
-                        </li>
-                    </ul>
-                </nav>
+                            <?php for ($p = 1; $p <= $totalPages; $p++): ?>
+                                <?php
+                                    $pagerQuery['page'] = $p;
+                                    $pageUrl = $pagerBase . '?' . http_build_query($pagerQuery);
+                                ?>
+                                <li class="page-item <?= $p === $page ? 'active' : '' ?>">
+                                    <a class="page-link" href="<?= h($pageUrl) ?>"><?= $p ?></a>
+                                </li>
+                            <?php endfor; ?>
+                            <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
+                                <a class="page-link" href="<?= h($nextUrl) ?>">Next</a>
+                            </li>
+                        </ul>
+                    </nav>
+                <?php endif; ?>
             <?php endif; ?>
-        <?php endif; ?>
+            </div><!-- /.res-history-content -->
+        </div><!-- /.res-history-body -->
 
 <?php if (!$embedded): ?>
     </div>

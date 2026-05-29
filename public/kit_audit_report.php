@@ -178,35 +178,47 @@ function kit_audit_build_url(string $base, array $params): string
         <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
 <?php endif; ?>
 
-    <div class="border rounded-3 p-4 mb-4">
-        <form method="get" class="row g-2 mb-0 align-items-end" action="<?= h($pageBase) ?>">
-            <?php foreach ($baseQuery as $k => $v): ?>
-                <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
-            <?php endforeach; ?>
-            <div class="col-md-4">
-                <label class="form-label mb-1">Search</label>
-                <input type="text" name="q" value="<?= h($search) ?>"
-                       class="form-control" placeholder="User name, kit name, model...">
-            </div>
-            <div class="col-md-3">
-                <label class="form-label mb-1">Kit type</label>
-                <select name="kit_type" class="form-select">
-                    <option value="">All</option>
-                    <option value="functional" <?= $kitTypeValid === 'functional' ? 'selected' : '' ?>>Functional only</option>
-                    <option value="convenience" <?= $kitTypeValid === 'convenience' ? 'selected' : '' ?>>Convenience only</option>
-                </select>
-            </div>
-            <div class="col-md-3 d-flex gap-2">
-                <button type="submit" class="btn btn-primary">Filter</button>
-                <a href="<?= h(kit_audit_build_url($pageBase, $baseQuery)) ?>" class="btn btn-outline-secondary">Clear</a>
-            </div>
-        </form>
+    <form method="get" action="<?= h($pageBase) ?>" id="kit-audit-filter-form">
+    <?php foreach ($baseQuery as $k => $v): ?>
+        <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
+    <?php endforeach; ?>
+    <div class="border rounded-3 p-3 mb-3">
+        <div class="row g-2 align-items-end">
+        <div class="col-auto">
+            <select name="kit_type" class="form-select form-select-lg" style="min-width: 200px;">
+                <option value="">All kit types</option>
+                <option value="functional" <?= $kitTypeValid === 'functional' ? 'selected' : '' ?>>Functional only</option>
+                <option value="convenience" <?= $kitTypeValid === 'convenience' ? 'selected' : '' ?>>Convenience only</option>
+            </select>
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-primary btn-lg">Filter</button>
+        </div>
+        <div class="col-auto">
+            <a href="<?= h(kit_audit_build_url($pageBase, $baseQuery)) ?>" class="btn btn-outline-secondary btn-lg">Clear</a>
+        </div>
+        </div>
     </div>
+    </form>
 
+    <div class="res-history-body">
+        <div class="res-history-search-header">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-search text-muted flex-shrink-0"></i>
+                <input type="text" name="q" form="kit-audit-filter-form"
+                       value="<?= h($search) ?>"
+                       class="form-control"
+                       placeholder="User name, kit name, model...">
+            </div>
+        </div>
+        <div class="res-history-content">
     <?php if ($error): ?>
         <div class="alert alert-danger"><?= h($error) ?></div>
     <?php elseif (empty($grouped)): ?>
-        <div class="alert alert-secondary">No incomplete kit checkouts found.</div>
+        <div class="panel-empty-state">
+            <i class="bi bi-bag-x panel-empty-icon"></i>
+            <p class="panel-empty-text">No incomplete kit checkouts found.</p>
+        </div>
     <?php else: ?>
         <div class="d-flex justify-content-between align-items-center mb-2">
             <span class="text-muted small"><?= count($grouped) ?> checkout<?= count($grouped) !== 1 ? 's' : '' ?> with incomplete kits</span>
@@ -253,6 +265,8 @@ function kit_audit_build_url(string $base, array $params): string
             </div>
         <?php endforeach; ?>
     <?php endif; ?>
+        </div><!-- /.res-history-content -->
+    </div><!-- /.res-history-body -->
 
 <?php if (!$embedded): ?>
     </div>

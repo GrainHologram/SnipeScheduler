@@ -888,6 +888,10 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 </div>
             <?php endif; ?>
 
+        <?php
+            $overrideName  = $bookingOverride ? (trim(($bookingOverride['first_name'] ?? '') . ' ' . ($bookingOverride['last_name'] ?? '')) ?: ($bookingOverride['email'] ?? '')) : '';
+            $overrideEmail = $bookingOverride ? ($bookingOverride['email'] ?? '') : '';
+        ?>
         <?php if ($tab === 'equipment'): ?>
         <div class="catalogue-layout"><aside class="catalogue-filter-sidebar" aria-label="Equipment filters">
 
@@ -895,27 +899,12 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
         <div class="cat-sidebar-user-card">
             <div class="cat-sidebar-user-header">
                 <div class="cat-sidebar-section-label">Selected User</div>
-                <?php if ($bookingOverride): ?>
-                <div class="cat-sidebar-user-name">
-                    <?= h(trim(($bookingOverride['first_name'] ?? '') . ' ' . ($bookingOverride['last_name'] ?? ''))) ?: h($bookingOverride['email'] ?? '') ?>
-                </div>
-                <?php if (!empty($userAccessLevels ?? []) || !empty($userCerts ?? [])): ?>
-                <div class="cat-sidebar-user-badges">
-                    <?php foreach ($userAccessLevels ?? [] as $level): ?>
-                        <span class="badge bg-info text-dark"><?= h($level) ?></span>
-                    <?php endforeach; ?>
-                    <?php foreach ($userCerts ?? [] as $cert): ?>
-                        <span class="badge bg-warning text-dark"><?= h($cert) ?></span>
-                    <?php endforeach; ?>
-                </div>
-                <?php endif; ?>
-                <?php endif; ?>
             </div>
             <hr class="cat-sidebar-user-divider" aria-hidden="true">
             <form method="post" id="booking_user_form" class="cat-sidebar-user-body position-relative">
                 <input type="hidden" name="mode" value="set_booking_user">
-                <input type="hidden" name="booking_user_email" id="booking_user_email">
-                <input type="hidden" name="booking_user_name" id="booking_user_name">
+                <input type="hidden" name="booking_user_email" id="booking_user_email" value="<?= h($overrideEmail) ?>">
+                <input type="hidden" name="booking_user_name" id="booking_user_name" value="<?= h($overrideName) ?>">
                 <input type="search" id="booking_user_input" name="user_lookup"
                        class="form-control form-control-sm cat-sidebar-user-search"
                        placeholder="Search name or email"
@@ -923,16 +912,13 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                        role="combobox"
                        aria-autocomplete="list"
                        aria-expanded="false"
-                       aria-controls="booking_user_suggestions">
+                       aria-controls="booking_user_suggestions"
+                       value="<?= h($overrideName) ?>">
                 <div class="list-group position-absolute w-100"
                      id="booking_user_suggestions"
                      role="listbox"
                      aria-label="User suggestions"
                      style="z-index:9999; max-height:260px; overflow-y:auto; display:none; box-shadow: 0 12px 24px rgba(0,0,0,0.18);"></div>
-                <?php if ($bookingOverride): ?>
-                <button class="cat-sidebar-user-clear btn btn-sm btn-outline-secondary"
-                        type="submit" name="booking_user_revert" value="1"><span aria-hidden="true">&times;</span> Clear</button>
-                <?php endif; ?>
             </form>
         </div>
         <?php endif; // $isStaff ?>
@@ -983,9 +969,8 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         <div class="cat-sort-item">
                             <label class="form-label mb-1 fw-semibold" for="sort-select">Sort</label>
                             <select name="sort" id="sort-select" class="form-select cat-rounded-select">
-                                <option value="">Model name (A–Z)</option>
-                                <option value="name_asc"   <?= $sort === 'name_asc'   ? 'selected' : '' ?>>Name (A–Z)</option>
-                                <option value="name_desc"  <?= $sort === 'name_desc'  ? 'selected' : '' ?>>Name (Z–A)</option>
+                                <option value="name_asc"   <?= ($sortRaw === '' || $sortRaw === 'name_asc')  ? 'selected' : '' ?>>Name (A–Z)</option>
+                                <option value="name_desc"  <?= $sortRaw === 'name_desc'                      ? 'selected' : '' ?>>Name (Z–A)</option>
                                 <option value="manu_asc"   <?= $sort === 'manu_asc'   ? 'selected' : '' ?>>Manufacturer (A–Z)</option>
                                 <option value="manu_desc"  <?= $sort === 'manu_desc'  ? 'selected' : '' ?>>Manufacturer (Z–A)</option>
                                 <option value="units_asc"  <?= $sort === 'units_asc'  ? 'selected' : '' ?>>Units (low–high)</option>
@@ -1043,17 +1028,87 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
         </form>
         </aside><div class="catalogue-main">
         <div class="catalogue-search-bar">
-            <div class="catalogue-search-capsule">
-                <span class="search-icon" aria-hidden="true">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
-                        <line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    </svg>
-                </span>
-                <input type="text" name="q" form="catalogue-filter-form"
-                       placeholder="Search by model name or manufacturer"
-                       value="<?= h($searchRaw) ?>"
-                       aria-label="Search by model name or manufacturer">
+            <div class="catalogue-search-row">
+                <div class="catalogue-search-capsule">
+                    <span class="search-icon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+                            <line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </span>
+                    <input type="text" name="q" form="catalogue-filter-form"
+                           placeholder="Search by model name or manufacturer"
+                           value="<?= h($searchRaw) ?>"
+                           aria-label="Search by model name or manufacturer">
+                </div>
+                <button type="button" class="cat-mobile-filter-btn" id="cat-mobile-filter-btn"
+                        aria-expanded="false" aria-controls="cat-mobile-filter-panel">
+                    <i class="bi bi-funnel" aria-hidden="true"></i>
+                    <span class="visually-hidden">Filters</span>
+                </button>
+            </div>
+            <div id="cat-mobile-filter-panel" class="cat-mobile-filter-panel" hidden>
+                <form id="cat-mobile-filter-form" method="get" action="catalogue.php">
+                    <input type="hidden" name="tab" value="equipment">
+                    <input type="hidden" name="start_datetime" value="<?= h($windowStartRaw) ?>">
+                    <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
+                    <input type="hidden" name="prefetch" value="1">
+                    <input type="hidden" name="q" value="<?= h($searchRaw) ?>">
+                    <div class="cat-mobile-filter-row">
+                        <div class="cat-mobile-filter-item">
+                            <label class="form-label mb-1 fw-semibold" for="cat-mobile-sort">Sort</label>
+                            <select name="sort" id="cat-mobile-sort" class="form-select cat-rounded-select">
+                                <option value="name_asc"   <?= ($sortRaw === '' || $sortRaw === 'name_asc')  ? 'selected' : '' ?>>Name (A–Z)</option>
+                                <option value="name_desc"  <?= $sortRaw === 'name_desc'                      ? 'selected' : '' ?>>Name (Z–A)</option>
+                                <option value="manu_asc"   <?= $sort === 'manu_asc'   ? 'selected' : '' ?>>Manufacturer (A–Z)</option>
+                                <option value="manu_desc"  <?= $sort === 'manu_desc'  ? 'selected' : '' ?>>Manufacturer (Z–A)</option>
+                                <option value="units_asc"  <?= $sort === 'units_asc'  ? 'selected' : '' ?>>Units (low–high)</option>
+                                <option value="units_desc" <?= $sort === 'units_desc' ? 'selected' : '' ?>>Units (high–low)</option>
+                            </select>
+                        </div>
+                        <div class="cat-mobile-filter-item cat-view-dropdown">
+                            <label class="form-label mb-1 fw-semibold">View</label>
+                            <button type="button" class="cat-toggle-btn cat-view-toggle" id="cat-view-btn-mobile"
+                                    aria-haspopup="true" aria-expanded="false">
+                                <i class="bi bi-list-ul" id="cat-view-icon-mobile" aria-hidden="true"></i>
+                                <span id="cat-view-label-mobile">List</span>
+                                <svg class="cat-toggle-chevron ms-auto" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                                    <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </button>
+                            <div class="cat-view-menu cat-dropdown" id="cat-view-menu-mobile" hidden>
+                                <button type="button" class="cat-view-option cat-option" data-view="list"><i class="bi bi-list-ul" aria-hidden="true"></i> List</button>
+                                <button type="button" class="cat-view-option cat-option" data-view="grid"><i class="bi bi-grid" aria-hidden="true"></i> Grid</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <p class="form-label mb-1 fw-semibold" id="cat-mobile-cat-label">Category</p>
+                        <button type="button" class="cat-toggle-btn" id="cat-mobile-cat-btn"
+                                aria-expanded="false" aria-controls="cat-mobile-cat-dropdown"
+                                aria-labelledby="cat-mobile-cat-label cat-mobile-cat-btn">
+                            <span class="cat-toggle-label"><?php
+                                $n = count($categoriesSelected);
+                                echo $n === 0 ? 'All categories' : ($n === 1 ? '1 category' : "$n categories");
+                            ?></span>
+                            <svg class="cat-toggle-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                                <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                        <div class="cat-dropdown" id="cat-mobile-cat-dropdown" hidden aria-labelledby="cat-mobile-cat-label">
+                            <?php foreach ($categories as $cat): ?>
+                                <?php $cid = (int)($cat['id'] ?? 0); $cname = $cat['name'] ?? ''; ?>
+                                <label class="cat-option">
+                                    <input class="cat-checkbox" type="checkbox"
+                                           name="category[]" value="<?= $cid ?>"
+                                           <?= in_array($cid, $categoriesSelected) ? 'checked' : '' ?>>
+                                    <span><?= label_safe($cname) ?></span>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 mt-3">Apply filters</button>
+                </form>
             </div>
         </div>
 
@@ -1670,27 +1725,12 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             <div class="cat-sidebar-user-card">
                 <div class="cat-sidebar-user-header">
                     <div class="cat-sidebar-section-label">Selected User</div>
-                    <?php if ($bookingOverride): ?>
-                    <div class="cat-sidebar-user-name">
-                        <?= h(trim(($bookingOverride['first_name'] ?? '') . ' ' . ($bookingOverride['last_name'] ?? ''))) ?: h($bookingOverride['email'] ?? '') ?>
-                    </div>
-                    <?php if (!empty($userAccessLevels ?? []) || !empty($userCerts ?? [])): ?>
-                    <div class="cat-sidebar-user-badges">
-                        <?php foreach ($userAccessLevels ?? [] as $level): ?>
-                            <span class="badge bg-info text-dark"><?= h($level) ?></span>
-                        <?php endforeach; ?>
-                        <?php foreach ($userCerts ?? [] as $cert): ?>
-                            <span class="badge bg-warning text-dark"><?= h($cert) ?></span>
-                        <?php endforeach; ?>
-                    </div>
-                    <?php endif; ?>
-                    <?php endif; ?>
                 </div>
                 <hr class="cat-sidebar-user-divider" aria-hidden="true">
                 <form method="post" id="booking_user_form" class="cat-sidebar-user-body position-relative">
                     <input type="hidden" name="mode" value="set_booking_user">
-                    <input type="hidden" name="booking_user_email" id="booking_user_email">
-                    <input type="hidden" name="booking_user_name" id="booking_user_name">
+                    <input type="hidden" name="booking_user_email" id="booking_user_email" value="<?= h($overrideEmail) ?>">
+                    <input type="hidden" name="booking_user_name" id="booking_user_name" value="<?= h($overrideName) ?>">
                     <input type="search" id="booking_user_input" name="user_lookup"
                            class="form-control form-control-sm cat-sidebar-user-search"
                            placeholder="Search by name or email"
@@ -1698,16 +1738,13 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                            role="combobox"
                            aria-autocomplete="list"
                            aria-expanded="false"
-                           aria-controls="booking_user_suggestions">
+                           aria-controls="booking_user_suggestions"
+                           value="<?= h($overrideName) ?>">
                     <div class="list-group position-absolute w-100"
                          id="booking_user_suggestions"
                          role="listbox"
                          aria-label="User suggestions"
                          style="z-index:9999; max-height:260px; overflow-y:auto; display:none; box-shadow: 0 12px 24px rgba(0,0,0,0.18);"></div>
-                    <?php if ($bookingOverride): ?>
-                    <button class="cat-sidebar-user-clear btn btn-sm btn-outline-secondary"
-                            type="submit" name="booking_user_revert" value="1"><span aria-hidden="true">&times;</span> Clear</button>
-                    <?php endif; ?>
                 </form>
             </div>
             <?php endif; // $isStaff ?>
@@ -2131,6 +2168,8 @@ document.addEventListener('DOMContentLoaded', function () {
     let bookingQuery   = '';
     let bookingActiveIndex = -1;
     let basketToastTimer = null;
+    const originalBookingName  = bookingInput  ? bookingInput.value  : '';
+    const originalBookingEmail = bookingEmail  ? bookingEmail.value  : '';
 
     function showLoadingOverlay() {
         if (!loadingOverlay) return;
@@ -2411,6 +2450,54 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // Mobile filter panel
+    (function () {
+        var filterBtn   = document.getElementById('cat-mobile-filter-btn');
+        var filterPanel = document.getElementById('cat-mobile-filter-panel');
+        var mobileForm  = document.getElementById('cat-mobile-filter-form');
+        var capsuleInput = document.querySelector('.catalogue-search-capsule input[type="text"]');
+        var mobileQHidden = mobileForm ? mobileForm.querySelector('input[name="q"]') : null;
+
+        if (!filterBtn || !filterPanel) return;
+
+        function syncQ() {
+            if (capsuleInput && mobileQHidden) {
+                mobileQHidden.value = capsuleInput.value;
+            }
+        }
+
+        filterBtn.addEventListener('click', function () {
+            var opening = filterPanel.hidden;
+            filterPanel.hidden = !opening;
+            filterBtn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+            filterBtn.classList.toggle('cat-mobile-filter-btn--active', opening);
+            if (opening) syncQ();
+        });
+
+        // Mobile category dropdown
+        var mobileCatBtn      = document.getElementById('cat-mobile-cat-btn');
+        var mobileCatDropdown = document.getElementById('cat-mobile-cat-dropdown');
+        if (mobileCatBtn && mobileCatDropdown) {
+            mobileCatBtn.addEventListener('click', function () {
+                var opening = mobileCatDropdown.hidden;
+                mobileCatDropdown.hidden = !opening;
+                mobileCatBtn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+            });
+            mobileCatDropdown.addEventListener('change', function () {
+                var checked = mobileCatDropdown.querySelectorAll('.cat-checkbox:checked');
+                var label   = mobileCatBtn.querySelector('.cat-toggle-label');
+                if (label) {
+                    var n = checked.length;
+                    label.textContent = n === 0 ? 'All categories' : (n === 1 ? '1 category' : n + ' categories');
+                }
+            });
+        }
+
+        if (mobileForm) {
+            mobileForm.addEventListener('submit', function () { syncQ(); showLoadingOverlay(); });
+        }
+    })();
+
     const overdueEnabled = document.body.dataset.catalogueOverdue === '1';
     if (overdueEnabled) {
         fetch('catalogue.php?ajax=overdue_check', {
@@ -2576,8 +2663,19 @@ document.addEventListener('DOMContentLoaded', function () {
             items[bookingActiveIndex].scrollIntoView({ block: 'nearest' });
         });
 
+        bookingInput.addEventListener('focus', function () {
+            if (originalBookingEmail && bookingInput.value === originalBookingName) {
+                bookingInput.value = '';
+            }
+        });
+
         bookingInput.addEventListener('blur', function () {
-            setTimeout(hideBookingSuggestions, 150);
+            setTimeout(function () {
+                hideBookingSuggestions();
+                if (originalBookingEmail && bookingEmail.value === originalBookingEmail) {
+                    bookingInput.value = originalBookingName;
+                }
+            }, 150);
         });
     }
 
@@ -2688,8 +2786,9 @@ function revertToLoggedIn(e) {
         });
     }
 
-    initToggle('cat-view-btn-top',  'cat-view-menu-top');
-    initToggle('cat-view-btn-side', 'cat-view-menu-side');
+    initToggle('cat-view-btn-top',    'cat-view-menu-top');
+    initToggle('cat-view-btn-side',   'cat-view-menu-side');
+    initToggle('cat-view-btn-mobile', 'cat-view-menu-mobile');
 
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') closeAll();

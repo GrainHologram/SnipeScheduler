@@ -378,6 +378,8 @@
         };
     })();
 
+    window.TopbarCrumbs = TopbarCrumbs;
+
     // ── Catalogue inline detail view ──────────────────────────────────────────
     //
     // CatalogueDetail.open(modelId, modelName) replaces .catalogue-scroll-area
