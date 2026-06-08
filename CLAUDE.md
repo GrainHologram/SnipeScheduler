@@ -133,6 +133,18 @@ On mobile (≤768px), the sidebar becomes a fixed horizontal top bar with horizo
 `public/my_bookings.php`:
 - Scroll model gotcha: at ≤900px stacked layout use `height: 100%` not `height: auto` — `html { height: 100%; overflow: hidden }` makes body the scroll container; `height: auto` causes clipping.
 
+## CSS & layout conventions
+
+- **Every colour comes from a CSS variable in `:root`** of `public/assets/style.css`. Never hardcode hex/rgba outside `:root` — add a variable instead. Use the paired `*-rgb` triples for `rgba()` (e.g. `rgba(var(--primary-rgb), 0.2)`). Run `bash scripts/check_css_hygiene.sh` to catch drift.
+- **Pages use layout helpers, not hand-rolled boilerplate.** New and migrated pages call `layout_page_start([...])` at the top and `layout_page_end([...])` at the bottom (both in `src/layout.php`) instead of writing the `<!DOCTYPE>`/`<head>`/nav/topbar/footer skeleton. Options: `active`, `title`, `subtitle`, `bodyClass`, `bodyAttrs`, `pageHeaderTitle`, `pageHeaderSubtitle`, `extraHead`, `layout` (`'standard'|'catalogue'|'minimal'|'embed'`), `hideTopUserBar`. The helper auto-detects `RESERVATIONS_EMBED` and no-ops in embed mode; the orchestrator (`reservations.php`) passes `'bypassEmbedCheck' => true` to render its own chrome.
+- **Repeated UI pieces have helpers** in `src/layout.php`. Use them instead of copy-pasting markup:
+  - `layout_empty_state($icon, $text)` — the standard "no items here" panel (icon + message)
+  - `layout_asset_status_badge($isCheckedIn)` — `Out` / `Returned` badge for asset rows
+  - `layout_status_badge($status)` / `layout_checkout_status_badge($status)` — reservation / checkout status pills
+  - `layout_window_modal([...])` — defined but currently NOT used; basket/catalogue still ship their own bespoke window modals (markup + JS diverge enough that extraction was deferred)
+- **`style.css` section index** lives in the comment block at the top of the file. When adding rules, put them in the matching section. `slot-picker.css` was merged in under "Slot picker (merged)".
+- **Pages intentionally left on the legacy skeleton:** `catalogue.php` (eager output-flush for loading overlay), `overdue_report.php` (uses `.page-shell.no-print` to suppress chrome in print mode), `login.php` (no auth context, custom centered layout). Migrating these requires custom helper variants that aren't worth the cost for one page each.
+
 ## Development Notes
 
 - **No build step or package manager** — plain PHP, no Composer dependencies, no bundler. Just edit and reload.

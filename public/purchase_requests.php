@@ -472,12 +472,12 @@ try {
 </div>
 
 <!-- Manage Modal -->
-<div id="manageBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1050;"
+<div id="manageBackdrop" style="display:none; position:fixed; inset:0; background:var(--backdrop-modal); z-index:1050;"
      onclick="closeManageModal()"></div>
 <div id="manageModal" style="display:none; position:fixed; inset:0; z-index:1055; overflow-y:auto; padding:1.75rem;"
      onclick="if(event.target===this)closeManageModal()">
-    <div style="max-width:550px; margin:0 auto; background:#fff; border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid #dee2e6;">
+    <div style="max-width:550px; margin:0 auto; background:var(--panel); border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(var(--black-rgb), 0.15);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid var(--border);">
             <h5 style="margin:0;">Manage Request</h5>
             <button type="button" onclick="closeManageModal()" style="background:none; border:none; font-size:1.5rem; cursor:pointer;">&times;</button>
         </div>

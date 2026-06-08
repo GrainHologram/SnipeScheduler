@@ -262,51 +262,17 @@ $allResItems = [];
 if (!empty($reservations)) {
     $allResItems = batch_get_reservation_items($pdo, array_column($reservations, 'id'));
 }
+layout_page_start([
+    'active' => $active,
+    'title'  => 'Reservation History – Admin',
+]);
 ?>
-<?php if (!$embedded): ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Reservation History – Admin</title>
-
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-    <?= layout_theme_styles() ?>
-</head>
-<body class="p-4">
-<div class="container">
-    <div class="page-shell">
-        <?= layout_logo_tag() ?>
-<?php endif; ?>
         <div class="page-header">
         <h1>Reservation History</h1>
             <div class="page-subtitle">
                 View, filter, and delete any past, present or future reservation.
             </div>
         </div>
-
-        <!-- App navigation -->
-        <?php if (!$embedded): ?>
-            <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
-            <?= layout_render_topbar($active) ?>
-        <?php endif; ?>
-
-        <!-- Top bar -->
-        <?php if (!$embedded): ?>
-            <div class="top-bar mb-3">
-                <div class="top-bar-user">
-                    Logged in as:
-                    <strong><?= h(trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''))) ?></strong>
-                    (<?= h($currentUser['email'] ?? '') ?>)
-                </div>
-                <div class="top-bar-actions">
-                    <a href="logout.php" class="btn btn-link btn-sm">Log out</a>
-                </div>
-            </div>
-        <?php endif; ?>
 
         <?php if (!empty($deletedMsg)): ?>
             <div class="alert alert-success">
@@ -628,23 +594,22 @@ if (!empty($reservations)) {
             </div><!-- /.res-history-content -->
         </div><!-- /.res-history-body -->
 
-<?php if (!$embedded): ?>
-    </div>
-</div>
-<?php layout_footer(); ?>
-</body>
-</html>
-<?php endif; ?>
-<?php if ($embedded): ?>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const form = document.getElementById('reservation-history-filter-form');
-    const sortSelect = form ? form.querySelector('select[name="sort"]') : null;
-    if (form && sortSelect) {
-        sortSelect.addEventListener('change', function () {
-            form.submit();
-        });
-    }
-});
-</script>
-<?php endif; ?>
+<?php
+if ($embedded) {
+    ?>
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const form = document.getElementById('reservation-history-filter-form');
+        const sortSelect = form ? form.querySelector('select[name="sort"]') : null;
+        if (form && sortSelect) {
+            sortSelect.addEventListener('change', function () {
+                form.submit();
+            });
+        }
+    });
+    </script>
+    <?php
+} else {
+    layout_page_end();
+}
+?>

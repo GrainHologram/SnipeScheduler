@@ -197,46 +197,17 @@ $overdueUserEmails = [];
 foreach ($overdueGrouped as $email => $_grp) {
     $overdueUserEmails[$email] = true;
 }
+$dashSubtitle = $isStaff
+    ? "Staff dashboard — today's pickups, active checkouts, and items due back."
+    : 'Browse bookable equipment, manage your basket, and review your bookings.';
+
+layout_page_start([
+    'active'             => $active,
+    'title'              => 'Equipment Booking – Dashboard',
+    'pageHeaderTitle'    => 'Equipment Booking',
+    'pageHeaderSubtitle' => $dashSubtitle,
+]);
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Equipment Booking – Dashboard</title>
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-    <?= layout_theme_styles() ?>
-</head>
-<body class="p-4">
-<div class="container">
-    <div class="page-shell">
-        <?= layout_logo_tag() ?>
-        <div class="page-header">
-            <h1>Equipment Booking</h1>
-            <div class="page-subtitle">
-                <?php if ($isStaff): ?>
-                    Staff dashboard — today's pickups, active checkouts, and items due back.
-                <?php else: ?>
-                    Browse bookable equipment, manage your basket, and review your bookings.
-                <?php endif; ?>
-            </div>
-        </div>
-
-        <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
-        <?= layout_render_topbar($active) ?>
-
-        <div class="top-bar mb-3">
-            <div class="top-bar-user">
-                Logged in as:
-                <strong><?= h(trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''))) ?></strong>
-                (<?= h($currentUser['email'] ?? '') ?>)
-            </div>
-            <div class="top-bar-actions">
-                <a href="logout.php" class="btn btn-link btn-sm">Log out</a>
-            </div>
-        </div>
 
         <?php if ($isStaff): ?>
 
@@ -447,10 +418,10 @@ foreach ($overdueGrouped as $email => $_grp) {
         </div>
 
         <!-- Items detail modal -->
-        <div id="dashItemsBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1050;" onclick="closeDashItemsModal()"></div>
+        <div id="dashItemsBackdrop" style="display:none; position:fixed; inset:0; background:var(--backdrop-modal); z-index:1050;" onclick="closeDashItemsModal()"></div>
         <div id="dashItemsModal" style="display:none; position:fixed; inset:0; z-index:1055; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)closeDashItemsModal()">
-            <div style="width:fit-content; max-width:90vw; margin:0 auto; background:#fff; border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
-                <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid #dee2e6;">
+            <div style="width:fit-content; max-width:90vw; margin:0 auto; background:var(--panel); border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(var(--black-rgb), 0.15);">
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid var(--border);">
                     <h5 style="margin:0;" id="dashItemsTitle">Items</h5>
                     <button type="button" onclick="closeDashItemsModal()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
                 </div>
@@ -551,17 +522,14 @@ document.addEventListener('keydown', function(e) {
 
         <?php endif; ?>
 
-    </div>
-</div>
-
 <?php
 $welcomeEnabled = $config['app']['welcome_enabled'] ?? true;
 if ($welcomeEnabled):
 ?>
-<div id="welcomeBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1050;" onclick="closeWelcomeModal()"></div>
+<div id="welcomeBackdrop" style="display:none; position:fixed; inset:0; background:var(--backdrop-modal); z-index:1050;" onclick="closeWelcomeModal()"></div>
 <div id="welcomeModal" style="display:none; position:fixed; inset:0; z-index:1055; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)closeWelcomeModal()">
-    <div style="max-width:550px; margin:0 auto; background:#fff; border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid #dee2e6;">
+    <div style="max-width:550px; margin:0 auto; background:var(--panel); border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(var(--black-rgb), 0.15);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid var(--border);">
             <h5 style="margin:0;">Welcome to <?= h($config['app']['name'] ?? 'SnipeScheduler') ?></h5>
             <button type="button" onclick="closeWelcomeModal()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
         </div>
@@ -612,6 +580,4 @@ document.addEventListener('keydown', function(e) {
 </script>
 <?php endif; ?>
 
-<?php layout_footer(); ?>
-</body>
-</html>
+<?php layout_page_end(); ?>

@@ -179,45 +179,14 @@ foreach ($currentBasket as $mid => $qty) {
 foreach ($kitNames as $kid => $kname) {
     $currentBasketSummary[] = h($kname);
 }
+layout_page_start([
+    'active'             => $active,
+    'title'              => 'My Gear',
+    'bodyClass'          => 'p-4 page-my-gear',
+    'pageHeaderTitle'    => 'My Gear',
+    'pageHeaderSubtitle' => 'View all your past, current and future reservations.',
+]);
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>My Gear</title>
-
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-    <?= layout_theme_styles() ?>
-</head>
-<body class="p-4 page-my-gear">
-<div class="container">
-    <div class="page-shell">
-        <?= layout_logo_tag() ?>
-        <div class="page-header">
-            <h1>My Gear</h1>
-            <div class="page-subtitle">
-                View all your past, current and future reservations.
-            </div>
-        </div>
-
-        <!-- App navigation -->
-        <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
-        <?= layout_render_topbar($active) ?>
-
-        <!-- Top bar -->
-        <div class="top-bar mb-3">
-            <div class="top-bar-user">
-                Logged in as:
-                <strong><?= h($userName) ?></strong>
-                (<?= h($currentUser['email'] ?? '') ?>)
-            </div>
-            <div class="top-bar-actions">
-                <a href="logout.php" class="btn btn-link btn-sm">Log out</a>
-            </div>
-        </div>
 
         <?php if (!empty($deletedMsg)): ?>
             <div class="alert alert-success">
@@ -498,14 +467,12 @@ foreach ($kitNames as $kid => $kname) {
 
         </div><!-- /.my-bookings-panels -->
 
-    </div>
-</div>
 <?php if ($isStaff && ($currentBasketCount > 0 || $bookingOverride)): ?>
 <!-- Reuse confirmation modal -->
-<div id="reuseBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1050;" onclick="closeReuseModal()"></div>
+<div id="reuseBackdrop" style="display:none; position:fixed; inset:0; background:var(--backdrop-modal); z-index:1050;" onclick="closeReuseModal()"></div>
 <div id="reuseModal" style="display:none; position:fixed; inset:0; z-index:1055; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)closeReuseModal()">
-    <div style="max-width:480px; margin:0 auto; background:#fff; border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid #dee2e6;">
+    <div style="max-width:480px; margin:0 auto; background:var(--panel); border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(var(--black-rgb), 0.15);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid var(--border);">
             <h5 style="margin:0;">Replace current basket?</h5>
             <button type="button" onclick="closeReuseModal()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
         </div>
@@ -531,7 +498,7 @@ foreach ($kitNames as $kid => $kname) {
                         <div class="small text-muted">Empty</div>
                     <?php endif; ?>
                 </div>
-                <div style="display:flex; align-items:center; font-size:1.25rem; color:#6c757d;">&rarr;</div>
+                <div style="display:flex; align-items:center; font-size:1.25rem; color:var(--muted);">&rarr;</div>
                 <div style="flex:1; min-width:0;">
                     <div class="fw-semibold text-success small mb-1">New items</div>
                     <div class="small mb-1" id="reuseNewUser"></div>
@@ -539,7 +506,7 @@ foreach ($kitNames as $kid => $kname) {
                 </div>
             </div>
         </div>
-        <div style="display:flex; justify-content:flex-end; gap:.5rem; padding:.75rem 1rem; border-top:1px solid #dee2e6;">
+        <div style="display:flex; justify-content:flex-end; gap:.5rem; padding:.75rem 1rem; border-top:1px solid var(--border);">
             <button type="button" class="btn btn-outline-secondary" onclick="closeReuseModal()">Cancel</button>
             <form method="post" action="reuse_reservation.php" id="reuseModalForm">
                 <input type="hidden" name="reservation_id" id="reuseModalResId" value="">
@@ -550,7 +517,9 @@ foreach ($kitNames as $kid => $kname) {
 </div>
 <?php endif; ?>
 
-<?php layout_footer(); ?>
+<?php
+ob_start();
+?>
 <script>
 <?php if ($isStaff && ($currentBasketCount > 0 || $bookingOverride)): ?>
 var _reuseSummaries = <?= json_encode($reuseSummaries, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
@@ -590,5 +559,6 @@ function togglePastReservations() {
     }
 }
 </script>
-</body>
-</html>
+<?php
+layout_page_end(['extraScripts' => ob_get_clean()]);
+?>

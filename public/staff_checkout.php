@@ -1671,55 +1671,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // View data
 // ---------------------------------------------------------------------
 $active  = basename($_SERVER['PHP_SELF']);
+layout_page_start([
+    'active'             => $active,
+    'title'              => 'Today’s Reservations (Checkout)',
+    'pageHeaderTitle'    => $embedded ? '' : 'Today’s Reservations (Checkout)',
+    'pageHeaderSubtitle' => 'View today’s reservations and perform bulk checkouts via Snipe-IT.',
+]);
 ?>
-<?php if (!$embedded): ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Today’s Reservations (Checkout)</title>
-
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-    <?= layout_theme_styles() ?>
-</head>
-<body class="p-4">
-<div class="container">
-    <div class="page-shell">
-        <?= layout_logo_tag() ?>
-<?php endif; ?>
 <?php if ($embedded): ?>
 <div class="res-history-body">
-<?php else: ?>
-        <div class="page-header">
-            <h1>Today’s Reservations (Checkout)</h1>
-            <div class="page-subtitle">
-                View today’s reservations and perform bulk checkouts via Snipe-IT.
-            </div>
-        </div>
 <?php endif; ?>
-
-        <!-- App navigation -->
-        <?php if (!$embedded): ?>
-            <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
-            <?= layout_render_topbar($active) ?>
-        <?php endif; ?>
-
-        <!-- Top bar -->
-        <?php if (!$embedded): ?>
-            <div class="top-bar mb-3">
-                <div class="top-bar-user">
-                    Logged in as:
-                    <strong><?= h(trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''))) ?></strong>
-                    (<?= h($currentUser['email'] ?? '') ?>)
-                </div>
-                <div class="top-bar-actions">
-                    <a href="logout.php" class="btn btn-link btn-sm">Log out</a>
-                </div>
-            </div>
-        <?php endif; ?>
 
 <?php if ($embedded): ?>
     <!-- EMBEDDED: new list/detail layout -->
@@ -1757,10 +1718,7 @@ $active  = basename($_SERVER['PHP_SELF']);
             <?php if (!empty($upcomingError)): ?>
                 <div class="alert alert-danger"><?= h($upcomingError) ?></div>
             <?php elseif (empty($upcomingBookings)): ?>
-                <div class="panel-empty-state">
-                    <div class="panel-empty-icon"><i class="bi bi-calendar-x"></i></div>
-                    <p class="panel-empty-text">No upcoming pending reservations.</p>
-                </div>
+                <?= layout_empty_state('bi-calendar-x', 'No upcoming pending reservations.') ?>
             <?php else: ?>
                 <?php foreach ($upcomingBookings as $res): ?>
                     <?php
@@ -2101,7 +2059,7 @@ $active  = basename($_SERVER['PHP_SELF']);
     </div><!-- /.res-today-detail -->
     <!-- Dates info modal -->
     <div id="res-dates-modal-backdrop"
-         style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1070;"
+         style="display:none; position:fixed; inset:0; background:var(--backdrop-modal-strong); z-index:1070;"
          onclick="closeResDatesModal()"></div>
     <div id="res-dates-modal" role="dialog" aria-modal="true" aria-labelledby="res-dates-modal-title"
          style="display:none; position:fixed; inset:0; z-index:1075; align-items:center; justify-content:center; padding:1.75rem;"
@@ -3165,10 +3123,11 @@ $active  = basename($_SERVER['PHP_SELF']);
     window._scanQueue = { enqueue: enqueueTag };
 })();
 </script>
-<?php if (!$embedded): ?>
-<?php layout_checkout_loading_overlay(); ?>
-<?php layout_model_history_modal(true); ?>
-<?php layout_footer(); ?>
-</body>
-</html>
-<?php endif; ?>
+<?php
+if (!$embedded) {
+    layout_page_end([
+        'withCheckoutOverlay'   => true,
+        'withModelHistoryModal' => true,
+    ]);
+}
+?>

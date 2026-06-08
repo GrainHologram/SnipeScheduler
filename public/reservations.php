@@ -44,52 +44,25 @@ if (!$tabFile || !is_file($tabFile)) {
     include $tabFile;
     $tabContent = ob_get_clean();
 }
+$tabSubtitles = [
+    'today'            => 'Upcoming Reservations',
+    'checked_out'      => 'Checked Out Items',
+    'history'          => 'Reservation History',
+    'checkout_history' => 'Checkout History',
+    'unmatched'        => 'Unmatched Checkins',
+    'kit_audit'        => 'Kit Audit',
+];
+
+layout_page_start([
+    'active'             => $active,
+    'title'              => 'Reservations',
+    'subtitle'           => $tabSubtitles[$tab] ?? '',
+    'bodyClass'          => 'p-4 page-reservations',
+    'pageHeaderTitle'    => 'Reservations',
+    'pageHeaderSubtitle' => "Manage reservation history, today's checkouts, and checked-out assets from one place.",
+    'bypassEmbedCheck'   => true,
+]);
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Reservations</title>
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-    <?= layout_theme_styles() ?>
-</head>
-<body class="p-4 page-reservations">
-<div class="container">
-    <div class="page-shell">
-        <?= layout_logo_tag() ?>
-        <div class="page-header">
-            <h1>Reservations</h1>
-            <div class="page-subtitle">
-                Manage reservation history, today's checkouts, and checked-out assets from one place.
-            </div>
-        </div>
-
-        <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
-        <?php
-        $tabSubtitles = [
-            'today'            => 'Upcoming Reservations',
-            'checked_out'      => 'Checked Out Items',
-            'history'          => 'Reservation History',
-            'checkout_history' => 'Checkout History',
-            'unmatched'        => 'Unmatched Checkins',
-            'kit_audit'        => 'Kit Audit',
-        ];
-        ?>
-        <?= layout_render_topbar($active, $tabSubtitles[$tab] ?? '') ?>
-
-        <div class="top-bar mb-3">
-            <div class="top-bar-user">
-                Logged in as:
-                <strong><?= h(trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''))) ?></strong>
-                (<?= h($currentUser['email'] ?? '') ?>)
-            </div>
-            <div class="top-bar-actions">
-                <a href="logout.php" class="btn btn-link btn-sm">Log out</a>
-            </div>
-        </div>
 
         <ul class="nav nav-tabs reservations-subtabs mb-3">
             <li class="nav-item">
@@ -123,10 +96,10 @@ if (!$tabFile || !is_file($tabFile)) {
         <div class="tab-content">
             <?= $tabContent ?>
         </div>
-    </div>
-</div>
-<?php layout_checkout_loading_overlay(); ?>
-<?php layout_model_history_modal(true); ?>
-<?php layout_footer(); ?>
-</body>
-</html>
+<?php
+layout_page_end([
+    'withCheckoutOverlay'   => true,
+    'withModelHistoryModal' => true,
+    'bypassEmbedCheck'      => true,
+]);
+?>

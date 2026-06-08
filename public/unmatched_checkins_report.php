@@ -97,31 +97,13 @@ function unmatched_build_url(string $base, array $params): string
     $query = http_build_query($params);
     return $query === '' ? $base : ($base . '?' . $query);
 }
+layout_page_start([
+    'active'             => $active,
+    'title'              => 'Unmatched Checkins Report',
+    'pageHeaderTitle'    => 'Unmatched Checkins',
+    'pageHeaderSubtitle' => 'Assets returned without a matching local checkout record.',
+]);
 ?>
-<?php if (!$embedded): ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Unmatched Checkins Report</title>
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-    <?= layout_theme_styles() ?>
-</head>
-<body class="p-4">
-<div class="container">
-    <div class="page-shell">
-        <?= layout_logo_tag() ?>
-        <div class="page-header">
-            <h1>Unmatched Checkins</h1>
-            <div class="page-subtitle">
-                Assets returned without a matching local checkout record.
-            </div>
-        </div>
-        <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
-<?php endif; ?>
 
     <form method="get" action="<?= h($pageBase) ?>" id="unmatched-filter-form">
     <?php foreach ($baseQuery as $k => $v): ?>
@@ -267,10 +249,4 @@ function unmatched_build_url(string $base, array $params): string
         </div><!-- /.res-history-content -->
     </div><!-- /.res-history-body -->
 
-<?php if (!$embedded): ?>
-    </div>
-</div>
-<?php layout_footer(); ?>
-</body>
-</html>
-<?php endif; ?>
+<?php layout_page_end(); ?>

@@ -103,26 +103,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$appName = h($config['app']['name'] ?? 'SnipeScheduler');
+$appName   = $config['app']['name'] ?? 'SnipeScheduler';
 $pageTitle = 'My Account';
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= h($pageTitle) ?> - <?= $appName ?></title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-    <?= layout_theme_styles() ?>
-</head>
-<body class="p-4">
-<?= layout_logo_tag() ?>
-<?= layout_render_nav($active, $isStaff, $isAdmin) ?>
-<?= layout_render_topbar($active) ?>
 
-<div class="container py-4" style="max-width:700px;">
-    <h4 class="mb-3"><?= h($pageTitle) ?></h4>
+layout_page_start([
+    'active'          => $active,
+    'title'           => $pageTitle . ' - ' . $appName,
+    'pageHeaderTitle' => $pageTitle,
+]);
+?>
+
+<div class="my-account-shell" style="max-width:700px; margin:0 auto;">
 
     <?php foreach ($messages as $msg): ?>
         <div class="alert alert-success py-2"><?= h($msg) ?></div>
@@ -217,6 +208,4 @@ $pageTitle = 'My Account';
     <?php endif; ?>
 </div>
 
-<?php layout_footer(); ?>
-</body>
-</html>
+<?php layout_page_end(); ?>
