@@ -168,47 +168,17 @@ foreach ($checkouts as $co) {
         }
     }
 }
+layout_page_start([
+    'active' => $active,
+    'title'  => 'Checkout History',
+]);
 ?>
-<?php if (!$embedded): ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Checkout History</title>
-
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-    <?= layout_theme_styles() ?>
-</head>
-<body class="p-4">
-<div class="container">
-    <div class="page-shell">
-        <?= layout_logo_tag() ?>
-<?php endif; ?>
         <div class="page-header">
             <h1>Checkout History</h1>
             <div class="page-subtitle">
                 Browse all checkout records with asset details.
             </div>
         </div>
-
-        <?php if (!$embedded): ?>
-            <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
-            <?= layout_render_topbar($active) ?>
-
-            <div class="top-bar mb-3">
-                <div class="top-bar-user">
-                    Logged in as:
-                    <strong><?= h(trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''))) ?></strong>
-                    (<?= h($currentUser['email'] ?? '') ?>)
-                </div>
-                <div class="top-bar-actions">
-                    <a href="logout.php" class="btn btn-link btn-sm">Log out</a>
-                </div>
-            </div>
-        <?php endif; ?>
 
         <?php if (!empty($loadError ?? '')): ?>
             <div class="alert alert-danger">
@@ -347,7 +317,7 @@ foreach ($checkouts as $co) {
                                                 <td><?= h($ci['asset_name'] ?? '') ?></td>
                                                 <td><?php if ($isStaff && !empty($ci['model_id'])): ?><a href="#" class="model-history-link" onclick="openModelHistory(<?= (int)$ci['model_id'] ?>, <?= htmlspecialchars(json_encode($ci['model_name'] ?? ''), ENT_QUOTES) ?>); return false;"><?= h($ci['model_name'] ?? '') ?></a><?php else: ?><?= h($ci['model_name'] ?? '') ?><?php endif; ?></td>
                                                 <td><?= h(display_datetime($ci['checked_out_at'] ?? '')) ?></td>
-                                                <td><?= $ci['checked_in_at'] ? h(display_datetime($ci['checked_in_at'])) : '<span class="badge bg-warning text-dark">Out</span>' ?></td>
+                                                <td><?= $ci['checked_in_at'] ? h(display_datetime($ci['checked_in_at'])) : layout_asset_status_badge(false) ?></td>
                                             </tr>
                                         <?php endforeach; ?>
                                     </tbody>
@@ -395,7 +365,7 @@ foreach ($checkouts as $co) {
                                                         <td><?= h($ci['asset_name'] ?? '') ?></td>
                                                         <td><?php if ($isStaff && !empty($ci['model_id'])): ?><a href="#" class="model-history-link" onclick="openModelHistory(<?= (int)$ci['model_id'] ?>, <?= htmlspecialchars(json_encode($ci['model_name'] ?? ''), ENT_QUOTES) ?>); return false;"><?= h($ci['model_name'] ?? '') ?></a><?php else: ?><?= h($ci['model_name'] ?? '') ?><?php endif; ?></td>
                                                         <td><?= h(display_datetime($ci['checked_out_at'] ?? '')) ?></td>
-                                                        <td><?= $ci['checked_in_at'] ? h(display_datetime($ci['checked_in_at'])) : '<span class="badge bg-warning text-dark">Out</span>' ?></td>
+                                                        <td><?= $ci['checked_in_at'] ? h(display_datetime($ci['checked_in_at'])) : layout_asset_status_badge(false) ?></td>
                                                     </tr>
                                                 <?php endforeach; ?>
                                             </tbody>
@@ -452,25 +422,24 @@ foreach ($checkouts as $co) {
             </div><!-- /.res-history-content -->
         </div><!-- /.res-history-body -->
 
-<?php if (!$embedded): ?>
-    </div>
-</div>
-<?php layout_model_history_modal($isStaff); ?>
-<?php layout_footer(); ?>
-</body>
-</html>
-<?php endif; ?>
-<?php if ($embedded): ?>
-<?php layout_model_history_modal($isStaff); ?>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    var form = document.getElementById('checkout-history-filter-form');
-    var sortSelect = form ? form.querySelector('select[name="sort"]') : null;
-    if (form && sortSelect) {
-        sortSelect.addEventListener('change', function () {
-            form.submit();
-        });
-    }
-});
-</script>
-<?php endif; ?>
+<?php
+// Modal renders for both standalone (via page_end) and embed (explicit below).
+if ($embedded) {
+    layout_model_history_modal($isStaff);
+    ?>
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var form = document.getElementById('checkout-history-filter-form');
+        var sortSelect = form ? form.querySelector('select[name="sort"]') : null;
+        if (form && sortSelect) {
+            sortSelect.addEventListener('change', function () {
+                form.submit();
+            });
+        }
+    });
+    </script>
+    <?php
+} else {
+    layout_page_end(['withModelHistoryModal' => true]);
+}
+?>

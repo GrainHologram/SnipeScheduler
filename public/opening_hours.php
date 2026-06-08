@@ -186,42 +186,13 @@ if ($editOverrideId > 0) {
         }
     }
 }
+layout_page_start([
+    'active'             => $active,
+    'title'              => 'Opening Hours – SnipeScheduler',
+    'pageHeaderTitle'    => 'Opening Hours',
+    'pageHeaderSubtitle' => 'Configure when the facility is open for equipment collection and return.',
+]);
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Opening Hours – SnipeScheduler</title>
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-    <?= layout_theme_styles($config) ?>
-</head>
-<body class="p-4">
-<div class="container">
-    <div class="page-shell">
-        <?= layout_logo_tag($config) ?>
-        <div class="page-header">
-            <h1>Opening Hours</h1>
-            <div class="page-subtitle">
-                Configure when the facility is open for equipment collection and return.
-            </div>
-        </div>
-
-        <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
-        <?= layout_render_topbar($active) ?>
-
-        <div class="top-bar mb-3">
-            <div class="top-bar-user">
-                Logged in as:
-                <strong><?= h(trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''))) ?></strong>
-                (<?= h($currentUser['email'] ?? '') ?>)
-            </div>
-            <div class="top-bar-actions">
-                <a href="logout.php" class="btn btn-link btn-sm">Log out</a>
-            </div>
-        </div>
 
         <ul class="nav nav-tabs reservations-subtabs mb-3">
             <li class="nav-item">
@@ -565,9 +536,9 @@ if ($editOverrideId > 0) {
             </div>
         </div>
 
-    </div>
-</div>
-<?php layout_footer(); ?>
+<?php
+layout_page_end([
+    'extraScripts' => <<<'HTML'
 <script>
 (function () {
     // Toggle time inputs when "Closed" checkbox changes
@@ -583,5 +554,6 @@ if ($editOverrideId > 0) {
     });
 })();
 </script>
-</body>
-</html>
+HTML
+]);
+?>

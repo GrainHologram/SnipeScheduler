@@ -594,31 +594,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
+layout_page_start([
+    'active'             => $active,
+    'title'              => 'Quick Checkout – SnipeScheduler',
+    'pageHeaderTitle'    => 'Quick Checkout',
+    'pageHeaderSubtitle' => 'Ad-hoc bulk checkout via Snipe-IT (not tied to a reservation).',
+]);
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Quick Checkout – SnipeScheduler</title>
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-    <?= layout_theme_styles() ?>
-</head>
-<body class="p-4">
-<div class="container">
-    <div class="page-shell">
-        <?= layout_logo_tag() ?>
-        <div class="page-header">
-            <h1>Quick Checkout</h1>
-            <div class="page-subtitle">
-                Ad-hoc bulk checkout via Snipe-IT (not tied to a reservation).
-            </div>
-        </div>
-
-        <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
-        <?= layout_render_topbar($active) ?>
 
         <?php if (!empty($messages)): ?>
             <div class="alert alert-success">
@@ -865,9 +847,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
 
-    </div>
-</div>
-
+<?php ob_start(); ?>
 <script>
 (function () {
     const assetWrappers = document.querySelectorAll('.asset-autocomplete-wrapper');
@@ -1041,8 +1021,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     });
 })();
 </script>
-<?php layout_checkout_loading_overlay(); ?>
-<?php layout_model_history_modal(true); ?>
-<?php layout_footer(); ?>
-</body>
-</html>
+<?php
+layout_page_end([
+    'withCheckoutOverlay'   => true,
+    'withModelHistoryModal' => true,
+    'extraScripts'          => ob_get_clean(),
+]);
+?>

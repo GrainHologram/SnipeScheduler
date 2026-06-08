@@ -647,7 +647,6 @@ $checkedOutCounts = [];
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-    <link rel="stylesheet" href="assets/slot-picker.css">
     <?= layout_theme_styles() ?>
 </head>
 <body class="p-4 page-catalogue"
@@ -918,7 +917,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                      id="booking_user_suggestions"
                      role="listbox"
                      aria-label="User suggestions"
-                     style="z-index:9999; max-height:260px; overflow-y:auto; display:none; box-shadow: 0 12px 24px rgba(0,0,0,0.18);"></div>
+                     style="z-index:9999; max-height:260px; overflow-y:auto; display:none; box-shadow: 0 12px 24px rgba(var(--black-rgb), 0.18);"></div>
             </form>
         </div>
         <?php endif; // $isStaff ?>
@@ -1744,7 +1743,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                          id="booking_user_suggestions"
                          role="listbox"
                          aria-label="User suggestions"
-                         style="z-index:9999; max-height:260px; overflow-y:auto; display:none; box-shadow: 0 12px 24px rgba(0,0,0,0.18);"></div>
+                         style="z-index:9999; max-height:260px; overflow-y:auto; display:none; box-shadow: 0 12px 24px rgba(var(--black-rgb), 0.18);"></div>
                 </form>
             </div>
             <?php endif; // $isStaff ?>
@@ -1999,10 +1998,10 @@ var kitContentsData = <?= json_encode(array_combine(
 </script>
 
 <!-- Kit Contents Modal -->
-<div id="kitContentsBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1060;" onclick="closeKitContentsModal()"></div>
+<div id="kitContentsBackdrop" style="display:none; position:fixed; inset:0; background:var(--backdrop-modal); z-index:1060;" onclick="closeKitContentsModal()"></div>
 <div id="kitContentsModal" style="display:none; position:fixed; inset:0; z-index:1065; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)closeKitContentsModal()">
-    <div style="max-width:600px; margin:0 auto; background:var(--bs-body-bg, #fff); border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid var(--bs-border-color, #dee2e6);">
+    <div style="max-width:600px; margin:0 auto; background:var(--panel); border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(var(--black-rgb), 0.15);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid var(--border);">
             <h5 id="kitContentsTitle" style="margin:0;">Kit Contents</h5>
             <button type="button" onclick="closeKitContentsModal()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
         </div>
@@ -2018,8 +2017,8 @@ function openKitContentsModal(kitId) {
     var html = '<div class="list-group">';
     kit.models.forEach(function(m) {
         var imgHtml = m.image
-            ? '<img src="image_proxy.php?src=' + encodeURIComponent(m.image) + '" style="width:48px; height:48px; object-fit:contain; border-radius:4px; background:#f8f9fa;" alt="">'
-            : '<div style="width:48px; height:48px; background:#f1f3f5; border-radius:4px; display:flex; align-items:center; justify-content:center;"><small class="text-muted">&mdash;</small></div>';
+            ? '<img src="image_proxy.php?src=' + encodeURIComponent(m.image) + '" style="width:48px; height:48px; object-fit:contain; border-radius:4px; background:var(--surface);" alt="">'
+            : '<div style="width:48px; height:48px; background:var(--surface-card); border-radius:4px; display:flex; align-items:center; justify-content:center;"><small class="text-muted">&mdash;</small></div>';
         html += '<div class="list-group-item d-flex align-items-center gap-3">';
         html += imgHtml;
         html += '<div class="flex-grow-1">';
@@ -2053,7 +2052,7 @@ document.addEventListener('keydown', function(e) {
 
 <!-- Booking Window Modal -->
 <div id="windowModalBackdrop"
-     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1070;"
+     style="display:none; position:fixed; inset:0; background:var(--backdrop-modal-strong); z-index:1070;"
      onclick="closeWindowModal()"></div>
 <div id="windowModal" role="dialog" aria-modal="true" aria-labelledby="windowModalTitle"
      style="display:none; position:fixed; inset:0; z-index:1075; overflow-y:auto; padding:1.75rem;"

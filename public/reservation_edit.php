@@ -563,33 +563,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ];
     }
 }
+$pageTitle = 'Edit Reservation #' . (int)$id;
+layout_page_start([
+    'active'             => $active,
+    'title'              => $pageTitle,
+    'pageHeaderTitle'    => $pageTitle,
+    'pageHeaderSubtitle' => 'Update dates and quantities for a pending reservation.',
+    'hideTopUserBar'     => true,
+]);
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Edit Reservation #<?= (int)$id ?></title>
-
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-    <link rel="stylesheet" href="assets/slot-picker.css">
-    <?= layout_theme_styles() ?>
-</head>
-<body class="p-4">
-<div class="container">
-    <div class="page-shell">
-        <?= layout_logo_tag() ?>
-        <div class="page-header">
-            <h1>Edit Reservation #<?= (int)$id ?></h1>
-            <div class="page-subtitle">
-                Update dates and quantities for a pending reservation.
-            </div>
-        </div>
-
-        <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
-        <?= layout_render_topbar($active) ?>
 
         <div class="top-bar mb-3">
             <div class="top-bar-user">
@@ -862,9 +844,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
             </div>
         </form>
-    </div>
-</div>
-<?php layout_footer(); ?>
+
+<?php
+ob_start();
+?>
 <script src="assets/slot-picker.js"></script>
 <script>
 (function () {
@@ -1088,5 +1071,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     });
 })();
 </script>
-</body>
-</html>
+<?php layout_page_end(['extraScripts' => ob_get_clean()]); ?>

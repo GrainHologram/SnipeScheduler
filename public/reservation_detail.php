@@ -53,33 +53,15 @@ if (!$reservation) {
 $items = get_reservation_items_with_names($pdo, $id);
 
 $active  = 'staff_reservations.php'; // Treat detail view as part of booking history.
+$pageTitle = 'Booking #' . (int)$id . ' – Details';
+layout_page_start([
+    'active'             => $active,
+    'title'              => $pageTitle,
+    'pageHeaderTitle'    => $pageTitle,
+    'pageHeaderSubtitle' => 'Full details for this booking.',
+    'hideTopUserBar'     => true,
+]);
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Booking #<?= (int)$id ?> – Details</title>
-
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-    <?= layout_theme_styles() ?>
-</head>
-<body class="p-4">
-<div class="container">
-    <div class="page-shell">
-        <?= layout_logo_tag() ?>
-        <div class="page-header">
-            <h1>Booking #<?= (int)$id ?> – Details</h1>
-            <div class="page-subtitle">
-                Full details for this booking.
-            </div>
-        </div>
-
-        <!-- App navigation -->
-        <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
-        <?= layout_render_topbar($active) ?>
 
         <div class="top-bar mb-3">
             <div class="top-bar-user">
@@ -192,7 +174,7 @@ $active  = 'staff_reservations.php'; // Treat detail view as part of booking his
                                             <td><?= h($ci['asset_name'] ?? '') ?></td>
                                             <td><?= h($ci['model_name'] ?? '') ?></td>
                                             <td><?= h(display_datetime($ci['checked_out_at'] ?? '')) ?></td>
-                                            <td><?= $ci['checked_in_at'] ? h(display_datetime($ci['checked_in_at'])) : '<span class="badge bg-warning text-dark">Out</span>' ?></td>
+                                            <td><?= $ci['checked_in_at'] ? h(display_datetime($ci['checked_in_at'])) : layout_asset_status_badge(false) ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>
@@ -240,7 +222,7 @@ $active  = 'staff_reservations.php'; // Treat detail view as part of booking his
                                             <td><?= h($rci['asset_name'] ?? '') ?></td>
                                             <td><?= h($rci['model_name'] ?? '') ?></td>
                                             <td><?= h(display_datetime($rci['checked_out_at'] ?? '')) ?></td>
-                                            <td><?= $rci['checked_in_at'] ? h(display_datetime($rci['checked_in_at'])) : '<span class="badge bg-warning text-dark">Out</span>' ?></td>
+                                            <td><?= $rci['checked_in_at'] ? h(display_datetime($rci['checked_in_at'])) : layout_asset_status_badge(false) ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>
@@ -277,8 +259,4 @@ $active  = 'staff_reservations.php'; // Treat detail view as part of booking his
             <?php endif; ?>
         </div>
 
-    </div>
-</div>
-<?php layout_footer(); ?>
-</body>
-</html>
+<?php layout_page_end(); ?>

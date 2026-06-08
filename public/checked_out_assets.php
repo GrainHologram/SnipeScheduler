@@ -622,35 +622,17 @@ function layout_checked_out_url(string $base, array $params): string
     $query = http_build_query($params);
     return $query === '' ? $base : ($base . '?' . $query);
 }
+layout_page_start([
+    'active' => $active,
+    'title'  => 'Checked Out Reservations – SnipeScheduler',
+]);
 ?>
-<?php if (!$embedded): ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Checked Out Reservations – SnipeScheduler</title>
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-    <?= layout_theme_styles() ?>
-</head>
-<body class="p-4">
-<div class="container">
-    <div class="page-shell">
-        <?= layout_logo_tag() ?>
-<?php endif; ?>
         <div class="page-header">
             <h1>Checked Out Reservations</h1>
             <div class="page-subtitle">
                 Showing requestable assets currently checked out in Snipe-IT.
             </div>
         </div>
-
-        <?php if (!$embedded): ?>
-            <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
-            <?= layout_render_topbar($active) ?>
-        <?php endif; ?>
 
         <?php
             $tabBaseParams = $baseQuery;
@@ -948,13 +930,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 </script>
-<?php if (!$embedded): ?>
-    </div>
-</div>
-<?php layout_footer(); ?>
-</body>
-</html>
-<?php endif; ?>
+<?php layout_page_end(); ?>
 <?php if (!empty($messages)): ?>
 <script>
     // After showing renew success, refresh overdue list to bust any cached data.

@@ -690,31 +690,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
+layout_page_start([
+    'active'             => $active,
+    'title'              => 'Quick Checkin – SnipeScheduler',
+    'pageHeaderTitle'    => 'Quick Checkin',
+    'pageHeaderSubtitle' => 'Scan or type asset tags to check items back in via Snipe-IT.',
+]);
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Quick Checkin – SnipeScheduler</title>
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-    <?= layout_theme_styles() ?>
-</head>
-<body class="p-4">
-<div class="container">
-    <div class="page-shell">
-        <?= layout_logo_tag() ?>
-        <div class="page-header">
-            <h1>Quick Checkin</h1>
-            <div class="page-subtitle">
-                Scan or type asset tags to check items back in via Snipe-IT.
-            </div>
-        </div>
-
-        <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
-        <?= layout_render_topbar($active) ?>
 
         <?php if (!empty($messages)): ?>
             <div class="alert alert-success">
@@ -951,8 +933,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
 
-    </div>
-</div>
 <script>
 (function () {
     const assetWrappers = document.querySelectorAll('.asset-autocomplete-wrapper');
@@ -1198,10 +1178,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <?php layout_model_history_modal(true); ?>
 
 <!-- Asset Note Modal -->
-<div id="assetNoteBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1060;" onclick="closeAssetNoteModal()"></div>
+<div id="assetNoteBackdrop" style="display:none; position:fixed; inset:0; background:var(--backdrop-modal); z-index:1060;" onclick="closeAssetNoteModal()"></div>
 <div id="assetNoteModal" style="display:none; position:fixed; inset:0; z-index:1065; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)closeAssetNoteModal()">
-    <div style="max-width:500px; margin:0 auto; background:#fff; border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid #dee2e6;">
+    <div style="max-width:500px; margin:0 auto; background:var(--panel); border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(var(--black-rgb), 0.15);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid var(--border);">
             <h5 id="assetNoteModalLabel" style="margin:0;">Asset Note</h5>
             <button type="button" onclick="closeAssetNoteModal()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
         </div>
@@ -1382,6 +1362,4 @@ function updateNoteRow(assetId, note, createMaint, pullRepair) {
     }
 }
 </script>
-<?php layout_footer(); ?>
-</body>
-</html>
+<?php layout_page_end(); ?>

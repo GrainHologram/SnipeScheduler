@@ -220,43 +220,13 @@ try {
 } catch (Throwable $e) {
     $activityLogError = $e->getMessage();
 }
+layout_page_start([
+    'active'             => $active,
+    'title'              => 'Activity Log – SnipeScheduler',
+    'pageHeaderTitle'    => 'Activity Log',
+    'pageHeaderSubtitle' => 'Review recent activity across the application.',
+]);
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Activity Log – SnipeScheduler</title>
-
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-    <?= layout_theme_styles() ?>
-</head>
-<body class="p-4">
-<div class="container">
-    <div class="page-shell">
-        <?= layout_logo_tag() ?>
-        <div class="page-header">
-            <h1>Activity Log</h1>
-            <div class="page-subtitle">
-                Review recent activity across the application.
-            </div>
-        </div>
-
-        <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
-        <?= layout_render_topbar($active) ?>
-
-        <div class="top-bar mb-3">
-            <div class="top-bar-user">
-                Logged in as:
-                <strong><?= h(trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''))) ?></strong>
-                (<?= h($currentUser['email'] ?? '') ?>)
-            </div>
-            <div class="top-bar-actions">
-                <a href="logout.php" class="btn btn-link btn-sm">Log out</a>
-            </div>
-        </div>
 
         <ul class="nav nav-tabs reservations-subtabs mb-3">
             <li class="nav-item">
@@ -508,11 +478,8 @@ try {
                 <?php endif; ?>
             </div>
         </div>
-    </div>
-</div>
-<?php layout_footer(); ?>
-</body>
-</html>
+<?php
+layout_page_end(['extraScripts' => <<<'HTML'
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('activity-log-filter-form');
@@ -536,3 +503,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 </script>
+HTML
+]);
+?>

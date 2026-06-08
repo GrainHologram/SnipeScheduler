@@ -341,27 +341,17 @@ if (!empty($basket)) {
     }
 }
 
+layout_page_start([
+    'active'     => $active,
+    'title'      => 'Basket – Book Equipment',
+    'bodyClass'  => 'p-4 page-basket',
+    'bodyAttrs'  => [
+        'data-date-format' => app_get_date_format(),
+        'data-time-format' => app_get_time_format(),
+    ],
+    'hideTopUserBar' => true,
+]);
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Basket – Book Equipment</title>
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-    <link rel="stylesheet" href="assets/slot-picker.css">
-    <?= layout_theme_styles() ?>
-</head>
-<body class="p-4 page-basket"
-      data-date-format="<?= h(app_get_date_format()) ?>"
-      data-time-format="<?= h(app_get_time_format()) ?>">
-<div class="container">
-    <div class="page-shell">
-        <?= layout_logo_tag() ?>
-        <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
-        <?= layout_render_topbar($active) ?>
 
         <div class="basket-layout">
 
@@ -392,7 +382,7 @@ if (!empty($basket)) {
                              id="booking_user_suggestions"
                              role="listbox"
                              aria-label="User suggestions"
-                             style="z-index:9999; max-height:260px; overflow-y:auto; display:none; box-shadow: 0 12px 24px rgba(0,0,0,0.18);"></div>
+                             style="z-index:9999; max-height:260px; overflow-y:auto; display:none; box-shadow: 0 12px 24px rgba(var(--black-rgb), 0.18);"></div>
                     </form>
                 </div>
                 <?php else: ?>
@@ -653,8 +643,6 @@ if (!empty($basket)) {
             </div>
 
         </div><!-- /.basket-layout -->
-    </div>
-</div>
 
 <!-- Basket window form (GET submission to reload with new dates) -->
 <?php if (!empty($basket)): ?>
@@ -664,7 +652,7 @@ if (!empty($basket)) {
 </form>
 
 <div id="windowModalBackdrop"
-     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1070;"
+     style="display:none; position:fixed; inset:0; background:var(--backdrop-modal-strong); z-index:1070;"
      onclick="closeWindowModal()"></div>
 <div id="windowModal" role="dialog" aria-modal="true" aria-labelledby="windowModalTitle"
      style="display:none; position:fixed; inset:0; z-index:1075; overflow-y:auto; padding:1.75rem;"
@@ -1012,7 +1000,4 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 </script>
-<?php layout_checkout_loading_overlay(); ?>
-<?php layout_footer(); ?>
-</body>
-</html>
+<?php layout_page_end(['withCheckoutOverlay' => true]); ?>

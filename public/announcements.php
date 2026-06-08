@@ -106,41 +106,13 @@ try {
 }
 
 $nowUtc = gmdate('Y-m-d H:i:s');
+layout_page_start([
+    'active'             => $active,
+    'title'              => 'Announcements',
+    'pageHeaderTitle'    => 'Announcements',
+    'pageHeaderSubtitle' => 'Create timed announcements that display as pop-ups to users.',
+]);
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Announcements</title>
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-    <?= layout_theme_styles() ?>
-</head>
-<body class="p-4">
-<div class="container">
-    <div class="page-shell">
-        <?= layout_logo_tag() ?>
-        <div class="page-header">
-            <h1>Announcements</h1>
-            <div class="page-subtitle">
-                Create timed announcements that display as pop-ups to users.
-            </div>
-        </div>
-
-        <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
-
-        <div class="top-bar mb-3">
-            <div class="top-bar-user">
-                Logged in as:
-                <strong><?= h(trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''))) ?></strong>
-                (<?= h($currentUser['email'] ?? '') ?>)
-            </div>
-            <div class="top-bar-actions">
-                <a href="logout.php" class="btn btn-link btn-sm">Log out</a>
-            </div>
-        </div>
 
         <ul class="nav nav-tabs reservations-subtabs mb-3">
             <li class="nav-item">
@@ -290,8 +262,4 @@ $nowUtc = gmdate('Y-m-d H:i:s');
                 </table>
             </div>
         <?php endif; ?>
-    </div>
-</div>
-<?php layout_footer(); ?>
-</body>
-</html>
+<?php layout_page_end(); ?>

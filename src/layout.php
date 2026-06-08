@@ -512,15 +512,15 @@ if (!function_exists('layout_announcements')) {
             ];
         }
         ?>
-<div id="announcementBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1050;" onclick="dismissAnnouncement()"></div>
+<div id="announcementBackdrop" style="display:none; position:fixed; inset:0; background:var(--backdrop-modal); z-index:1050;" onclick="dismissAnnouncement()"></div>
 <div id="announcementModal" style="display:none; position:fixed; inset:0; z-index:1055; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)dismissAnnouncement()">
-    <div style="max-width:550px; margin:0 auto; background:var(--panel, #fff); border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid var(--border, #dee2e6);">
+    <div style="max-width:550px; margin:0 auto; background:var(--panel); border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(var(--black-rgb), 0.15);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid var(--border);">
             <h5 style="margin:0;" id="announcementTitle"></h5>
             <button type="button" onclick="dismissAnnouncement()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
         </div>
         <div style="padding:1rem;" id="announcementBody"></div>
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:.75rem 1rem; border-top:1px solid var(--border, #dee2e6);">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:.75rem 1rem; border-top:1px solid var(--border);">
             <span class="text-muted small" id="announcementCounter"></span>
             <div class="d-flex gap-2">
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="announcementNextBtn" onclick="nextAnnouncement()" style="display:none;">Next</button>
@@ -702,10 +702,10 @@ if (!function_exists('layout_model_history_modal')) {
     function layout_model_history_modal(bool $isStaff = false): void
     {
         ?>
-<div id="modelHistoryBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1050;" onclick="closeModelHistory()"></div>
+<div id="modelHistoryBackdrop" style="display:none; position:fixed; inset:0; background:var(--backdrop-modal); z-index:1050;" onclick="closeModelHistory()"></div>
 <div id="modelHistoryModal" style="display:none; position:fixed; inset:0; z-index:1055; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)closeModelHistory()">
-    <div style="max-width:900px; margin:0 auto; background:#fff; border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid #dee2e6;">
+    <div style="max-width:900px; margin:0 auto; background:var(--panel); border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(var(--black-rgb), 0.15);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid var(--border);">
             <h5 id="modelHistoryModalLabel" style="margin:0;">Model Details</h5>
             <button type="button" onclick="closeModelHistory()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
         </div>
@@ -727,7 +727,7 @@ if (!function_exists('layout_model_history_modal')) {
 .md-meta { margin-bottom:1rem; }
 .md-meta span { margin-right:1rem; }
 .md-notes { background:#f8f9fa; border-radius:.25rem; padding:.75rem; margin-bottom:1rem; white-space:pre-wrap; }
-.md-note-form { border-top:1px solid #dee2e6; padding:.75rem; margin-top:.5rem; }
+.md-note-form { border-top:1px solid var(--border); padding:.75rem; margin-top:.5rem; }
 .md-asset-status-deployed { color: var(--bs-primary, #0d6efd); }
 .md-asset-status-undeployable { color: #dc3545; }
 </style>
@@ -1039,6 +1039,349 @@ function closeModelDetailNote() {
         form.innerHTML = '';
     }
 }
+</script>
+        <?php
+    }
+}
+
+/* ==================================================
+   Page layout helpers
+   ==================================================
+   Use layout_page_start([...]) at the top of a page and
+   layout_page_end([...]) at the bottom instead of hand-rolling
+   the <head>/<body>/nav/topbar/footer boilerplate.
+   ================================================== */
+
+if (!function_exists('layout_page_title_map')) {
+    /**
+     * Page-key → display title map. Single source of truth used by both
+     * layout_render_topbar() and layout_page_start() <title> derivation.
+     */
+    function layout_page_title_map(): array
+    {
+        return [
+            'index.php'                    => 'Dashboard',
+            'catalogue.php'                => 'Catalogue',
+            'reservations.php'             => 'Reservations',
+            'quick_checkout.php'           => 'Quick Checkout',
+            'quick_checkin.php'            => 'Quick Checkin',
+            'activity_log.php'             => 'Admin',
+            'my_bookings.php'              => 'My Gear',
+            'basket.php'                   => 'Basket',
+            'reservation_detail.php'      => 'Reservation Detail',
+            'reservation_edit.php'        => 'Edit Reservation',
+            'settings.php'                 => 'Settings',
+            'checkout_history.php'        => 'Checkout History',
+            'checked_out_assets.php'      => 'Checked Out Assets',
+            'feedback.php'                 => 'Feedback',
+            'opening_hours.php'            => 'Opening Hours',
+            'overdue_report.php'           => 'Overdue Report',
+            'staff_checkout.php'           => 'Staff Checkout',
+            'staff_reservations.php'       => 'Staff Reservations',
+            'purchase_request_submit.php'  => 'Purchase Requests',
+            'my_account.php'               => 'My Account',
+            'feedback_submit.php'          => 'Feedback',
+            'announcements.php'            => 'Announcements',
+        ];
+    }
+}
+
+if (!function_exists('layout_page_start')) {
+    /**
+     * Emit the page skeleton from <!DOCTYPE> through the opening of the content area.
+     * Pair with layout_page_end().
+     *
+     * Options:
+     *   active            (string, required) Page key (e.g. 'my_account.php'), used by nav + topbar.
+     *   title             (string) <title> tag. Default: derived from layout_page_title_map().
+     *   subtitle          (string) Topbar breadcrumb subtitle.
+     *   bodyClass         (string) Body class. 'p-4' is silently prepended if missing
+     *                              (it gates sidebar padding via body.p-4 selector).
+     *   bodyAttrs         (array<string,string>) Extra body attributes; h()-escaped.
+     *   pageHeaderTitle   (string) <h1> inside .page-header. If empty, the block is omitted.
+     *   pageHeaderSubtitle(string) Text under the h1.
+     *   extraHead         (string) Already-escaped HTML appended after layout_theme_styles().
+     *   layout            ('standard'|'catalogue'|'minimal'|'embed') Default: 'standard'.
+     *                       - 'standard':  container + page-shell + nav + topbar + top-user-bar (~15 pages)
+     *                       - 'catalogue': nav + topbar but caller manages .catalogue-main (1 page)
+     *                       - 'minimal':   doctype/head/body only; no nav, no shell (login)
+     *                       - 'embed':     emits nothing; also auto-detected via RESERVATIONS_EMBED
+     *   staff             (?bool) Override staff detection; default derived from session.
+     *   admin             (?bool) Override admin detection; default derived from session.
+     *   hideTopUserBar    (bool) Suppress "Logged in as / Log out" strip. Default false.
+     */
+    function layout_page_start(array $opts): void
+    {
+        // Embed mode: orchestrator (reservations.php) already rendered the shell.
+        // Orchestrators that define RESERVATIONS_EMBED themselves but still need
+        // to render their own chrome must pass `bypassEmbedCheck => true`.
+        $bypassEmbed = !empty($opts['bypassEmbedCheck']);
+        if (!$bypassEmbed && (defined('RESERVATIONS_EMBED') || ($opts['layout'] ?? '') === 'embed')) {
+            return;
+        }
+
+        $active = (string)($opts['active'] ?? '');
+        if ($active === '') {
+            throw new \InvalidArgumentException('layout_page_start: "active" key is required');
+        }
+
+        $layout      = $opts['layout'] ?? 'standard';
+        $titlesMap   = layout_page_title_map();
+        $title       = $opts['title'] ?? ($titlesMap[$active] ?? 'SnipeScheduler');
+        $subtitle    = (string)($opts['subtitle'] ?? '');
+        $bodyClass   = trim((string)($opts['bodyClass'] ?? 'p-4'));
+        // Always include p-4 — it gates sidebar padding via body.p-4
+        if (!preg_match('/\bp-4\b/', $bodyClass)) {
+            $bodyClass = 'p-4 ' . $bodyClass;
+        }
+        $bodyAttrs   = is_array($opts['bodyAttrs'] ?? null) ? $opts['bodyAttrs'] : [];
+        $extraHead   = (string)($opts['extraHead'] ?? '');
+        $pageHTitle  = (string)($opts['pageHeaderTitle'] ?? '');
+        $pageHSub    = (string)($opts['pageHeaderSubtitle'] ?? '');
+        $sessionUser = $_SESSION['user'] ?? [];
+        $isStaff     = $opts['staff'] ?? (!empty($sessionUser['is_staff']) || !empty($sessionUser['is_admin']));
+        $isAdmin     = $opts['admin'] ?? !empty($sessionUser['is_admin']);
+        $hideTopBar  = !empty($opts['hideTopUserBar']);
+
+        $bodyAttrStr = '';
+        foreach ($bodyAttrs as $k => $v) {
+            $bodyAttrStr .= ' ' . htmlspecialchars((string)$k, ENT_QUOTES, 'UTF-8')
+                          . '="' . htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8') . '"';
+        }
+
+        $titleEsc     = htmlspecialchars($title, ENT_QUOTES, 'UTF-8');
+        $bodyClassEsc = htmlspecialchars($bodyClass, ENT_QUOTES, 'UTF-8');
+        $stylesheet   = htmlspecialchars(layout_stylesheet_url(), ENT_QUOTES, 'UTF-8');
+
+        echo "<!DOCTYPE html>\n<html>\n<head>\n"
+           . "    <meta charset=\"UTF-8\">\n"
+           . "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+           . "    <title>{$titleEsc}</title>\n"
+           . "    <link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css\">\n"
+           . "    <link rel=\"stylesheet\" href=\"{$stylesheet}\">\n"
+           . "    " . layout_theme_styles() . "\n";
+        if ($extraHead !== '') {
+            echo "    {$extraHead}\n";
+        }
+        echo "</head>\n<body class=\"{$bodyClassEsc}\"{$bodyAttrStr}>\n";
+
+        if ($layout === 'minimal') {
+            return;
+        }
+
+        if ($layout === 'standard') {
+            echo "<div class=\"container\">\n    <div class=\"page-shell\">\n";
+            echo "        " . layout_logo_tag() . "\n";
+
+            if ($pageHTitle !== '') {
+                $hTitleEsc = htmlspecialchars($pageHTitle, ENT_QUOTES, 'UTF-8');
+                echo "        <div class=\"page-header\">\n"
+                   . "            <h1>{$hTitleEsc}</h1>\n";
+                if ($pageHSub !== '') {
+                    $hSubEsc = htmlspecialchars($pageHSub, ENT_QUOTES, 'UTF-8');
+                    echo "            <div class=\"page-subtitle\">{$hSubEsc}</div>\n";
+                }
+                echo "        </div>\n";
+            }
+        }
+
+        // Nav + topbar are emitted for both 'standard' and 'catalogue'.
+        echo layout_render_nav($active, $isStaff, $isAdmin) . "\n";
+        echo layout_render_topbar($active, $subtitle) . "\n";
+
+        if ($layout === 'standard' && !$hideTopBar) {
+            echo layout_top_user_bar() . "\n";
+        }
+    }
+}
+
+if (!function_exists('layout_top_user_bar')) {
+    /**
+     * Render the "Logged in as: Name (email) … Log out" strip that appears
+     * below the topbar on standard pages.
+     */
+    function layout_top_user_bar(): string
+    {
+        $user      = $_SESSION['user'] ?? [];
+        $firstName = $user['first_name'] ?? '';
+        $lastName  = $user['last_name'] ?? '';
+        $fullName  = htmlspecialchars(trim($firstName . ' ' . $lastName), ENT_QUOTES, 'UTF-8');
+        $email     = htmlspecialchars($user['email'] ?? '', ENT_QUOTES, 'UTF-8');
+
+        return '<div class="top-bar mb-3">'
+             . '<div class="top-bar-user">Logged in as: <strong>' . $fullName . '</strong> (' . $email . ')</div>'
+             . '<div class="top-bar-actions"><a href="logout.php" class="btn btn-link btn-sm">Log out</a></div>'
+             . '</div>';
+    }
+}
+
+if (!function_exists('layout_page_end')) {
+    /**
+     * Emit the closing of the page skeleton through </html>.
+     * Pair with layout_page_start().
+     *
+     * Options:
+     *   withCheckoutOverlay   (bool)        Render layout_checkout_loading_overlay().
+     *   withModelHistoryModal (bool)        Render layout_model_history_modal($isStaff).
+     *   withWindowModal       (false|array) If array, render layout_window_modal($opts).
+     *   extraScripts          (string)      Already-escaped HTML before </body>, after layout_footer().
+     *   skipFooter            (bool)        Suppress layout_footer() call.
+     *   layout                (string)      Must match the value passed to layout_page_start().
+     *                                         Default: 'standard'.
+     */
+    function layout_page_end(array $opts = []): void
+    {
+        $bypassEmbed = !empty($opts['bypassEmbedCheck']);
+        if (!$bypassEmbed && (defined('RESERVATIONS_EMBED') || ($opts['layout'] ?? '') === 'embed')) {
+            return;
+        }
+
+        $layout      = $opts['layout'] ?? 'standard';
+        $sessionUser = $_SESSION['user'] ?? [];
+        $isStaff     = !empty($sessionUser['is_staff']) || !empty($sessionUser['is_admin']);
+
+        if (!empty($opts['withCheckoutOverlay'])) {
+            layout_checkout_loading_overlay();
+        }
+        if (!empty($opts['withModelHistoryModal'])) {
+            layout_model_history_modal($isStaff);
+        }
+        if (!empty($opts['withWindowModal']) && is_array($opts['withWindowModal'])) {
+            layout_window_modal($opts['withWindowModal']);
+        }
+
+        if ($layout === 'standard') {
+            echo "    </div>\n</div>\n"; // close .page-shell + .container
+        }
+
+        if (empty($opts['skipFooter'])) {
+            layout_footer();
+        }
+
+        if (!empty($opts['extraScripts'])) {
+            echo $opts['extraScripts'];
+        }
+
+        echo "</body>\n</html>\n";
+    }
+}
+
+if (!function_exists('layout_empty_state')) {
+    /**
+     * Render the standardized empty-state block used across panels.
+     *
+     * @param string $icon       Bootstrap icon class without the "bi " prefix (e.g. "bi-basket"). Whitelisted.
+     * @param string $text       Empty-state message; passed through h().
+     * @param string $extraClass Optional extra class on the wrapper.
+     */
+    function layout_empty_state(string $icon, string $text, string $extraClass = ''): string
+    {
+        // Whitelist icon to bi-* tokens to prevent class injection.
+        if (!preg_match('/^bi-[a-z0-9-]+$/', $icon)) {
+            $icon = 'bi-info-circle';
+        }
+        $cls = 'panel-empty-state' . ($extraClass !== '' ? ' ' . htmlspecialchars($extraClass, ENT_QUOTES, 'UTF-8') : '');
+        return '<div class="' . $cls . '">'
+             . '<i class="bi ' . $icon . ' panel-empty-icon" aria-hidden="true"></i>'
+             . '<p class="panel-empty-text">' . htmlspecialchars($text, ENT_QUOTES, 'UTF-8') . '</p>'
+             . '</div>';
+    }
+}
+
+if (!function_exists('layout_asset_status_badge')) {
+    /**
+     * Render the per-asset status badge (Out vs Returned) currently inlined
+     * in checkout_history.php, reservation_detail.php, and quick_checkin.php.
+     */
+    function layout_asset_status_badge(bool $isCheckedIn): string
+    {
+        if ($isCheckedIn) {
+            return '<span class="badge bg-success">Returned</span>';
+        }
+        return '<span class="badge status-badge-checked-out">Out</span>';
+    }
+}
+
+if (!function_exists('layout_window_modal')) {
+    /**
+     * Render the booking-window modal markup + open/close JS used by both
+     * catalogue.php and basket.php. Keeps the global openWindowModal /
+     * closeWindowModal function names the existing JS depends on.
+     *
+     * Options:
+     *   error    (string) Initial error message (renders inside the modal).
+     *   isStaff  (bool)   Show "Bypass slot capacity" checkbox.
+     *   isAdmin  (bool)   Show "Bypass closed hours" checkbox.
+     */
+    function layout_window_modal(array $opts = []): void
+    {
+        $error   = htmlspecialchars((string)($opts['error'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $isStaff = !empty($opts['isStaff']);
+        $isAdmin = !empty($opts['isAdmin']);
+        ?>
+<div class="window-modal-backdrop" id="windowModalBackdrop" aria-hidden="true"></div>
+<div class="window-modal" id="windowModal" role="dialog" aria-modal="true" aria-labelledby="windowModalTitle" aria-hidden="true">
+    <div class="window-modal-inner">
+        <div class="window-modal-header">
+            <span class="window-modal-title" id="windowModalTitle">Choose your booking window</span>
+            <button type="button" class="window-modal-close" id="windowModalClose" aria-label="Close booking window">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+        </div>
+        <div class="window-modal-body">
+            <?php if ($error !== ''): ?>
+                <div class="alert alert-danger mb-2"><?= $error ?></div>
+            <?php endif; ?>
+            <div id="windowModalSlotPicker" class="slot-picker"></div>
+            <?php if ($isStaff || $isAdmin): ?>
+                <div class="window-modal-bypass">
+                    <?php if ($isStaff): ?>
+                        <label class="form-check">
+                            <input class="form-check-input" type="checkbox" id="windowModalBypassCapacity">
+                            <span class="form-check-label">Bypass slot capacity</span>
+                        </label>
+                    <?php endif; ?>
+                    <?php if ($isAdmin): ?>
+                        <label class="form-check">
+                            <input class="form-check-input" type="checkbox" id="windowModalBypassClosed">
+                            <span class="form-check-label">Bypass closed hours</span>
+                        </label>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    var backdrop = document.getElementById('windowModalBackdrop');
+    var modal    = document.getElementById('windowModal');
+    var closeBtn = document.getElementById('windowModalClose');
+    if (!backdrop || !modal || !closeBtn) return;
+
+    window.openWindowModal = function() {
+        backdrop.classList.add('is-active');
+        modal.classList.add('is-active');
+        modal.setAttribute('aria-hidden', 'false');
+        backdrop.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('window-modal-open');
+    };
+    window.closeWindowModal = function() {
+        backdrop.classList.remove('is-active');
+        modal.classList.remove('is-active');
+        modal.setAttribute('aria-hidden', 'true');
+        backdrop.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('window-modal-open');
+    };
+
+    closeBtn.addEventListener('click', window.closeWindowModal);
+    backdrop.addEventListener('click', window.closeWindowModal);
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.classList.contains('is-active')) {
+            window.closeWindowModal();
+        }
+    });
+})();
 </script>
         <?php
     }
