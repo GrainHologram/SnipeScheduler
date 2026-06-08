@@ -21,8 +21,6 @@ $isStaff       = !empty($currentUser['is_staff']) || $isAdmin;
 $currentUserId = (string)($currentUser['snipeit_user_id'] ?? '');
 
 $userName = trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''));
-$tabRaw = $_GET['tab'] ?? 'reservations';
-$tab = $tabRaw === 'checked_out' ? 'checked_out' : 'reservations';
 
 // Load this user's reservations
 try {
@@ -79,27 +77,48 @@ if (!empty($resIds)) {
     }
 }
 
+// Batch-fetch checkout_items per checkout + model, for per-reservation asset display
+$checkoutItemsByModel = [];
+if (!empty($reservationCheckouts)) {
+    $checkoutIds = array_column($reservationCheckouts, 'id');
+    $ph = implode(',', array_fill(0, count($checkoutIds), '?'));
+    $ciStmt = $pdo->prepare("
+        SELECT ci.checkout_id, ci.model_id, ci.asset_tag, ci.asset_name
+          FROM checkout_items ci
+         WHERE ci.checkout_id IN ($ph)
+         ORDER BY ci.checkout_id, ci.model_id, ci.id
+    ");
+    $ciStmt->execute(array_values($checkoutIds));
+    foreach ($ciStmt->fetchAll(PDO::FETCH_ASSOC) as $ci) {
+        $cid = (int)$ci['checkout_id'];
+        $mid = (int)$ci['model_id'];
+        $checkoutItemsByModel[$cid][$mid][] = [
+            'asset_tag'  => $ci['asset_tag']  ?? '',
+            'asset_name' => $ci['asset_name'] ?? '',
+        ];
+    }
+}
+
+// Load checked-out items
 $checkedOutItems = [];
 $checkedOutError = '';
-if ($tab === 'checked_out') {
-    try {
-        $stmt = $pdo->prepare("
-            SELECT ci.asset_tag, ci.asset_name, ci.model_name,
-                   ci.checked_out_at, c.end_datetime,
-                   c.status AS checkout_status
-              FROM checkout_items ci
-              JOIN checkouts c ON c.id = ci.checkout_id
-             WHERE c.snipeit_user_id = :uid
-               AND ci.checked_in_at IS NULL
-               AND c.status IN ('open','partial')
-             ORDER BY ci.checked_out_at DESC
-        ");
-        $stmt->execute([':uid' => $currentUserId]);
-        $checkedOutItems = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
-        $checkedOutItems = [];
-        $checkedOutError = $e->getMessage();
-    }
+try {
+    $stmt = $pdo->prepare("
+        SELECT ci.asset_tag, ci.asset_name, ci.model_name,
+               ci.checked_out_at, c.end_datetime,
+               c.status AS checkout_status
+          FROM checkout_items ci
+          JOIN checkouts c ON c.id = ci.checkout_id
+         WHERE c.snipeit_user_id = :uid
+           AND ci.checked_in_at IS NULL
+           AND c.status IN ('open','partial')
+         ORDER BY ci.checked_out_at DESC
+    ");
+    $stmt->execute([':uid' => $currentUserId]);
+    $checkedOutItems = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    $checkedOutItems = [];
+    $checkedOutError = $e->getMessage();
 }
 
 $deletedMsg = '';
@@ -166,19 +185,19 @@ foreach ($kitNames as $kid => $kname) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>My Reservations</title>
+    <title>My Gear</title>
 
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
     <?= layout_theme_styles() ?>
 </head>
-<body class="p-4">
+<body class="p-4 page-my-gear">
 <div class="container">
     <div class="page-shell">
         <?= layout_logo_tag() ?>
         <div class="page-header">
-            <h1>My Reservations</h1>
+            <h1>My Gear</h1>
             <div class="page-subtitle">
                 View all your past, current and future reservations.
             </div>
@@ -186,6 +205,7 @@ foreach ($kitNames as $kid => $kname) {
 
         <!-- App navigation -->
         <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
+        <?= layout_render_topbar($active) ?>
 
         <!-- Top bar -->
         <div class="top-bar mb-3">
@@ -211,295 +231,272 @@ foreach ($kitNames as $kid => $kname) {
             </div>
         <?php endif; ?>
 
-        <?php
-            $reservationsUrl = 'my_bookings.php?tab=reservations';
-            $checkedOutUrl = 'my_bookings.php?tab=checked_out';
-        ?>
-        <ul class="nav nav-tabs reservations-subtabs mb-3">
-            <li class="nav-item">
-                <a class="nav-link <?= $tab === 'reservations' ? 'active' : '' ?>"
-                   href="<?= h($reservationsUrl) ?>">My Reservations</a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link <?= $tab === 'checked_out' ? 'active' : '' ?>"
-                   href="<?= h($checkedOutUrl) ?>">My Checked Out Items</a>
-            </li>
-        </ul>
+        <!-- ===================== Side-by-side panels ===================== -->
+        <div class="my-bookings-panels">
 
-        <?php if ($tab === 'checked_out'): ?>
-            <?php if (!empty($checkedOutError)): ?>
-                <div class="alert alert-danger">
-                    Error loading checked-out items: <?= htmlspecialchars($checkedOutError) ?>
-                </div>
-            <?php elseif (empty($checkedOutItems)): ?>
-                <div class="alert alert-info">
-                    You don’t have any checked-out items right now.
-                </div>
-            <?php else: ?>
-                <div class="table-responsive">
-                    <table class="table table-sm table-striped align-middle">
-                        <thead>
-                            <tr>
-                                <th>Asset Tag</th>
-                                <th>Name</th>
-                                <th>Model</th>
-                                <th>Checked Out</th>
-                                <th>Expected Return</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($checkedOutItems as $row): ?>
-                                <tr>
-                                    <td><?= h($row['asset_tag'] ?? '') ?></td>
-                                    <td><?= h($row['asset_name'] ?? '') ?></td>
-                                    <td><?= h($row['model_name'] ?? '') ?></td>
-                                    <td><?= h(display_datetime($row['checked_out_at'] ?? '')) ?></td>
-                                    <td><?= h(display_datetime($row['end_datetime'] ?? '')) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            <?php endif; ?>
-        <?php else: ?>
-            <?php if (empty($reservations)): ?>
-                <div class="alert alert-info">
-                    You don't have any reservations yet.
-                </div>
-            <?php else: ?>
-                <?php if (empty($upcomingReservations)): ?>
-                    <div class="alert alert-info">
-                        No upcoming reservations.
-                    </div>
-                <?php else: ?>
-                    <?php foreach ($upcomingReservations as $res): ?>
-                        <?php
-                            $resId   = (int)$res['id'];
-                            $items   = $allResItems[$resId] ?? [];
-                            $summary = build_items_summary_text($items);
-                            $status  = strtolower((string)($res['status'] ?? ''));
-                        ?>
-                        <div class="card mb-3">
-                            <div class="card-body">
-                                <h5 class="card-title">
-                                    Reservation #<?= $resId ?><?= !empty($res['name']) ? ' — ' . h($res['name']) : '' ?>
-                                </h5>
-                                <p class="card-text">
-                                    <strong>User Name:</strong>
-                                    <?= h($res['user_name'] ?? $userName) ?><br>
-
-                                    <strong>Start:</strong>
-                                    <?= display_datetime($res['start_datetime'] ?? '') ?><br>
-
-                                    <strong>End:</strong>
-                                    <?= display_datetime($res['end_datetime'] ?? '') ?><br>
-
-                                    <strong>Status:</strong>
-                                    <?= layout_status_badge($res['status'] ?? '') ?><br>
-
-                                    <?php if ($summary !== ''): ?>
-                                        <strong>Items:</strong>
-                                        <?= h($summary) ?><br>
-                                    <?php endif; ?>
-
-                                    <?php if (!empty($res['asset_name_cache'])): ?>
-                                        <strong>Checked-out assets:</strong>
-                                        <?= h($res['asset_name_cache']) ?>
-                                    <?php endif; ?>
-
-                                    <?php $linkedCheckout = $reservationCheckouts[$resId] ?? null; ?>
-                                    <?php if ($linkedCheckout): ?>
-                                        <br><strong>Checkout:</strong>
-                                        <?php if ($isStaff): ?>
-                                            <a href="checkout_history.php?q=<?= urlencode($res['user_email'] ?? '') ?>">
-                                                #<?= (int)$linkedCheckout['id'] ?> (<?= h($linkedCheckout['status']) ?>)
-                                            </a>
-                                        <?php else: ?>
-                                            <a href="my_bookings.php?tab=checked_out">
-                                                #<?= (int)$linkedCheckout['id'] ?> (<?= h($linkedCheckout['status']) ?>)
-                                            </a>
-                                        <?php endif; ?>
-                                    <?php endif; ?>
-                                </p>
-
-                                <?php if (!empty($items)): ?>
-                                    <h6>Items in this reservation</h6>
-                                    <div class="table-responsive">
-                                        <table class="table table-sm table-striped align-middle mb-0">
-                                            <thead>
-                                                <tr>
-                                                    <th>Item</th>
-                                                    <th style="width: 80px;">Qty</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($items as $item): ?>
-                                                    <tr>
-                                                        <td><?= h($item['name'] ?? '') ?></td>
-                                                        <td><?= (int)$item['qty'] ?></td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                <?php endif; ?>
-
-                                <div class="d-flex justify-content-end gap-2 mt-3">
-                                    <?php if (!empty($items)): ?>
-                                        <?php if ($isStaff && ($currentBasketCount > 0 || $bookingOverride)): ?>
-                                            <button type="button" class="btn btn-outline-secondary btn-sm"
-                                                    onclick="showReuseModal(<?= $resId ?>)">
-                                                Reuse items
-                                            </button>
-                                        <?php else: ?>
-                                            <form method="post" action="reuse_reservation.php">
-                                                <input type="hidden" name="reservation_id" value="<?= $resId ?>">
-                                                <button type="submit" class="btn btn-outline-secondary btn-sm">
-                                                    Reuse items
-                                                </button>
-                                            </form>
-                                        <?php endif; ?>
-                                    <?php endif; ?>
-                                    <?php if ($status === 'pending'): ?>
-                                        <a href="reservation_edit.php?id=<?= $resId ?>&from=my_bookings"
-                                           class="btn btn-outline-primary btn-sm btn-action">
-                                            Edit
-                                        </a>
-                                    <?php endif; ?>
-                                    <?php
-                                        $deletableStatuses = (load_config())['reservations']['deletable_statuses'] ?? ['pending', 'confirmed', 'cancelled', 'missed'];
-                                        if (in_array($status, $deletableStatuses, true)):
-                                    ?>
-                                    <form method="post"
-                                          action="delete_reservation.php"
-                                          onsubmit="return confirm('Delete reservation #<?= $resId ?>?\n\nThis will permanently remove the reservation and all its items. This cannot be undone.');">
-                                        <input type="hidden" name="reservation_id" value="<?= $resId ?>">
-                                        <button type="submit" class="btn btn-outline-danger btn-sm">
-                                            Delete reservation
-                                        </button>
-                                    </form>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
+            <!-- My Reservations panel -->
+            <div class="my-bookings-panel">
+                <h2 class="my-bookings-panel-title">My Reservations</h2>
+                <div class="my-bookings-panel-box">
+                    <?php if (empty($reservations)): ?>
+                        <div class="panel-empty-state">
+                            <i class="bi bi-calendar-x panel-empty-icon"></i>
+                            <p class="panel-empty-text">You don't have any reservations yet.</p>
                         </div>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-
-                <?php if (!empty($pastReservations)): ?>
-                    <button type="button" id="toggle-past-btn" class="btn btn-outline-secondary btn-sm mb-3"
-                            onclick="togglePastReservations()">
-                        Show past reservations (<?= count($pastReservations) ?>)
-                    </button>
-                    <div id="past-reservations" style="display:none">
-                        <?php foreach ($pastReservations as $res): ?>
-                            <?php
-                                $resId   = (int)$res['id'];
-                                $items   = $allResItems[$resId] ?? [];
-                                $summary = build_items_summary_text($items);
-                                $status  = strtolower((string)($res['status'] ?? ''));
-                            ?>
-                            <div class="card mb-3">
-                                <div class="card-body">
-                                    <h5 class="card-title">
-                                        Reservation #<?= $resId ?><?= !empty($res['name']) ? ' — ' . h($res['name']) : '' ?>
-                                    </h5>
-                                    <p class="card-text">
-                                        <strong>User Name:</strong>
-                                        <?= h($res['user_name'] ?? $userName) ?><br>
-
-                                        <strong>Start:</strong>
-                                        <?= display_datetime($res['start_datetime'] ?? '') ?><br>
-
-                                        <strong>End:</strong>
-                                        <?= display_datetime($res['end_datetime'] ?? '') ?><br>
-
-                                        <strong>Status:</strong>
-                                        <?= layout_status_badge($res['status'] ?? '') ?><br>
-
-                                        <?php if ($summary !== ''): ?>
-                                            <strong>Items:</strong>
-                                            <?= h($summary) ?><br>
-                                        <?php endif; ?>
-
-                                        <?php if (!empty($res['asset_name_cache'])): ?>
-                                            <strong>Checked-out assets:</strong>
-                                            <?= h($res['asset_name_cache']) ?>
-                                        <?php endif; ?>
-
-                                        <?php $linkedCheckout = $reservationCheckouts[$resId] ?? null; ?>
-                                        <?php if ($linkedCheckout): ?>
-                                            <br><strong>Checkout:</strong>
-                                            <?php if ($isStaff): ?>
-                                                <a href="checkout_history.php?q=<?= urlencode($res['user_email'] ?? '') ?>">
-                                                    #<?= (int)$linkedCheckout['id'] ?> (<?= h($linkedCheckout['status']) ?>)
-                                                </a>
-                                            <?php else: ?>
-                                                <a href="my_bookings.php?tab=checked_out">
-                                                    #<?= (int)$linkedCheckout['id'] ?> (<?= h($linkedCheckout['status']) ?>)
-                                                </a>
-                                            <?php endif; ?>
-                                        <?php endif; ?>
-                                    </p>
-
-                                    <?php if (!empty($items)): ?>
-                                        <h6>Items in this reservation</h6>
-                                        <div class="table-responsive">
-                                            <table class="table table-sm table-striped align-middle mb-0">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Item</th>
-                                                        <th style="width: 80px;">Qty</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <?php foreach ($items as $item): ?>
-                                                        <tr>
-                                                            <td><?= h($item['name'] ?? '') ?></td>
-                                                            <td><?= (int)$item['qty'] ?></td>
-                                                        </tr>
-                                                    <?php endforeach; ?>
-                                                </tbody>
-                                            </table>
+                    <?php else: ?>
+                        <?php if (empty($upcomingReservations)): ?>
+                            <div class="panel-empty-state">
+                                <i class="bi bi-calendar-check panel-empty-icon"></i>
+                                <p class="panel-empty-text">No upcoming reservations.</p>
+                            </div>
+                        <?php else: ?>
+                            <?php foreach ($upcomingReservations as $res): ?>
+                                <?php
+                                    $resId   = (int)$res['id'];
+                                    $items   = $allResItems[$resId] ?? [];
+                                    $summary = build_items_summary_text($items);
+                                    $status  = strtolower((string)($res['status'] ?? ''));
+                                ?>
+                                <div class="card mb-3">
+                                    <div class="card-body">
+                                        <div class="res-card-header">
+                                            <div>
+                                                <h5 class="card-title mb-0">Reservation #<?= $resId ?><?= !empty($res['name']) ? ' — ' . h($res['name']) : '' ?></h5>
+                                                <div class="res-card-subtitle"><?= h($res['user_name'] ?? $userName) ?></div>
+                                            </div>
+                                            <?= layout_status_badge($res['status'] ?? '') ?>
                                         </div>
-                                    <?php endif; ?>
+                                        <hr class="res-card-divider" aria-hidden="true">
+                                        <?php $linkedCheckout = $reservationCheckouts[$resId] ?? null; ?>
+                                        <p class="card-text">
+                                            <strong>Start:</strong>
+                                            <?= display_datetime($res['start_datetime'] ?? '') ?><br>
 
-                                    <div class="d-flex justify-content-end gap-2 mt-3">
+                                            <strong>End:</strong>
+                                            <?= display_datetime($res['end_datetime'] ?? '') ?><br>
+                                        </p>
+
                                         <?php if (!empty($items)): ?>
-                                            <?php if ($isStaff && ($currentBasketCount > 0 || $bookingOverride)): ?>
-                                                <button type="button" class="btn btn-outline-secondary btn-sm"
-                                                        onclick="showReuseModal(<?= $resId ?>)">
-                                                    Reuse items
-                                                </button>
-                                            <?php else: ?>
-                                                <form method="post" action="reuse_reservation.php">
+                                            <?php
+                                                $coId        = $linkedCheckout ? (int)$linkedCheckout['id'] : null;
+                                                $hasCheckout = $coId !== null && isset($checkoutItemsByModel[$coId]);
+                                            ?>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-striped align-middle mb-0">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Item</th>
+                                                            <?php if ($hasCheckout): ?><th>Assets</th><?php endif; ?>
+                                                            <th style="width: 80px;">Qty</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <?php foreach ($items as $item): ?>
+                                                            <?php
+                                                                $mid    = (int)($item['model_id'] ?? 0);
+                                                                $assets = $hasCheckout ? ($checkoutItemsByModel[$coId][$mid] ?? []) : [];
+                                                                $tags   = implode(', ', array_map(fn($a) => h($a['asset_tag']), $assets));
+                                                            ?>
+                                                            <tr>
+                                                                <td><?= h($item['name'] ?? '') ?></td>
+                                                                <?php if ($hasCheckout): ?><td><?= $tags ?></td><?php endif; ?>
+                                                                <td><?= (int)$item['qty'] ?></td>
+                                                            </tr>
+                                                        <?php endforeach; ?>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        <?php endif; ?>
+
+                                        <div class="d-flex justify-content-between align-items-center mt-3">
+                                            <div>
+                                                <?php if ($linkedCheckout): ?>
+                                                    <small class="text-muted">
+                                                        Checkout:
+                                                        <?php if ($isStaff): ?>
+                                                            <a href="checkout_history.php?q=<?= urlencode($res['user_email'] ?? '') ?>">
+                                                                #<?= (int)$linkedCheckout['id'] ?> (<?= h($linkedCheckout['status']) ?>)
+                                                            </a>
+                                                        <?php else: ?>
+                                                            #<?= (int)$linkedCheckout['id'] ?> (<?= h($linkedCheckout['status']) ?>)
+                                                        <?php endif; ?>
+                                                    </small>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div class="d-flex gap-2">
+                                                <?php if ($status === 'pending'): ?>
+                                                    <a href="reservation_edit.php?id=<?= $resId ?>&from=my_bookings"
+                                                       class="btn btn-outline-primary btn-sm btn-action">
+                                                        Edit
+                                                    </a>
+                                                <?php endif; ?>
+                                                <?php
+                                                    $deletableStatuses = (load_config())['reservations']['deletable_statuses'] ?? ['pending', 'confirmed', 'cancelled', 'missed'];
+                                                    if (in_array($status, $deletableStatuses, true)):
+                                                ?>
+                                                <form method="post"
+                                                      action="delete_reservation.php"
+                                                      onsubmit="return confirm('Delete reservation #<?= $resId ?>?\n\nThis will permanently remove the reservation and all its items. This cannot be undone.');">
                                                     <input type="hidden" name="reservation_id" value="<?= $resId ?>">
-                                                    <button type="submit" class="btn btn-outline-secondary btn-sm">
-                                                        Reuse items
+                                                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                                                        Delete reservation
                                                     </button>
                                                 </form>
-                                            <?php endif; ?>
-                                        <?php endif; ?>
-                                        <?php
-                                            $deletableStatuses = (load_config())['reservations']['deletable_statuses'] ?? ['pending', 'confirmed', 'cancelled', 'missed'];
-                                            if (in_array($status, $deletableStatuses, true)):
-                                        ?>
-                                        <form method="post"
-                                              action="delete_reservation.php"
-                                              onsubmit="return confirm('Delete reservation #<?= $resId ?>?\n\nThis will permanently remove the reservation and all its items. This cannot be undone.');">
-                                            <input type="hidden" name="reservation_id" value="<?= $resId ?>">
-                                            <button type="submit" class="btn btn-outline-danger btn-sm">
-                                                Delete reservation
-                                            </button>
-                                        </form>
-                                        <?php endif; ?>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+
+                        <?php if (!empty($pastReservations)): ?>
+                            <button type="button" id="toggle-past-btn" class="btn btn-outline-secondary btn-sm mb-3"
+                                    onclick="togglePastReservations()">
+                                Show past reservations (<?= count($pastReservations) ?>)
+                            </button>
+                            <div id="past-reservations" style="display:none">
+                                <?php foreach ($pastReservations as $res): ?>
+                                    <?php
+                                        $resId   = (int)$res['id'];
+                                        $items   = $allResItems[$resId] ?? [];
+                                        $summary = build_items_summary_text($items);
+                                        $status  = strtolower((string)($res['status'] ?? ''));
+                                    ?>
+                                    <div class="card mb-3">
+                                        <div class="card-body">
+                                            <div class="res-card-header">
+                                                <div>
+                                                    <h5 class="card-title mb-0">Reservation #<?= $resId ?><?= !empty($res['name']) ? ' — ' . h($res['name']) : '' ?></h5>
+                                                    <div class="res-card-subtitle"><?= h($res['user_name'] ?? $userName) ?></div>
+                                                </div>
+                                                <?= layout_status_badge($res['status'] ?? '') ?>
+                                            </div>
+                                            <hr class="res-card-divider" aria-hidden="true">
+                                            <?php $linkedCheckout = $reservationCheckouts[$resId] ?? null; ?>
+                                            <p class="card-text">
+                                                <strong>Start:</strong>
+                                                <?= display_datetime($res['start_datetime'] ?? '') ?><br>
+
+                                                <strong>End:</strong>
+                                                <?= display_datetime($res['end_datetime'] ?? '') ?><br>
+                                            </p>
+
+                                            <?php if (!empty($items)): ?>
+                                                <?php
+                                                    $coId        = $linkedCheckout ? (int)$linkedCheckout['id'] : null;
+                                                    $hasCheckout = $coId !== null && isset($checkoutItemsByModel[$coId]);
+                                                ?>
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm table-striped align-middle mb-0">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Item</th>
+                                                                <?php if ($hasCheckout): ?><th>Assets</th><?php endif; ?>
+                                                                <th style="width: 80px;">Qty</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <?php foreach ($items as $item): ?>
+                                                                <?php
+                                                                    $mid    = (int)($item['model_id'] ?? 0);
+                                                                    $assets = $hasCheckout ? ($checkoutItemsByModel[$coId][$mid] ?? []) : [];
+                                                                    $tags   = implode(', ', array_map(fn($a) => h($a['asset_tag']), $assets));
+                                                                ?>
+                                                                <tr>
+                                                                    <td><?= h($item['name'] ?? '') ?></td>
+                                                                    <?php if ($hasCheckout): ?><td><?= $tags ?></td><?php endif; ?>
+                                                                    <td><?= (int)$item['qty'] ?></td>
+                                                                </tr>
+                                                            <?php endforeach; ?>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            <?php endif; ?>
+
+                                            <div class="d-flex justify-content-between align-items-center mt-3">
+                                                <div>
+                                                    <?php if ($linkedCheckout): ?>
+                                                        <small class="text-muted">
+                                                            Checkout:
+                                                            <?php if ($isStaff): ?>
+                                                                <a href="checkout_history.php?q=<?= urlencode($res['user_email'] ?? '') ?>">
+                                                                    #<?= (int)$linkedCheckout['id'] ?> (<?= h($linkedCheckout['status']) ?>)
+                                                                </a>
+                                                            <?php else: ?>
+                                                                <a href="my_bookings.php">
+                                                                    #<?= (int)$linkedCheckout['id'] ?> (<?= h($linkedCheckout['status']) ?>)
+                                                                </a>
+                                                            <?php endif; ?>
+                                                        </small>
+                                                    <?php endif; ?>
+                                                </div>
+                                                <div class="d-flex gap-2">
+                                                    <?php
+                                                        $deletableStatuses = (load_config())['reservations']['deletable_statuses'] ?? ['pending', 'confirmed', 'cancelled', 'missed'];
+                                                        if (in_array($status, $deletableStatuses, true)):
+                                                    ?>
+                                                    <form method="post"
+                                                          action="delete_reservation.php"
+                                                          onsubmit="return confirm('Delete reservation #<?= $resId ?>?\n\nThis will permanently remove the reservation and all its items. This cannot be undone.');">
+                                                        <input type="hidden" name="reservation_id" value="<?= $resId ?>">
+                                                        <button type="submit" class="btn btn-outline-danger btn-sm">
+                                                            Delete reservation
+                                                        </button>
+                                                    </form>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
                             </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
-            <?php endif; ?>
-        <?php endif; ?>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- My Checked Out Items panel -->
+            <div class="my-bookings-panel">
+                <h2 class="my-bookings-panel-title">My Checked Out Items</h2>
+                <div class="my-bookings-panel-box">
+                    <?php if (!empty($checkedOutError)): ?>
+                        <div class="alert alert-danger">
+                            Error loading checked-out items: <?= htmlspecialchars($checkedOutError) ?>
+                        </div>
+                    <?php elseif (empty($checkedOutItems)): ?>
+                        <div class="panel-empty-state">
+                            <i class="bi bi-bag-x panel-empty-icon"></i>
+                            <p class="panel-empty-text">You don't have any checked-out items right now.</p>
+                        </div>
+                    <?php else: ?>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Assets</th>
+                                        <th>Model</th>
+                                        <th>Checked Out</th>
+                                        <th>Expected Return</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($checkedOutItems as $row): ?>
+                                        <tr>
+                                            <td><?= h($row['asset_tag'] ?? '') ?></td>
+                                            <td><?= h($row['model_name'] ?? '') ?></td>
+                                            <td><?= h(display_datetime($row['checked_out_at'] ?? '')) ?></td>
+                                            <td><?= h(display_datetime($row['end_datetime'] ?? '')) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+        </div><!-- /.my-bookings-panels -->
 
     </div>
 </div>

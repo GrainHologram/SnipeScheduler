@@ -6,7 +6,7 @@ require_once SRC_PATH . '/checkout_rules.php';
 require_once SRC_PATH . '/db.php';
 require_once SRC_PATH . '/layout.php';
 
-$config   = load_config();
+$config        = load_config();
 $isAdmin  = !empty($currentUser['is_admin']);
 $isStaff  = !empty($currentUser['is_staff']) || $isAdmin;
 
@@ -555,16 +555,31 @@ $maxCheckoutHours = $catLimits['max_checkout_hours'];
 // ---------------------------------------------------------------------
 $tab          = ($_GET['tab'] ?? 'kits') === 'equipment' ? 'equipment' : 'kits';
 $searchRaw    = trim($_GET['q'] ?? '');
-$categoryRaw  = trim($_GET['category'] ?? '');
 $sortRaw      = trim($_GET['sort'] ?? '');
 $page         = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 $windowStartRaw = trim($_GET['start_datetime'] ?? '');
 $windowEndRaw   = trim($_GET['end_datetime'] ?? '');
 
+// Category supports both ?category=N (single/legacy) and ?category[]=N&category[]=M (multi)
+$_categoryInput = $_GET['category'] ?? null;
+if (is_array($_categoryInput)) {
+    $categoriesSelected = array_values(array_filter(array_map('intval', $_categoryInput)));
+    $categoryRaw        = implode(',', $categoriesSelected);
+} else {
+    $categoryRaw        = trim((string)($_categoryInput ?? ''));
+    $categoriesSelected = (ctype_digit($categoryRaw) && $categoryRaw !== '') ? [(int)$categoryRaw] : [];
+}
+unset($_categoryInput);
+
 // Normalise filters
 $search   = $searchRaw !== '' ? $searchRaw : null;
-$category = ctype_digit($categoryRaw) ? (int)$categoryRaw : null;
+// Pass a single category ID to the API only when exactly one is selected
+$category = count($categoriesSelected) === 1 ? $categoriesSelected[0] : null;
 $sort     = $sortRaw !== '' ? $sortRaw : null;
+
+if (!empty($_GET['window_clear'])) {
+    unset($_SESSION['reservation_window_start'], $_SESSION['reservation_window_end']);
+}
 
 if ($windowStartRaw === '' && $windowEndRaw === '') {
     $sessionStart = trim((string)($_SESSION['reservation_window_start'] ?? ''));
@@ -635,7 +650,7 @@ $checkedOutCounts = [];
     <link rel="stylesheet" href="assets/slot-picker.css">
     <?= layout_theme_styles() ?>
 </head>
-<body class="p-4"
+<body class="p-4 page-catalogue"
       data-catalogue-overdue="<?= $blockCatalogueOverdue ? '1' : '0' ?>"
       data-date-format="<?= h(app_get_date_format()) ?>"
       data-time-format="<?= h(app_get_time_format()) ?>">
@@ -679,22 +694,39 @@ if (is_array($allowedCfg)) {
 // Load models from Snipe-IT (deferred so loader shows immediately)
 // ---------------------------------------------------------------------
 try {
-    $data = get_bookable_models($page, $search ?? '', $category, $sort, $perPage, $allowedCategoryIds);
+    $multiCat = count($categoriesSelected) > 1;
+
+    if ($multiCat) {
+        // Fetch all models in one call (no API-level category filter, no pagination)
+        // so we can filter across multiple categories and paginate PHP-side.
+        $data = get_bookable_models(1, $search ?? '', null, $sort, 500, $allowedCategoryIds);
+    } else {
+        $data = get_bookable_models($page, $search ?? '', $category, $sort, $perPage, $allowedCategoryIds);
+    }
 
     if (isset($data['rows']) && is_array($data['rows'])) {
         $models = $data['rows'];
     }
 
-    if (isset($data['total'])) {
-        $totalModels = (int)$data['total'];
-    } else {
+    if ($multiCat) {
+        // Filter to only the selected categories, then paginate PHP-side.
+        $models = array_values(array_filter($models, function ($m) use ($categoriesSelected) {
+            return in_array((int)(($m['category']['id'] ?? 0)), $categoriesSelected);
+        }));
         $totalModels = count($models);
-    }
-
-    if ($perPage > 0) {
-        $totalPages = max(1, (int)ceil($totalModels / $perPage));
+        $totalPages  = $perPage > 0 ? max(1, (int)ceil($totalModels / $perPage)) : 1;
+        $models      = array_slice($models, ($page - 1) * $perPage, $perPage);
     } else {
-        $totalPages = 1;
+        if (isset($data['total'])) {
+            $totalModels = (int)$data['total'];
+        } else {
+            $totalModels = count($models);
+        }
+        if ($perPage > 0) {
+            $totalPages = max(1, (int)ceil($totalModels / $perPage));
+        } else {
+            $totalPages = 1;
+        }
     }
 } catch (Throwable $e) {
     $models   = [];
@@ -740,6 +772,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
 
         <!-- App navigation -->
         <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
+        <?= layout_render_topbar($active, $tab === 'equipment' ? 'Equipment' : 'Kits') ?>
 
         <?php if ($blockCatalogueOverdue): ?>
             <div id="overdue-warning" class="alert alert-warning<?= $overdueErr ? '' : ' d-none' ?>">
@@ -780,52 +813,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     }
                 }
             ?>
-            <div class="alert alert-info d-flex flex-column flex-md-row align-items-md-center justify-content-md-between booking-for-alert">
-                <div class="mb-2 mb-md-0">
-                    <?php if ($staffNoUserSelected): ?>
-                        <strong>No user selected</strong> — search to begin booking
-                    <?php else: ?>
-                        <strong>Booking for:</strong>
-                        <?= h($activeUser['email'] ?? '') ?>
-                        <?php if (!empty($activeUser['first_name'])): ?>
-                            (<?= h(trim(($activeUser['first_name'] ?? '') . ' ' . ($activeUser['last_name'] ?? ''))) ?>)
-                        <?php endif; ?>
-                        <?php if (!empty($userAccessLevels) || !empty($userCerts)): ?>
-                            <span class="ms-2">
-                                <?php foreach ($userAccessLevels as $level): ?>
-                                    <span class="badge bg-info text-dark"><?= h($level) ?></span>
-                                <?php endforeach; ?>
-                                <?php foreach ($userCerts as $cert): ?>
-                                    <span class="badge bg-warning text-dark"><?= h($cert) ?></span>
-                                <?php endforeach; ?>
-                            </span>
-                        <?php endif; ?>
-                    <?php endif; ?>
-                </div>
-                <form method="post" id="booking_user_form" class="d-flex gap-2 mb-0 flex-wrap position-relative" style="z-index: 9998;">
-                    <input type="hidden" name="mode" value="set_booking_user">
-                    <input type="hidden" name="booking_user_email" id="booking_user_email">
-                    <input type="hidden" name="booking_user_name" id="booking_user_name">
-                    <div class="position-relative">
-                        <input type="search"
-                               id="booking_user_input"
-                               name="user_lookup"
-                               class="form-control form-control-sm"
-                               placeholder="Start typing email or name"
-                               autocomplete="off"
-                               role="combobox"
-                               aria-expanded="false"
-                               aria-controls="booking_user_suggestions">
-                        <div class="list-group position-absolute w-100"
-                             id="booking_user_suggestions"
-                             style="z-index: 9999; max-height: 260px; overflow-y: auto; display: none; box-shadow: 0 12px 24px rgba(0,0,0,0.18);"></div>
-                    </div>
-                    <?php if ($bookingOverride): ?>
-                        <button class="btn btn-sm btn-outline-secondary" type="submit" name="booking_user_revert" value="1">Clear selected user</button>
-                    <?php endif; ?>
-                </form>
-            </div>
-        <?php endif; ?>
+        <?php endif; // $isStaff ?>
 
         <?php if ($blockCatalogueOverdue): ?>
             <div id="overdue-alert" class="alert alert-danger<?= $catalogueBlocked ? '' : ' d-none' ?>">
@@ -855,72 +843,38 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 // Build query string that preserves filters across tabs
                 $tabQueryParams = array_filter([
                     'q'              => $searchRaw,
-                    'category'       => $categoryRaw,
                     'sort'           => $sortRaw,
                     'start_datetime' => $windowStartRaw,
                     'end_datetime'   => $windowEndRaw,
                     'prefetch'       => '1',
                 ], 'strlen');
+                if (!empty($categoriesSelected)) {
+                    $tabQueryParams['category'] = $categoriesSelected;
+                }
             ?>
             <form class="filter-panel filter-panel--compact filter-panel--soft mb-3" method="get" action="catalogue.php" id="catalogue-window-form">
-                <div class="filter-panel__header d-flex align-items-center gap-3">
-                    <span class="filter-panel__dot"></span>
-                    <div class="filter-panel__title">RESERVATION WINDOW</div>
-                </div>
                 <input type="hidden" name="tab" value="<?= h($tab) ?>">
                 <input type="hidden" name="q" value="<?= h($searchRaw) ?>">
-                <input type="hidden" name="category" value="<?= h($categoryRaw) ?>">
+                <?php foreach ($categoriesSelected as $_cid): ?><input type="hidden" name="category[]" value="<?= $_cid ?>"><?php endforeach; ?>
                 <input type="hidden" name="sort" value="<?= h($sortRaw) ?>">
                 <input type="hidden" name="prefetch" value="1">
                 <input type="hidden" name="start_datetime" id="window_start_datetime" value="<?= h($windowStartRaw) ?>">
                 <input type="hidden" name="end_datetime" id="window_end_datetime" value="<?= h($windowEndRaw) ?>">
-                <div class="row g-3 align-items-end">
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Pick-up date &amp; time</label>
-                        <div id="window-start-picker"></div>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Return date &amp; time</label>
-                        <div id="window-end-picker"></div>
-                    </div>
-                    <div class="col-md-4 d-grid d-md-flex gap-2">
-                        <button class="btn btn-primary btn-lg w-100 flex-md-fill mt-3 mt-md-0 reservation-window-btn" type="button" id="window-today-btn">
-                            Today
-                        </button>
-                        <button class="btn btn-primary btn-lg w-100 flex-md-fill mt-3 mt-md-0 reservation-window-btn" type="submit">
-                            Update availability
-                        </button>
-                    </div>
-                </div>
-                <?php if ($isStaff): ?>
-                <div class="mt-2">
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input window-bypass-cap" type="checkbox" id="window-bypass-capacity">
-                        <label class="form-check-label" for="window-bypass-capacity">Bypass slot capacity</label>
-                    </div>
-                    <?php if ($isAdmin): ?>
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input window-bypass-closed" type="checkbox" id="window-bypass-closed">
-                        <label class="form-check-label" for="window-bypass-closed">Bypass closed hours</label>
-                    </div>
-                    <?php endif; ?>
-                </div>
-                <?php endif; ?>
-                <?php if ($windowError !== ''): ?>
-                    <div class="text-danger small mt-2"><?= h($windowError) ?></div>
-                <?php endif; ?>
+                <input type="hidden" name="window_clear" id="window_clear_flag" value="">
             </form>
 
-            <ul class="nav nav-tabs mb-3">
-                <li class="nav-item">
-                    <a class="nav-link <?= $tab === 'equipment' ? 'active' : '' ?>"
-                       href="catalogue.php?<?= http_build_query(array_merge($tabQueryParams, ['tab' => 'equipment'])) ?>">Equipment</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link <?= $tab === 'kits' ? 'active' : '' ?>"
-                       href="catalogue.php?<?= http_build_query(array_merge($tabQueryParams, ['tab' => 'kits'])) ?>">Kits</a>
-                </li>
-            </ul>
+            <div class="catalogue-tab-nav">
+                <ul class="nav nav-tabs mb-3">
+                    <li class="nav-item">
+                        <a class="nav-link <?= $tab === 'equipment' ? 'active' : '' ?>"
+                           href="catalogue.php?<?= http_build_query(array_merge($tabQueryParams, ['tab' => 'equipment'])) ?>">Equipment</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link <?= $tab === 'kits' ? 'active' : '' ?>"
+                           href="catalogue.php?<?= http_build_query(array_merge($tabQueryParams, ['tab' => 'kits'])) ?>">Kits</a>
+                    </li>
+                </ul>
+            </div>
 
             <?php if ($categoryErr): ?>
                 <div class="alert alert-warning">
@@ -934,13 +888,72 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 </div>
             <?php endif; ?>
 
+        <?php
+            $overrideName  = $bookingOverride ? (trim(($bookingOverride['first_name'] ?? '') . ' ' . ($bookingOverride['last_name'] ?? '')) ?: ($bookingOverride['email'] ?? '')) : '';
+            $overrideEmail = $bookingOverride ? ($bookingOverride['email'] ?? '') : '';
+        ?>
         <?php if ($tab === 'equipment'): ?>
+        <div class="catalogue-layout"><aside class="catalogue-filter-sidebar" aria-label="Equipment filters">
+
+        <?php if ($isStaff): ?>
+        <div class="cat-sidebar-user-card">
+            <div class="cat-sidebar-user-header">
+                <div class="cat-sidebar-section-label">Selected User</div>
+            </div>
+            <hr class="cat-sidebar-user-divider" aria-hidden="true">
+            <form method="post" id="booking_user_form" class="cat-sidebar-user-body position-relative">
+                <input type="hidden" name="mode" value="set_booking_user">
+                <input type="hidden" name="booking_user_email" id="booking_user_email" value="<?= h($overrideEmail) ?>">
+                <input type="hidden" name="booking_user_name" id="booking_user_name" value="<?= h($overrideName) ?>">
+                <input type="search" id="booking_user_input" name="user_lookup"
+                       class="form-control form-control-sm cat-sidebar-user-search"
+                       placeholder="Search name or email"
+                       autocomplete="off"
+                       role="combobox"
+                       aria-autocomplete="list"
+                       aria-expanded="false"
+                       aria-controls="booking_user_suggestions"
+                       value="<?= h($overrideName) ?>">
+                <div class="list-group position-absolute w-100"
+                     id="booking_user_suggestions"
+                     role="listbox"
+                     aria-label="User suggestions"
+                     style="z-index:9999; max-height:260px; overflow-y:auto; display:none; box-shadow: 0 12px 24px rgba(0,0,0,0.18);"></div>
+            </form>
+        </div>
+        <?php endif; // $isStaff ?>
+
+        <button type="button"
+                class="cat-sidebar-window-display"
+                id="window-display-btn"
+                aria-haspopup="dialog"
+                aria-controls="windowModal"
+                <?= ($windowError !== '') ? 'data-open-on-load="1"' : '' ?>>
+            <?php if ($windowStartRaw !== '' && $windowEndRaw !== ''): ?>
+                <div class="cat-sidebar-window-row">
+                    <span class="cat-sidebar-window-label">Pick-up</span>
+                    <span class="cat-sidebar-window-value" id="window-display-start">
+                        <?= h(app_format_datetime_local($windowStartRaw, $config, $appTz)) ?>
+                    </span>
+                </div>
+                <div class="cat-sidebar-window-row">
+                    <span class="cat-sidebar-window-label">Return</span>
+                    <span class="cat-sidebar-window-value" id="window-display-end">
+                        <?= h(app_format_datetime_local($windowEndRaw, $config, $appTz)) ?>
+                    </span>
+                </div>
+            <?php else: ?>
+                <span class="cat-sidebar-window-placeholder">Set booking window</span>
+            <?php endif; ?>
+        </button>
+
+        <hr class="cat-sidebar-section-divider">
         <!-- Filters -->
 
         <form class="filter-panel mb-4" method="get" action="catalogue.php" id="catalogue-filter-form">
             <div class="filter-panel__header d-flex align-items-center gap-3">
                 <span class="filter-panel__dot"></span>
-                <div class="filter-panel__title">SEARCH</div>
+                <div class="filter-panel__title">FILTERS</div>
             </div>
 
             <input type="hidden" name="tab" value="equipment">
@@ -949,51 +962,63 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             <input type="hidden" name="prefetch" value="1">
 
             <div class="row g-3 align-items-end">
-                <div class="col-12 col-lg-5">
-                    <label class="form-label mb-1 fw-semibold">Search by name</label>
-                    <div class="input-group filter-search">
-                        <span class="input-group-text filter-search__icon" aria-hidden="true">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
-                                <line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                        </span>
-                        <input type="text"
-                               name="q"
-                               class="form-control form-control-lg filter-search__input"
-                               placeholder="Search by model name or manufacturer"
-                               value="<?= htmlspecialchars($searchRaw) ?>">
+
+                <!-- Sort + View toggle row, then Categories -->
+                <div class="col-12">
+                    <div class="cat-sort-view-row">
+                        <div class="cat-sort-item">
+                            <label class="form-label mb-1 fw-semibold" for="sort-select">Sort</label>
+                            <select name="sort" id="sort-select" class="form-select cat-rounded-select">
+                                <option value="name_asc"   <?= ($sortRaw === '' || $sortRaw === 'name_asc')  ? 'selected' : '' ?>>Name (A–Z)</option>
+                                <option value="name_desc"  <?= $sortRaw === 'name_desc'                      ? 'selected' : '' ?>>Name (Z–A)</option>
+                                <option value="manu_asc"   <?= $sort === 'manu_asc'   ? 'selected' : '' ?>>Manufacturer (A–Z)</option>
+                                <option value="manu_desc"  <?= $sort === 'manu_desc'  ? 'selected' : '' ?>>Manufacturer (Z–A)</option>
+                                <option value="units_asc"  <?= $sort === 'units_asc'  ? 'selected' : '' ?>>Units (low–high)</option>
+                                <option value="units_desc" <?= $sort === 'units_desc' ? 'selected' : '' ?>>Units (high–low)</option>
+                            </select>
+                        </div>
+                        <div class="cat-sort-item cat-view-dropdown">
+                            <label class="form-label mb-1 fw-semibold">View</label>
+                            <button type="button" class="cat-toggle-btn cat-view-toggle" id="cat-view-btn-side"
+                                    aria-haspopup="true" aria-expanded="false">
+                                <i class="bi bi-list-ul" id="cat-view-icon-side" aria-hidden="true"></i>
+                                <span id="cat-view-label-side">List</span>
+                                <svg class="cat-toggle-chevron ms-auto" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                                    <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </button>
+                            <div class="cat-view-menu cat-dropdown" id="cat-view-menu-side" hidden>
+                                <button type="button" class="cat-view-option cat-option" data-view="list"><i class="bi bi-list-ul" aria-hidden="true"></i> List</button>
+                                <button type="button" class="cat-view-option cat-option" data-view="grid"><i class="bi bi-grid" aria-hidden="true"></i> Grid</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="col-6 col-lg-3">
-                    <label class="form-label mb-1 fw-semibold">Category</label>
-                    <select name="category" class="form-select">
-                        <option value="">All categories</option>
+                <div class="col-12">
+                    <p class="form-label mb-1 fw-semibold" id="cat-dropdown-label">Category</p>
+                    <button type="button" class="cat-toggle-btn" id="cat-toggle-btn"
+                            aria-expanded="false" aria-controls="cat-dropdown"
+                            aria-labelledby="cat-dropdown-label cat-toggle-btn">
+                        <span class="cat-toggle-label"><?php
+                            $n = count($categoriesSelected);
+                            echo $n === 0 ? 'All categories' : ($n === 1 ? '1 category' : "$n categories");
+                        ?></span>
+                        <svg class="cat-toggle-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                            <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                    <div class="cat-dropdown" id="cat-dropdown" hidden aria-labelledby="cat-dropdown-label">
                         <?php foreach ($categories as $cat): ?>
-                            <?php
-                            $cid   = (int)($cat['id'] ?? 0);
-                            $cname = $cat['name'] ?? '';
-                            ?>
-                            <option value="<?= $cid ?>"
-                                <?= ($category === $cid) ? 'selected' : '' ?>>
-                                <?= label_safe($cname) ?>
-                            </option>
+                            <?php $cid = (int)($cat['id'] ?? 0); $cname = $cat['name'] ?? ''; ?>
+                            <label class="cat-option">
+                                <input class="cat-checkbox" type="checkbox"
+                                       name="category[]" value="<?= $cid ?>"
+                                       <?= in_array($cid, $categoriesSelected) ? 'checked' : '' ?>>
+                                <span><?= label_safe($cname) ?></span>
+                            </label>
                         <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="col-6 col-lg-2">
-                    <label class="form-label mb-1 fw-semibold">Sort</label>
-                    <select name="sort" class="form-select">
-                        <option value="">Model name (A–Z)</option>
-                        <option value="name_asc"   <?= $sort === 'name_asc'   ? 'selected' : '' ?>>Model Name (Ascending)</option>
-                        <option value="name_desc"  <?= $sort === 'name_desc'  ? 'selected' : '' ?>>Model Name (Descending)</option>
-                        <option value="manu_asc"   <?= $sort === 'manu_asc'   ? 'selected' : '' ?>>Manufacturer (Ascending)</option>
-                        <option value="manu_desc"  <?= $sort === 'manu_desc'  ? 'selected' : '' ?>>Manufacturer (Descending)</option>
-                        <option value="units_asc"  <?= $sort === 'units_asc'  ? 'selected' : '' ?>>Units in Total (Ascending)</option>
-                        <option value="units_desc" <?= $sort === 'units_desc' ? 'selected' : '' ?>>Units in Total (Descending)</option>
-                    </select>
+                    </div>
                 </div>
 
                 <div class="col-12 col-lg-2 d-grid">
@@ -1001,6 +1026,93 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 </div>
             </div>
         </form>
+        </aside><div class="catalogue-main">
+        <div class="catalogue-search-bar">
+            <div class="catalogue-search-row">
+                <div class="catalogue-search-capsule">
+                    <span class="search-icon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+                            <line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </span>
+                    <input type="text" name="q" form="catalogue-filter-form"
+                           placeholder="Search by model name or manufacturer"
+                           value="<?= h($searchRaw) ?>"
+                           aria-label="Search by model name or manufacturer">
+                </div>
+                <button type="button" class="cat-mobile-filter-btn" id="cat-mobile-filter-btn"
+                        aria-expanded="false" aria-controls="cat-mobile-filter-panel">
+                    <i class="bi bi-funnel" aria-hidden="true"></i>
+                    <span class="visually-hidden">Filters</span>
+                </button>
+            </div>
+            <div id="cat-mobile-filter-panel" class="cat-mobile-filter-panel" hidden>
+                <form id="cat-mobile-filter-form" method="get" action="catalogue.php">
+                    <input type="hidden" name="tab" value="equipment">
+                    <input type="hidden" name="start_datetime" value="<?= h($windowStartRaw) ?>">
+                    <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
+                    <input type="hidden" name="prefetch" value="1">
+                    <input type="hidden" name="q" value="<?= h($searchRaw) ?>">
+                    <div class="cat-mobile-filter-row">
+                        <div class="cat-mobile-filter-item">
+                            <label class="form-label mb-1 fw-semibold" for="cat-mobile-sort">Sort</label>
+                            <select name="sort" id="cat-mobile-sort" class="form-select cat-rounded-select">
+                                <option value="name_asc"   <?= ($sortRaw === '' || $sortRaw === 'name_asc')  ? 'selected' : '' ?>>Name (A–Z)</option>
+                                <option value="name_desc"  <?= $sortRaw === 'name_desc'                      ? 'selected' : '' ?>>Name (Z–A)</option>
+                                <option value="manu_asc"   <?= $sort === 'manu_asc'   ? 'selected' : '' ?>>Manufacturer (A–Z)</option>
+                                <option value="manu_desc"  <?= $sort === 'manu_desc'  ? 'selected' : '' ?>>Manufacturer (Z–A)</option>
+                                <option value="units_asc"  <?= $sort === 'units_asc'  ? 'selected' : '' ?>>Units (low–high)</option>
+                                <option value="units_desc" <?= $sort === 'units_desc' ? 'selected' : '' ?>>Units (high–low)</option>
+                            </select>
+                        </div>
+                        <div class="cat-mobile-filter-item cat-view-dropdown">
+                            <label class="form-label mb-1 fw-semibold">View</label>
+                            <button type="button" class="cat-toggle-btn cat-view-toggle" id="cat-view-btn-mobile"
+                                    aria-haspopup="true" aria-expanded="false">
+                                <i class="bi bi-list-ul" id="cat-view-icon-mobile" aria-hidden="true"></i>
+                                <span id="cat-view-label-mobile">List</span>
+                                <svg class="cat-toggle-chevron ms-auto" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                                    <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </button>
+                            <div class="cat-view-menu cat-dropdown" id="cat-view-menu-mobile" hidden>
+                                <button type="button" class="cat-view-option cat-option" data-view="list"><i class="bi bi-list-ul" aria-hidden="true"></i> List</button>
+                                <button type="button" class="cat-view-option cat-option" data-view="grid"><i class="bi bi-grid" aria-hidden="true"></i> Grid</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <p class="form-label mb-1 fw-semibold" id="cat-mobile-cat-label">Category</p>
+                        <button type="button" class="cat-toggle-btn" id="cat-mobile-cat-btn"
+                                aria-expanded="false" aria-controls="cat-mobile-cat-dropdown"
+                                aria-labelledby="cat-mobile-cat-label cat-mobile-cat-btn">
+                            <span class="cat-toggle-label"><?php
+                                $n = count($categoriesSelected);
+                                echo $n === 0 ? 'All categories' : ($n === 1 ? '1 category' : "$n categories");
+                            ?></span>
+                            <svg class="cat-toggle-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                                <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                        <div class="cat-dropdown" id="cat-mobile-cat-dropdown" hidden aria-labelledby="cat-mobile-cat-label">
+                            <?php foreach ($categories as $cat): ?>
+                                <?php $cid = (int)($cat['id'] ?? 0); $cname = $cat['name'] ?? ''; ?>
+                                <label class="cat-option">
+                                    <input class="cat-checkbox" type="checkbox"
+                                           name="category[]" value="<?= $cid ?>"
+                                           <?= in_array($cid, $categoriesSelected) ? 'checked' : '' ?>>
+                                    <span><?= label_safe($cname) ?></span>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 mt-3">Apply filters</button>
+                </form>
+            </div>
+        </div>
+
+        <?php if ($staffNoUserSelected): ?><div class="catalogue-hud-label">Select User to Checkout Items</div><?php endif; ?><div class="catalogue-scroll-area<?php if ($staffNoUserSelected): ?> catalogue-no-user<?php endif; ?>">
 
         <?php if (empty($models) && !$modelErr): ?>
             <div class="alert alert-info">
@@ -1093,10 +1205,25 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
 
                             // "Now" mode: use live cache count for currently checked-out assets.
                             if (array_key_exists($modelId, $checkedOutCounts)) {
-                                $activeCheckedOut = $checkedOutCounts[$modelId];
+                                $cacheCheckedOut = $checkedOutCounts[$modelId];
                             } else {
-                                $activeCheckedOut = count_checked_out_assets_by_model($modelId);
+                                $cacheCheckedOut = count_checked_out_assets_by_model($modelId);
                             }
+                            // Also query checkout_items for open/partial checkouts tracked locally —
+                            // the cache can be stale if the sync cron hasn't run since the last checkout.
+                            $coNowStmt = $pdo->prepare("
+                                SELECT COUNT(*) AS co_qty
+                                FROM checkout_items ci
+                                JOIN checkouts c ON c.id = ci.checkout_id
+                                WHERE ci.model_id = :mid
+                                  AND ci.checked_in_at IS NULL
+                                  AND c.status IN ('open','partial')
+                            ");
+                            $coNowStmt->execute([':mid' => $modelId]);
+                            $localCheckedOut = (int)(($coNowStmt->fetch(PDO::FETCH_ASSOC))['co_qty'] ?? 0);
+                            // Use the higher of the two sources: cache covers Snipe-IT-direct checkouts,
+                            // checkout_items covers locally-tracked checkouts when the cache is stale.
+                            $activeCheckedOut = max($cacheCheckedOut, $localCheckedOut);
                             $booked = $pendingQty + $activeCheckedOut;
                         }
                         $freeNow = max(0, $assetCount - $booked);
@@ -1108,113 +1235,6 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         $maxQty     = 0;
                         $isRequestable = $assetCount > 0;
                     }
-                    // Fetch schedule info for this model (conflicting, prior, next reservations)
-                    $scheduleConflicts = [];
-                    $schedulePrior = null;
-                    $scheduleNext = null;
-                    try {
-                        if ($windowActive) {
-                            // Conflicting reservations in the selected window
-                            $schedStmt = $pdo->prepare("
-                                SELECT r.id, r.user_name, r.status, r.start_datetime, r.end_datetime,
-                                       COALESCE(SUM(ri.quantity), 0) AS qty
-                                FROM reservations r
-                                JOIN reservation_items ri ON ri.reservation_id = r.id
-                                WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed')
-                                  AND r.start_datetime < :end
-                                  AND r.end_datetime > :start
-                                GROUP BY r.id
-                                ORDER BY r.start_datetime ASC
-                                LIMIT 10
-                            ");
-                            $schedStmt->execute([':mid' => $modelId, ':start' => $windowStartIso, ':end' => $windowEndIso]);
-
-                            // Prior reservation (ends before window start)
-                            $priorStmt = $pdo->prepare("
-                                SELECT r.start_datetime, r.end_datetime, r.status,
-                                       COALESCE(SUM(ri.quantity), 0) AS qty
-                                FROM reservations r
-                                JOIN reservation_items ri ON ri.reservation_id = r.id
-                                WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed')
-                                  AND r.end_datetime <= :start
-                                GROUP BY r.id
-                                ORDER BY r.end_datetime DESC
-                                LIMIT 1
-                            ");
-                            $priorStmt->execute([':mid' => $modelId, ':start' => $windowStartIso]);
-
-                            // Next reservation (starts after window end)
-                            $nextStmt = $pdo->prepare("
-                                SELECT r.start_datetime, r.end_datetime, r.status,
-                                       COALESCE(SUM(ri.quantity), 0) AS qty
-                                FROM reservations r
-                                JOIN reservation_items ri ON ri.reservation_id = r.id
-                                WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed')
-                                  AND r.start_datetime >= :end
-                                GROUP BY r.id
-                                ORDER BY r.start_datetime ASC
-                                LIMIT 1
-                            ");
-                            $nextStmt->execute([':mid' => $modelId, ':end' => $windowEndIso]);
-                        } else {
-                            // "Now" mode — overlapping reservations
-                            $schedStmt = $pdo->prepare("
-                                SELECT r.id, r.user_name, r.status, r.start_datetime, r.end_datetime,
-                                       COALESCE(SUM(ri.quantity), 0) AS qty
-                                FROM reservations r
-                                JOIN reservation_items ri ON ri.reservation_id = r.id
-                                WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed')
-                                  AND r.start_datetime <= :now
-                                  AND r.end_datetime > :now
-                                GROUP BY r.id
-                                ORDER BY r.start_datetime ASC
-                                LIMIT 10
-                            ");
-                            $schedStmt->execute([':mid' => $modelId, ':now' => $nowIso]);
-
-                            // Prior reservation (ended before now)
-                            $priorStmt = $pdo->prepare("
-                                SELECT r.start_datetime, r.end_datetime, r.status,
-                                       COALESCE(SUM(ri.quantity), 0) AS qty
-                                FROM reservations r
-                                JOIN reservation_items ri ON ri.reservation_id = r.id
-                                WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed')
-                                  AND r.end_datetime <= :now
-                                GROUP BY r.id
-                                ORDER BY r.end_datetime DESC
-                                LIMIT 1
-                            ");
-                            $priorStmt->execute([':mid' => $modelId, ':now' => $nowIso]);
-
-                            // Next reservation (starts after now)
-                            $nextStmt = $pdo->prepare("
-                                SELECT r.start_datetime, r.end_datetime, r.status,
-                                       COALESCE(SUM(ri.quantity), 0) AS qty
-                                FROM reservations r
-                                JOIN reservation_items ri ON ri.reservation_id = r.id
-                                WHERE ri.model_id = :mid
-                                  AND r.status IN ('pending','confirmed')
-                                  AND r.start_datetime > :now
-                                GROUP BY r.id
-                                ORDER BY r.start_datetime ASC
-                                LIMIT 1
-                            ");
-                            $nextStmt->execute([':mid' => $modelId, ':now' => $nowIso]);
-                        }
-
-                        $scheduleConflicts = $schedStmt->fetchAll(PDO::FETCH_ASSOC);
-                        $schedulePrior = $priorStmt->fetch(PDO::FETCH_ASSOC) ?: null;
-                        $scheduleNext = $nextStmt->fetch(PDO::FETCH_ASSOC) ?: null;
-                    } catch (Throwable $e) {
-                        // Non-fatal — schedule info is supplementary
-                    }
-                    $hasScheduleInfo = !empty($scheduleConflicts) || $schedulePrior || $scheduleNext;
-
                     $notes      = $model['notes'] ?? '';
                     if (is_array($notes)) {
                         $notes = $notes['text'] ?? '';
@@ -1241,10 +1261,10 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                     }
                     ?>
                     <div class="col-md-4">
-                        <div class="card h-100 model-card">
+                        <div class="card h-100 model-card<?= ($isRequestable && $freeNow > 0) ? '' : ' model-card--unavailable' ?>">
                             <?php if ($proxiedImage !== ''): ?>
                                 <div class="model-image-wrapper">
-                                    <a href="#" onclick="openModelHistory(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
+                                    <a href="#" onclick="openModelDetail(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
                                         <img src="<?= htmlspecialchars($proxiedImage) ?>"
                                              alt=""
                                              class="model-image img-fluid">
@@ -1252,7 +1272,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                 </div>
                             <?php else: ?>
                                 <div class="model-image-wrapper model-image-wrapper--placeholder">
-                                    <a href="#" onclick="openModelHistory(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
+                                    <a href="#" onclick="openModelDetail(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
                                         <div class="model-image-placeholder">
                                             No image
                                         </div>
@@ -1260,172 +1280,119 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                 </div>
                             <?php endif; ?>
 
+                            <?php
+                                $undeployInfo = $bulkStats ? $bulkStats['undeployable'] : ['undeployable_count' => 0, 'status_names' => []];
+                                $uCount   = $undeployInfo['undeployable_count'];
+                                $uStatuses = $uCount > 0 ? implode(', ', $undeployInfo['status_names']) : '';
+                            ?>
                             <div class="card-body d-flex flex-column">
-                                <h5 class="card-title">
-                                    <a href="#" class="model-history-link" onclick="openModelHistory(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
-                                        <?= label_safe($name) ?>
-                                    </a>
-                                </h5>
-                                <p class="card-text small text-muted mb-2">
+                                <div class="model-nameline">
+                                    <h5 class="card-title">
+                                        <a href="#" class="model-history-link" onclick="openModelDetail(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
+                                            <?= label_safe($name) ?>
+                                        </a>
+                                    </h5>
                                     <?php if ($manuName): ?>
-                                        <span><strong>Manufacturer:</strong> <?= label_safe($manuName) ?></span><br>
+                                        <span class="model-meta-manufacturer"><strong>Manufacturer:</strong> <?= label_safe($manuName) ?></span>
                                     <?php endif; ?>
-                                    <?php if ($catName): ?>
-                                        <span><strong>Category:</strong> <?= label_safe($catName) ?></span><br>
-                                    <?php endif; ?>
-                                    <?php if ($assetCount !== null): ?>
-                                        <span><strong>Requestable units:</strong> <?= $assetCount ?></span><br>
-                                    <?php endif; ?>
-                                    <span><strong><?= $windowActive ? 'Available for selected dates:' : 'Available now:' ?></strong> <?= $freeNow ?></span>
-                                    <?php if (!empty($notes)): ?>
-                                        <div class="mt-2 text-muted clamp-3">
-                                            <?= label_safe($notes) ?>
-                                        </div>
-                                    <?php endif; ?>
-                                    <?php
-                                        $undeployInfo = $bulkStats ? $bulkStats['undeployable'] : ['undeployable_count' => 0, 'status_names' => []];
-                                        if ($undeployInfo['undeployable_count'] > 0):
-                                            $uCount = $undeployInfo['undeployable_count'];
-                                            $uStatuses = implode(', ', $undeployInfo['status_names']);
-                                    ?>
-                                        <div class="mt-2">
-                                            <span class="badge bg-danger" title="<?= h($uStatuses) ?>"><?= $uCount ?> unit<?= $uCount !== 1 ? 's' : '' ?> unavailable (<?= h($uStatuses) ?>)</span>
-                                        </div>
-                                    <?php endif; ?>
-                                    <?php if (!empty($authReqs['certs'])): ?>
-                                        <div class="mt-1">
-                                            <?php foreach ($authReqs['certs'] as $certName): ?>
-                                                <span class="badge bg-warning text-dark"><?= h($certName) ?></span>
-                                            <?php endforeach; ?>
-                                        </div>
-                                    <?php endif; ?>
-                                    <?php if (!empty($authReqs['access_levels'])): ?>
-                                        <div class="mt-1">
-                                            <?php foreach ($authReqs['access_levels'] as $level): ?>
-                                                <span class="badge bg-info text-dark"><?= h($level) ?></span>
-                                            <?php endforeach; ?>
-                                        </div>
-                                    <?php endif; ?>
-                                </p>
-
-                                <?php if ($hasScheduleInfo): $utcTz = new DateTimeZone('UTC'); ?>
-                                    <div class="schedule-info mt-2 mb-2">
-                                        <button type="button"
-                                                class="btn btn-sm btn-outline-secondary w-100 schedule-toggle"
-                                                onclick="this.parentElement.classList.toggle('schedule-open')">
-                                            View schedule
-                                        </button>
-                                        <div class="schedule-details">
-                                            <?php if ($schedulePrior): ?>
-                                                <div class="schedule-entry schedule-prior">
-                                                    <span class="schedule-label">Previous:</span>
-                                                    <?= layout_status_badge($schedulePrior['status']) ?>
-                                                    <span class="schedule-qty"><?= (int)$schedulePrior['qty'] ?> unit<?= (int)$schedulePrior['qty'] !== 1 ? 's' : '' ?></span>
-                                                    <span class="schedule-dates">
-                                                        <?= h(app_format_datetime_local($schedulePrior['start_datetime'], null, $utcTz)) ?>
-                                                        – <?= h(app_format_datetime_local($schedulePrior['end_datetime'], null, $utcTz)) ?>
-                                                    </span>
-                                                </div>
-                                            <?php endif; ?>
-
-                                            <?php if (!empty($scheduleConflicts)): ?>
-                                                <div class="schedule-section-label">Conflicts:</div>
-                                                <?php foreach ($scheduleConflicts as $conflict): ?>
-                                                    <div class="schedule-entry schedule-conflict">
-                                                        <?= layout_status_badge($conflict['status']) ?>
-                                                        <span class="schedule-qty"><?= (int)$conflict['qty'] ?> unit<?= (int)$conflict['qty'] !== 1 ? 's' : '' ?></span>
-                                                        <span class="schedule-dates">
-                                                            <?= h(app_format_datetime_local($conflict['start_datetime'], null, $utcTz)) ?>
-                                                            – <?= h(app_format_datetime_local($conflict['end_datetime'], null, $utcTz)) ?>
-                                                        </span>
-                                                        <?php if ($isStaff && !empty($conflict['user_name'])): ?>
-                                                            <span class="schedule-user text-muted">(<?= h($conflict['user_name']) ?>)</span>
-                                                        <?php endif; ?>
-                                                    </div>
-                                                <?php endforeach; ?>
-                                            <?php endif; ?>
-
-                                            <?php if ($scheduleNext): ?>
-                                                <div class="schedule-entry schedule-next">
-                                                    <span class="schedule-label">Next:</span>
-                                                    <?= layout_status_badge($scheduleNext['status']) ?>
-                                                    <span class="schedule-qty"><?= (int)$scheduleNext['qty'] ?> unit<?= (int)$scheduleNext['qty'] !== 1 ? 's' : '' ?></span>
-                                                    <span class="schedule-dates">
-                                                        <?= h(app_format_datetime_local($scheduleNext['start_datetime'], null, $utcTz)) ?>
-                                                        – <?= h(app_format_datetime_local($scheduleNext['end_datetime'], null, $utcTz)) ?>
-                                                    </span>
-                                                </div>
-                                            <?php endif; ?>
-                                        </div>
+                                </div>
+                                <?php if (!empty($notes)): ?>
+                                <p class="card-text small text-muted mb-2">
+                                    <div class="model-meta-notes clamp-3">
+                                        <?= label_safe($notes) ?>
                                     </div>
+                                </p>
                                 <?php endif; ?>
 
-                                <form method="post"
-                                      action="basket_add.php"
-                                      class="mt-auto add-to-basket-form">
-                                    <input type="hidden" name="model_id" value="<?= $modelId ?>">
-                                    <?php if ($windowActive): ?>
-                                        <input type="hidden" name="start_datetime" value="<?= h($windowStartRaw) ?>">
-                                        <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
+                                <?php if ($catName || !empty($authReqs['certs']) || !empty($authReqs['access_levels']) || $uCount > 0): ?>
+                                <div class="model-card-tags">
+                                    <?php if ($catName): ?>
+                                        <span class="model-meta-category"><?= label_safe($catName) ?></span>
                                     <?php endif; ?>
+                                    <?php foreach ($authReqs['certs'] as $certName): ?>
+                                        <span class="model-cert-tag"><?= h($certName) ?></span>
+                                    <?php endforeach; ?>
+                                    <?php foreach ($authReqs['access_levels'] as $level): ?>
+                                        <span class="model-access-tag"><?= h($level) ?></span>
+                                    <?php endforeach; ?>
+                                    <?php if ($uCount > 0): ?>
+                                        <span class="model-unavailable-tag" title="<?= h($uStatuses) ?>"><?= $uCount ?> unit<?= $uCount !== 1 ? 's' : '' ?> unavailable</span>
+                                    <?php endif; ?>
+                                </div>
+                                <?php endif; ?>
 
-                                    <?php if ($staffNoUserSelected): ?>
-                                        <div class="alert alert-info small mb-0">Select a user above before adding to basket.</div>
-                                        <button type="button" class="btn btn-sm btn-secondary w-100 mt-2" disabled>Add to basket</button>
-                                    <?php elseif ($accessBlocked): ?>
-                                        <div class="alert alert-warning small mb-0">
-                                            You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.
-                                        </div>
-                                        <button type="button"
-                                                class="btn btn-sm btn-secondary w-100 mt-2"
-                                                disabled>
-                                            Add to basket
-                                        </button>
-                                    <?php elseif ($authBlocked): ?>
-                                        <div class="alert alert-warning small mb-0">
-                                            <?php if (!empty($authMissing['certs'])): ?>
-                                                Requires certification: <?= h(implode(', ', $authMissing['certs'])) ?>
-                                            <?php else: ?>
-                                                Requires access level: <?= h(implode(', ', $authMissing['access_levels'] ?? [])) ?>
-                                            <?php endif; ?>
-                                        </div>
-                                        <button type="button"
-                                                class="btn btn-sm btn-secondary w-100 mt-2"
-                                                disabled>
-                                            Add to basket
-                                        </button>
-                                    <?php elseif ($isRequestable && $freeNow > 0): ?>
-                                        <div class="row g-2 align-items-center mb-2">
-                                            <div class="col-6">
-                                                <label class="form-label mb-0 small">Quantity</label>
-                                                <input type="number"
-                                                       name="quantity"
-                                                       class="form-control form-control-sm"
-                                                       value="1"
-                                                       min="1"
-                                                       max="<?= $maxQty ?>">
+                                <div class="model-card-right">
+                                    <div class="model-meta-availability">
+                                        <?php
+                                        if ($assetCount !== null && $freeNow <= 0) $availDotClass = 'model-avail-dot--red';
+                                        elseif ($assetCount !== null && $freeNow < $assetCount) $availDotClass = 'model-avail-dot--yellow';
+                                        else $availDotClass = 'model-avail-dot--green';
+                                        ?>
+                                        <?php if ($assetCount !== null): ?>
+                                            <span class="model-meta-requestable"><span class="model-avail-dot model-avail-dot--green"></span><strong>Requestable:</strong> <?= $assetCount ?></span>
+                                        <?php endif; ?>
+                                        <span class="model-meta-available"><span class="model-avail-dot <?= $availDotClass ?>"></span><strong><?= $windowActive ? 'Available (dates):' : 'Available:' ?></strong> <?= $freeNow ?></span>
+                                    </div>
+                                    <form method="post"
+                                          action="basket_add.php"
+                                          class="mt-auto add-to-basket-form">
+                                        <input type="hidden" name="model_id" value="<?= $modelId ?>">
+                                        <?php if ($windowActive): ?>
+                                            <input type="hidden" name="start_datetime" value="<?= h($windowStartRaw) ?>">
+                                            <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
+                                        <?php endif; ?>
+
+                                        <?php if ($staffNoUserSelected): ?>
+                                        <?php elseif ($accessBlocked): ?>
+                                            <div class="alert alert-warning small mb-0">
+                                                You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.
                                             </div>
-                                        </div>
+                                            <button type="button"
+                                                    class="btn btn-sm btn-secondary w-100 mt-2"
+                                                    disabled>
+                                                Add to basket
+                                            </button>
+                                        <?php elseif ($authBlocked): ?>
+                                            <div class="alert alert-warning small mb-0">
+                                                <?php if (!empty($authMissing['certs'])): ?>
+                                                    Requires certification: <?= h(implode(', ', $authMissing['certs'])) ?>
+                                                <?php else: ?>
+                                                    Requires access level: <?= h(implode(', ', $authMissing['access_levels'] ?? [])) ?>
+                                                <?php endif; ?>
+                                            </div>
+                                            <button type="button"
+                                                    class="btn btn-sm btn-secondary w-100 mt-2"
+                                                    disabled>
+                                                Add to basket
+                                            </button>
+                                        <?php elseif ($isRequestable && $freeNow > 0): ?>
+                                            <div class="row g-2 align-items-center mb-2">
+                                                <div class="col-6">
+                                                    <label class="form-label mb-0 small">Quantity</label>
+                                                    <input type="number"
+                                                           name="quantity"
+                                                           class="form-control form-control-sm"
+                                                           value="1"
+                                                           min="1"
+                                                           max="<?= $maxQty ?>">
+                                                </div>
+                                            </div>
 
-                                        <button type="submit"
-                                                class="btn btn-sm btn-success w-100">
-                                            Add to basket
-                                        </button>
-                                    <?php else: ?>
-                                        <div class="alert alert-secondary small mb-0">
-                                            <?php if (!$isRequestable): ?>
-                                                No requestable units available.
-                                            <?php else: ?>
-                                                <?= $windowActive ? 'No units available for selected dates.' : 'No units available right now.' ?>
-                                            <?php endif; ?>
-                                        </div>
-                                        <button type="button"
-                                                class="btn btn-sm btn-secondary w-100 mt-2"
-                                                disabled>
-                                            Add to basket
-                                        </button>
-                                    <?php endif; ?>
-                                </form>
+                                            <button type="submit"
+                                                    class="btn btn-sm btn-success w-100">
+                                                Add to basket
+                                            </button>
+                                        <?php else: ?>
+                                            <div class="alert alert-danger small mb-0">
+                                                <?php if (!$isRequestable): ?>
+                                                    No requestable units available.
+                                                <?php else: ?>
+                                                    <?= $windowActive ? 'No units available for selected dates.' : 'No units available right now.' ?>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endif; ?>
+                                    </form>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1437,15 +1404,17 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 <nav class="mt-4">
                     <ul class="pagination">
                         <?php
-                        $baseQuery = [
-                            'tab'      => $tab,
-                            'q'        => $searchRaw,
-                            'category' => $categoryRaw,
-                            'sort'     => $sortRaw,
+                        $baseQuery = array_filter([
+                            'tab'            => $tab,
+                            'q'              => $searchRaw,
+                            'sort'           => $sortRaw,
                             'start_datetime' => $windowStartRaw,
-                            'end_datetime' => $windowEndRaw,
-                            'prefetch' => 1,
-                        ];
+                            'end_datetime'   => $windowEndRaw,
+                            'prefetch'       => '1',
+                        ], 'strlen');
+                        if (!empty($categoriesSelected)) {
+                            $baseQuery['category'] = $categoriesSelected;
+                        }
                         ?>
                         <?php for ($p = 1; $p <= $totalPages; $p++): ?>
                             <?php $q = http_build_query(array_merge($baseQuery, ['page' => $p])); ?>
@@ -1460,6 +1429,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             <?php endif; ?>
         <?php endif; ?>
 
+        </div></div></div>
         <?php endif; // end equipment tab ?>
 
         <?php if ($tab === 'kits'): ?>
@@ -1636,7 +1606,18 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                     $stmt->execute([':mid' => $mid, ':now' => $nowIso]);
                                     $pendingQty = (int)(($stmt->fetch(PDO::FETCH_ASSOC))['pending_qty'] ?? 0);
 
-                                    $activeCheckedOut = $checkedOutCounts[$mid] ?? count_checked_out_assets_by_model($mid);
+                                    $cacheCheckedOut = $checkedOutCounts[$mid] ?? count_checked_out_assets_by_model($mid);
+                                    $coNowStmt2 = $pdo->prepare("
+                                        SELECT COUNT(*) AS co_qty
+                                        FROM checkout_items ci
+                                        JOIN checkouts c ON c.id = ci.checkout_id
+                                        WHERE ci.model_id = :mid
+                                          AND ci.checked_in_at IS NULL
+                                          AND c.status IN ('open','partial')
+                                    ");
+                                    $coNowStmt2->execute([':mid' => $mid]);
+                                    $localCheckedOut = (int)(($coNowStmt2->fetch(PDO::FETCH_ASSOC))['co_qty'] ?? 0);
+                                    $activeCheckedOut = max($cacheCheckedOut, $localCheckedOut);
                                     $booked = $pendingQty + $activeCheckedOut;
                                 }
 
@@ -1738,6 +1719,76 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 No kits available. Equipment kits are configured in Snipe-IT.
             </div>
         <?php else: ?>
+            <div class="catalogue-layout"><aside class="catalogue-filter-sidebar" aria-label="Kit filters">
+
+            <?php if ($isStaff): ?>
+            <div class="cat-sidebar-user-card">
+                <div class="cat-sidebar-user-header">
+                    <div class="cat-sidebar-section-label">Selected User</div>
+                </div>
+                <hr class="cat-sidebar-user-divider" aria-hidden="true">
+                <form method="post" id="booking_user_form" class="cat-sidebar-user-body position-relative">
+                    <input type="hidden" name="mode" value="set_booking_user">
+                    <input type="hidden" name="booking_user_email" id="booking_user_email" value="<?= h($overrideEmail) ?>">
+                    <input type="hidden" name="booking_user_name" id="booking_user_name" value="<?= h($overrideName) ?>">
+                    <input type="search" id="booking_user_input" name="user_lookup"
+                           class="form-control form-control-sm cat-sidebar-user-search"
+                           placeholder="Search by name or email"
+                           autocomplete="off"
+                           role="combobox"
+                           aria-autocomplete="list"
+                           aria-expanded="false"
+                           aria-controls="booking_user_suggestions"
+                           value="<?= h($overrideName) ?>">
+                    <div class="list-group position-absolute w-100"
+                         id="booking_user_suggestions"
+                         role="listbox"
+                         aria-label="User suggestions"
+                         style="z-index:9999; max-height:260px; overflow-y:auto; display:none; box-shadow: 0 12px 24px rgba(0,0,0,0.18);"></div>
+                </form>
+            </div>
+            <?php endif; // $isStaff ?>
+
+            <button type="button"
+                    class="cat-sidebar-window-display"
+                    id="window-display-btn"
+                    aria-haspopup="dialog"
+                    aria-controls="windowModal"
+                    <?= ($windowError !== '') ? 'data-open-on-load="1"' : '' ?>>
+                <?php if ($windowStartRaw !== '' && $windowEndRaw !== ''): ?>
+                    <div class="cat-sidebar-window-row">
+                        <span class="cat-sidebar-window-label">Pick-up</span>
+                        <span class="cat-sidebar-window-value" id="window-display-start">
+                            <?= h(app_format_datetime_local($windowStartRaw, $config, $appTz)) ?>
+                        </span>
+                    </div>
+                    <div class="cat-sidebar-window-row">
+                        <span class="cat-sidebar-window-label">Return</span>
+                        <span class="cat-sidebar-window-value" id="window-display-end">
+                            <?= h(app_format_datetime_local($windowEndRaw, $config, $appTz)) ?>
+                        </span>
+                    </div>
+                <?php else: ?>
+                    <span class="cat-sidebar-window-placeholder">Set booking window</span>
+                <?php endif; ?>
+            </button>
+
+            <hr class="cat-sidebar-section-divider">
+            <div class="cat-view-dropdown px-0">
+                <label class="form-label mb-1 fw-semibold">View</label>
+                <button type="button" class="cat-toggle-btn cat-view-toggle" id="cat-view-btn-side"
+                        aria-haspopup="true" aria-expanded="false">
+                    <i class="bi bi-list-ul" id="cat-view-icon-side" aria-hidden="true"></i>
+                    <span id="cat-view-label-side">List</span>
+                    <svg class="cat-toggle-chevron ms-auto" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                        <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+                <div class="cat-view-menu cat-dropdown" id="cat-view-menu-side" hidden>
+                    <button type="button" class="cat-view-option cat-option" data-view="list"><i class="bi bi-list-ul" aria-hidden="true"></i> List</button>
+                    <button type="button" class="cat-view-option cat-option" data-view="grid"><i class="bi bi-grid" aria-hidden="true"></i> Grid</button>
+                </div>
+            </div>
             <form class="filter-panel mb-4" method="get" action="catalogue.php" id="kits-filter-form">
                 <div class="filter-panel__header d-flex align-items-center gap-3">
                     <span class="filter-panel__dot"></span>
@@ -1747,28 +1798,24 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 <input type="hidden" name="start_datetime" value="<?= h($windowStartRaw) ?>">
                 <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
                 <input type="hidden" name="prefetch" value="1">
-                <div class="row g-3 align-items-end">
-                    <div class="col-12 col-lg-8">
-                        <label class="form-label mb-1 fw-semibold">Search by name</label>
-                        <div class="input-group filter-search">
-                            <span class="input-group-text filter-search__icon" aria-hidden="true">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
-                                    <line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                </svg>
-                            </span>
-                            <input type="text"
-                                   name="q"
-                                   class="form-control filter-search__input"
-                                   value="<?= h($searchRaw) ?>"
-                                   placeholder="Search by kit or model name...">
-                        </div>
-                    </div>
-                    <div class="col-12 col-lg-2 d-grid">
-                        <button class="btn btn-primary btn-lg" type="submit">Filter results</button>
-                    </div>
-                </div>
             </form>
+            </aside><div class="catalogue-main">
+            <div class="catalogue-search-bar">
+                <div class="catalogue-search-capsule">
+                    <span class="search-icon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+                            <line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </span>
+                    <input type="text" name="q" form="kits-filter-form"
+                           placeholder="Search by kit or model name"
+                           value="<?= h($searchRaw) ?>"
+                           aria-label="Search by kit or model name">
+                </div>
+            </div>
+
+            <?php if ($staffNoUserSelected): ?><div class="catalogue-hud-label">Select User to Checkout Items</div><?php endif; ?><div class="catalogue-scroll-area<?php if ($staffNoUserSelected): ?> catalogue-no-user<?php endif; ?>">
 
             <?php if ($windowActive): ?>
                 <div class="alert alert-info">
@@ -1834,8 +1881,6 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                     <?php endif; ?>
 
                                     <?php if ($staffNoUserSelected): ?>
-                                        <div class="alert alert-info small mb-0">Select a user above before adding to basket.</div>
-                                        <button type="button" class="btn btn-sm btn-secondary w-100 mt-2" disabled>Add kit to basket</button>
                                     <?php elseif ($accessBlocked): ?>
                                         <div class="alert alert-warning small mb-0">
                                             You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.
@@ -1887,10 +1932,9 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                         </div>
                                         <button type="submit" class="btn btn-sm btn-outline-success w-100">Add selected to basket</button>
                                     <?php else: ?>
-                                        <div class="alert alert-secondary small mb-0">
+                                        <div class="alert alert-danger small mb-0">
                                             <?= $windowActive ? 'No kits available for selected dates.' : 'No kits available right now.' ?>
                                         </div>
-                                        <button type="button" class="btn btn-sm btn-secondary w-100 mt-2" disabled>Add kit to basket</button>
                                     <?php endif; ?>
                                 </form>
                             </div>
@@ -1925,6 +1969,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             <?php endif; ?>
 
             <?php endif; // end non-empty kitCards ?>
+            </div></div></div>
 
         <?php endif; ?>
         <?php endif; // end kits tab ?>
@@ -2006,6 +2051,90 @@ document.addEventListener('keydown', function(e) {
 </script>
 <?php endif; ?>
 
+<!-- Booking Window Modal -->
+<div id="windowModalBackdrop"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1070;"
+     onclick="closeWindowModal()"></div>
+<div id="windowModal" role="dialog" aria-modal="true" aria-labelledby="windowModalTitle"
+     style="display:none; position:fixed; inset:0; z-index:1075; overflow-y:auto; padding:1.75rem;"
+     onclick="if(event.target===this)closeWindowModal()">
+    <div class="window-modal-inner">
+        <div class="window-modal-header">
+            <h5 id="windowModalTitle" class="mb-0">Booking Window</h5>
+            <button type="button" class="window-modal-close" onclick="closeWindowModal()"
+                    aria-label="Close">&times;</button>
+        </div>
+        <div class="window-modal-body">
+            <div id="window-modal-error" class="text-danger small mb-3"
+                 <?= ($windowError === '') ? 'style="display:none;"' : '' ?>>
+                <?= h($windowError) ?>
+            </div>
+            <div class="wm-picker-section">
+                <div class="wm-section-label">Pick-up date &amp; time</div>
+                <div id="window-start-picker"></div>
+            </div>
+            <hr class="wm-picker-divider">
+            <div class="wm-picker-section">
+                <div class="wm-section-label">Return date &amp; time</div>
+                <div id="window-end-picker"></div>
+            </div>
+            <div class="wm-picker-footer">
+                <button class="btn btn-sm btn-outline-secondary" type="button" id="window-today-btn">Today</button>
+                <button class="btn btn-sm btn-outline-danger" type="button" id="window-clear-btn">Clear</button>
+                <?php if ($isStaff): ?>
+                <div class="form-check mb-0">
+                    <input class="form-check-input window-bypass-cap" type="checkbox" id="window-bypass-capacity">
+                    <label class="form-check-label" for="window-bypass-capacity">Bypass slot capacity</label>
+                </div>
+                <?php if ($isAdmin): ?>
+                <div class="form-check mb-0">
+                    <input class="form-check-input window-bypass-closed" type="checkbox" id="window-bypass-closed">
+                    <label class="form-check-label" for="window-bypass-closed">Bypass closed hours</label>
+                </div>
+                <?php endif; ?>
+                <?php endif; ?>
+                <button class="btn btn-primary btn-sm ms-auto" type="button" id="window-confirm-btn"
+                        disabled>Confirm</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+var _windowModalTrapFn = null;
+function openWindowModal() {
+    document.getElementById('windowModalBackdrop').style.display = 'block';
+    document.getElementById('windowModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+    var modal = document.getElementById('windowModal');
+    var focusables = Array.from(modal.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    ));
+    var first = focusables[0];
+    var last  = focusables[focusables.length - 1];
+    if (first) first.focus();
+    _windowModalTrapFn = function (e) {
+        if (e.key !== 'Tab') return;
+        if (e.shiftKey) {
+            if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+        } else {
+            if (document.activeElement === last)  { e.preventDefault(); first.focus(); }
+        }
+    };
+    document.addEventListener('keydown', _windowModalTrapFn);
+}
+function closeWindowModal() {
+    document.getElementById('windowModalBackdrop').style.display = 'none';
+    document.getElementById('windowModal').style.display = 'none';
+    document.body.style.overflow = '';
+    if (_windowModalTrapFn) {
+        document.removeEventListener('keydown', _windowModalTrapFn);
+        _windowModalTrapFn = null;
+    }
+    var trigger = document.getElementById('window-display-btn');
+    if (trigger) trigger.focus();
+}
+</script>
+
 <div id="basket-toast"
      class="basket-toast"
      role="status"
@@ -2033,12 +2162,14 @@ document.addEventListener('DOMContentLoaded', function () {
     const bookingName  = document.getElementById('booking_user_name');
     const basketToast  = document.getElementById('basket-toast');
     const filterForm = document.getElementById('catalogue-filter-form');
-    const categorySelect = filterForm ? filterForm.querySelector('select[name="category"]') : null;
+    const categorySelect = filterForm ? filterForm.querySelector('select[name="category"]') : null; // v1 only
     const sortSelect = filterForm ? filterForm.querySelector('select[name="sort"]') : null;
     let bookingTimer   = null;
     let bookingQuery   = '';
     let bookingActiveIndex = -1;
     let basketToastTimer = null;
+    const originalBookingName  = bookingInput  ? bookingInput.value  : '';
+    const originalBookingEmail = bookingEmail  ? bookingEmail.value  : '';
 
     function showLoadingOverlay() {
         if (!loadingOverlay) return;
@@ -2081,6 +2212,12 @@ document.addEventListener('DOMContentLoaded', function () {
         form.submit();
     }
 
+    function updateWindowConfirmBtn() {
+        var btn = document.getElementById('window-confirm-btn');
+        if (!btn) return;
+        btn.disabled = !(windowStartHidden && windowStartHidden.value && windowEndHidden && windowEndHidden.value);
+    }
+
     // ---- Unified window slot pickers ----
     var windowForm = document.getElementById('catalogue-window-form');
     var windowStartHidden = document.getElementById('window_start_datetime');
@@ -2093,17 +2230,36 @@ document.addEventListener('DOMContentLoaded', function () {
             hiddenInput: windowEndHidden,
             type: 'end',
             intervalMinutes: intervalMinutes,
-            onSelect: function () { windowEndManuallySet = true; if (windowStartHidden.value) submitWindowForm(windowForm); }
+            noCollapse: true,
+            onSelect: function () { windowEndManuallySet = true; updateWindowConfirmBtn(); }
         }));
         windowStartPicker = new SlotPicker(Object.assign({}, spOpts, {
             container: document.getElementById('window-start-picker'),
             hiddenInput: windowStartHidden,
             type: 'start',
             intervalMinutes: intervalMinutes,
-            onSelect: function (dt) { if (!windowEndManuallySet) autoSetEnd(windowEndPicker, dt); if (windowEndHidden.value) submitWindowForm(windowForm); }
+            noCollapse: true,
+            onSelect: function (dt) { if (!windowEndManuallySet) autoSetEnd(windowEndPicker, dt); updateWindowConfirmBtn(); }
         }));
         if (windowStartHidden.value) windowStartPicker.setValue(windowStartHidden.value);
         if (windowEndHidden.value) { windowEndPicker.setValue(windowEndHidden.value); windowEndManuallySet = true; }
+        updateWindowConfirmBtn();
+
+        var windowConfirmBtn = document.getElementById('window-confirm-btn');
+        if (windowConfirmBtn) {
+            windowConfirmBtn.addEventListener('click', function () { submitWindowForm(windowForm); });
+        }
+
+        var windowClearBtn = document.getElementById('window-clear-btn');
+        if (windowClearBtn) {
+            windowClearBtn.addEventListener('click', function () {
+                var clearFlag = document.getElementById('window_clear_flag');
+                if (clearFlag) clearFlag.value = '1';
+                windowStartPicker.reset();
+                windowEndPicker.reset();
+                submitWindowForm(windowForm);
+            });
+        }
     }
 
     // ---- Today button ----
@@ -2168,6 +2324,13 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     })();
 
+    // ---- Window display button (v2) ----
+    var windowDisplayBtn = document.getElementById('window-display-btn');
+    if (windowDisplayBtn) {
+        windowDisplayBtn.addEventListener('click', openWindowModal);
+        if (windowDisplayBtn.dataset.openOnLoad === '1') openWindowModal();
+    }
+
     function applyOverdueBlock(items) {
         if (catalogueContent) {
             catalogueContent.classList.add('d-none');
@@ -2229,7 +2392,52 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    const searchInput = filterForm ? filterForm.querySelector('input[name="q"]') : null;
+    // v2 category toggle dropdown
+    const catToggleBtn = filterForm ? filterForm.querySelector('#cat-toggle-btn') : null;
+    const catDropdown  = filterForm ? filterForm.querySelector('#cat-dropdown')   : null;
+    if (catToggleBtn && catDropdown) {
+        catToggleBtn.addEventListener('click', function () {
+            const opening = catDropdown.hidden;
+            catDropdown.hidden = !opening;
+            catToggleBtn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+        });
+        // Escape closes the dropdown and returns focus to the button; also closes window modal
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                if (!catDropdown.hidden) {
+                    catDropdown.hidden = true;
+                    catToggleBtn.setAttribute('aria-expanded', 'false');
+                    catToggleBtn.focus();
+                }
+                if (typeof closeWindowModal === 'function') {
+                    var wm = document.getElementById('windowModal');
+                    if (wm && wm.style.display !== 'none') closeWindowModal();
+                }
+            }
+        });
+        // Update button label when checkboxes change
+        catDropdown.addEventListener('change', function () {
+            const checked = catDropdown.querySelectorAll('.cat-checkbox:checked');
+            const label   = catToggleBtn.querySelector('.cat-toggle-label');
+            if (label) {
+                const n = checked.length;
+                label.textContent = n === 0 ? 'All categories' : (n === 1 ? '1 category' : n + ' categories');
+            }
+        });
+    }
+
+    // Escape key for window modal on tabs without the cat dropdown
+    if (typeof closeWindowModal === 'function') {
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                var wm = document.getElementById('windowModal');
+                if (wm && wm.style.display !== 'none') closeWindowModal();
+            }
+        });
+    }
+
+    const searchInput = document.querySelector('.catalogue-search-capsule input[name="q"]') ||
+                        (filterForm ? filterForm.querySelector('input[name="q"]') : null);
     if (searchInput) {
         searchInput.addEventListener('blur', function () {
             if (!filterForm) return;
@@ -2241,6 +2449,54 @@ document.addEventListener('DOMContentLoaded', function () {
             filterForm.submit();
         });
     }
+
+    // Mobile filter panel
+    (function () {
+        var filterBtn   = document.getElementById('cat-mobile-filter-btn');
+        var filterPanel = document.getElementById('cat-mobile-filter-panel');
+        var mobileForm  = document.getElementById('cat-mobile-filter-form');
+        var capsuleInput = document.querySelector('.catalogue-search-capsule input[type="text"]');
+        var mobileQHidden = mobileForm ? mobileForm.querySelector('input[name="q"]') : null;
+
+        if (!filterBtn || !filterPanel) return;
+
+        function syncQ() {
+            if (capsuleInput && mobileQHidden) {
+                mobileQHidden.value = capsuleInput.value;
+            }
+        }
+
+        filterBtn.addEventListener('click', function () {
+            var opening = filterPanel.hidden;
+            filterPanel.hidden = !opening;
+            filterBtn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+            filterBtn.classList.toggle('cat-mobile-filter-btn--active', opening);
+            if (opening) syncQ();
+        });
+
+        // Mobile category dropdown
+        var mobileCatBtn      = document.getElementById('cat-mobile-cat-btn');
+        var mobileCatDropdown = document.getElementById('cat-mobile-cat-dropdown');
+        if (mobileCatBtn && mobileCatDropdown) {
+            mobileCatBtn.addEventListener('click', function () {
+                var opening = mobileCatDropdown.hidden;
+                mobileCatDropdown.hidden = !opening;
+                mobileCatBtn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+            });
+            mobileCatDropdown.addEventListener('change', function () {
+                var checked = mobileCatDropdown.querySelectorAll('.cat-checkbox:checked');
+                var label   = mobileCatBtn.querySelector('.cat-toggle-label');
+                if (label) {
+                    var n = checked.length;
+                    label.textContent = n === 0 ? 'All categories' : (n === 1 ? '1 category' : n + ' categories');
+                }
+            });
+        }
+
+        if (mobileForm) {
+            mobileForm.addEventListener('submit', function () { syncQ(); showLoadingOverlay(); });
+        }
+    })();
 
     const overdueEnabled = document.body.dataset.catalogueOverdue === '1';
     if (overdueEnabled) {
@@ -2313,6 +2569,8 @@ document.addEventListener('DOMContentLoaded', function () {
         bookingList.innerHTML = '';
         if (bookingInput) bookingInput.setAttribute('aria-expanded', 'false');
         bookingActiveIndex = -1;
+        var sidebar = bookingList.closest('.catalogue-filter-sidebar');
+        if (sidebar) sidebar.style.overflowY = '';
     }
 
     function renderBookingSuggestions(items) {
@@ -2329,6 +2587,9 @@ document.addEventListener('DOMContentLoaded', function () {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'list-group-item list-group-item-action';
+            btn.setAttribute('role', 'option');
+            btn.setAttribute('aria-selected', 'false');
+            btn.setAttribute('tabindex', '-1');
             btn.textContent = label;
             btn.addEventListener('mousedown', function (e) {
                 e.preventDefault();
@@ -2340,6 +2601,14 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         bookingList.style.display = 'block';
         if (bookingInput) bookingInput.setAttribute('aria-expanded', 'true');
+        // In the sidebar the list uses position:fixed — anchor it to the input and lock sidebar scroll
+        if (bookingInput && bookingList.closest('.cat-sidebar-user-card')) {
+            var rect = bookingInput.getBoundingClientRect();
+            bookingList.style.top  = rect.bottom + 'px';
+            bookingList.style.left = rect.left + 'px';
+            var sidebar = bookingList.closest('.catalogue-filter-sidebar');
+            if (sidebar) sidebar.style.overflowY = 'hidden';
+        }
         bookingActiveIndex = -1;
     }
 
@@ -2387,19 +2656,26 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
             items.forEach(function (el, i) {
-                el.classList.toggle('active', i === bookingActiveIndex);
+                var active = i === bookingActiveIndex;
+                el.classList.toggle('active', active);
+                el.setAttribute('aria-selected', active ? 'true' : 'false');
             });
             items[bookingActiveIndex].scrollIntoView({ block: 'nearest' });
         });
 
-        bookingInput.addEventListener('blur', function () {
-            setTimeout(hideBookingSuggestions, 150);
+        bookingInput.addEventListener('focus', function () {
+            if (originalBookingEmail && bookingInput.value === originalBookingName) {
+                bookingInput.value = '';
+            }
         });
-    }
 
-    if (filterForm && categorySelect) {
-        categorySelect.addEventListener('change', function () {
-            filterForm.submit();
+        bookingInput.addEventListener('blur', function () {
+            setTimeout(function () {
+                hideBookingSuggestions();
+                if (originalBookingEmail && bookingEmail.value === originalBookingEmail) {
+                    bookingInput.value = originalBookingName;
+                }
+            }, 150);
         });
     }
 
@@ -2408,6 +2684,7 @@ document.addEventListener('DOMContentLoaded', function () {
             filterForm.submit();
         });
     }
+
 });
 
 function clearBookingUser() {
@@ -2438,7 +2715,88 @@ function revertToLoggedIn(e) {
 }
 });
 </script>
-<?php layout_model_history_modal($isStaff); ?>
+<script>window._modelDetailIsStaff = <?= $isStaff ? 'true' : 'false' ?>;</script>
+<script>
+// ---- View toggle (grid / list) — topbar (desktop) + sidebar (mobile) ----
+(function () {
+    var storageKey = 'catalogueView';
+    var defaultView = 'list';
+    var viewMeta = {
+        list: { icon: 'bi-list-ul', label: 'List' },
+        grid: { icon: 'bi-grid',    label: 'Grid'  }
+    };
+
+    function applyView(view) {
+        var scrollArea = document.querySelector('.catalogue-scroll-area');
+        if (scrollArea) scrollArea.setAttribute('data-catalogue-view', view);
+        var meta = viewMeta[view] || viewMeta[defaultView];
+        ['top', 'side'].forEach(function (s) {
+            var icon  = document.getElementById('cat-view-icon-' + s);
+            var label = document.getElementById('cat-view-label-' + s);
+            if (icon)  icon.className = 'bi ' + meta.icon;
+            if (label) label.textContent = meta.label;
+        });
+        document.querySelectorAll('.cat-view-option').forEach(function (opt) {
+            opt.classList.toggle('active', opt.getAttribute('data-view') === view);
+        });
+    }
+
+    function closeAll() {
+        document.querySelectorAll('.cat-view-menu').forEach(function (m) {
+            m.setAttribute('hidden', '');
+        });
+        document.querySelectorAll('.cat-view-toggle').forEach(function (b) {
+            b.setAttribute('aria-expanded', 'false');
+        });
+    }
+
+    function initToggle(btnId, menuId) {
+        var btn  = document.getElementById(btnId);
+        var menu = document.getElementById(menuId);
+        if (!btn || !menu) return;
+
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            if (menu.hasAttribute('hidden')) {
+                closeAll();
+                menu.removeAttribute('hidden');
+                btn.setAttribute('aria-expanded', 'true');
+            } else {
+                menu.setAttribute('hidden', '');
+                btn.setAttribute('aria-expanded', 'false');
+            }
+        });
+
+        menu.querySelectorAll('.cat-view-option').forEach(function (opt) {
+            opt.addEventListener('click', function (e) {
+                e.stopPropagation();
+                var view = opt.getAttribute('data-view');
+                try { localStorage.setItem(storageKey, view); } catch (ex) {}
+                applyView(view);
+                menu.setAttribute('hidden', '');
+                btn.setAttribute('aria-expanded', 'false');
+            });
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!btn.contains(e.target) && !menu.contains(e.target)) {
+                menu.setAttribute('hidden', '');
+                btn.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
+
+    initToggle('cat-view-btn-top',    'cat-view-menu-top');
+    initToggle('cat-view-btn-side',   'cat-view-menu-side');
+    initToggle('cat-view-btn-mobile', 'cat-view-menu-mobile');
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeAll();
+    });
+
+    try { applyView(localStorage.getItem(storageKey) || defaultView); } catch (ex) { applyView(defaultView); }
+})();
+</script>
 <?php layout_footer(); ?>
 </body>
 </html>

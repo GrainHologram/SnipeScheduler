@@ -89,25 +89,14 @@ if (!function_exists('layout_adjust_lightness')) {
     }
 }
 
-if (!function_exists('layout_design_version')) {
-    /**
-     * Return the active design version (1 or 2). Driven by config['app']['design_version'].
-     */
-    function layout_design_version(?array $cfg = null): int
-    {
-        $config = layout_cached_config($cfg);
-        return (int)($config['app']['design_version'] ?? 1);
-    }
-}
-
 if (!function_exists('layout_stylesheet_url')) {
     /**
-     * Return the stylesheet URL for the active design version.
+     * Return the stylesheet URL.
      * Usage in page templates: <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
      */
     function layout_stylesheet_url(?array $cfg = null): string
     {
-        return layout_design_version($cfg) >= 2 ? 'assets/style-v2.css' : 'assets/style.css';
+        return 'assets/style.css';
     }
 }
 
@@ -162,20 +151,28 @@ if (!function_exists('layout_render_nav')) {
         $cfg = load_config();
         $quickCheckoutEnabled = $cfg['app']['quick_checkout_enabled'] ?? true;
 
+        $currentTab   = $_GET['tab'] ?? 'kits';
+
         $links = [
-            ['href' => 'index.php',          'label' => 'Dashboard',           'staff' => false],
-            ['href' => 'catalogue.php',      'label' => 'Catalogue',           'staff' => false],
-            ['href' => 'reservations.php',   'label' => 'Reservations',        'staff' => true],
-            ['href' => 'quick_checkout.php', 'label' => 'Quick Checkout',      'staff' => true, 'enabled' => $quickCheckoutEnabled],
-            ['href' => 'quick_checkin.php',  'label' => 'Quick Checkin',       'staff' => true],
-            ['href' => 'activity_log.php',   'label' => 'Admin',               'staff' => false, 'admin_only' => true],
-            ['href' => '#', 'label' => 'Feedback', 'staff' => true, 'onclick' => 'openFeedbackModal(); return false;', 'class' => 'app-nav-feedback'],
-            ['href' => 'purchase_request_submit.php', 'label' => 'Purchase Requests', 'staff' => false, 'right' => true],
-            ['href' => 'my_bookings.php',    'label' => 'My Reservations',     'staff' => false, 'right' => true],
-            ['href' => 'my_account.php',     'label' => 'My Account',          'staff' => false, 'right' => true],
+            ['href' => 'index.php',       'label' => 'Dashboard', 'staff' => false, 'icon' => 'bi-speedometer2'],
+            ['href' => 'my_bookings.php', 'label' => 'My Gear',   'staff' => false, 'icon' => 'bi-calendar-check'],
+            ['href' => 'reservations.php',            'label' => 'Reservations',      'staff' => true,  'icon' => 'bi-calendar3'],
+
+            ['type' => 'header', 'label' => 'Catalogue',   'staff' => false],
+            ['href' => 'catalogue.php?tab=equipment&prefetch=1', 'label' => 'Equipment', 'staff' => false, 'tab' => 'equipment', 'icon' => 'bi-camera-video'],
+            ['href' => 'catalogue.php?tab=kits&prefetch=1',      'label' => 'Kits',      'staff' => false, 'tab' => 'kits',      'icon' => 'bi-collection'],
+
+            ['type' => 'header', 'label' => 'Processing',  'staff' => true],
+            ['href' => 'quick_checkout.php', 'label' => 'Quick Checkout', 'staff' => true, 'enabled' => $quickCheckoutEnabled, 'icon' => 'bi-box-arrow-right'],
+            ['href' => 'quick_checkin.php',  'label' => 'Quick Checkin',  'staff' => true,  'icon' => 'bi-box-arrow-in-left'],
+
+            ['type' => 'header', 'label' => 'Admin',       'staff' => false, 'admin_only' => true],
+            ['href' => 'activity_log.php',   'label' => 'Admin',          'staff' => false, 'admin_only' => true, 'icon' => 'bi-gear'],
         ];
 
-        $html = '<nav class="app-nav">';
+        $html = '<nav id="app-nav" class="app-nav" aria-label="Main navigation">'
+              . '<button class="app-nav-hamburger" type="button" aria-label="Expand navigation" aria-expanded="false" aria-controls="app-nav"><i class="bi bi-list" aria-hidden="true"></i></button>'
+              . '<a href="index.php" class="app-nav-brand">Wrap It</a>';
         foreach ($links as $link) {
             if (isset($link['enabled']) && !$link['enabled']) {
                 continue;
@@ -184,22 +181,125 @@ if (!function_exists('layout_render_nav')) {
                 if (!$isAdmin) {
                     continue;
                 }
-            } elseif ($link['staff'] && !$isStaff) {
+            } elseif (!empty($link['staff']) && !$isStaff) {
                 continue;
             }
 
-            $href    = htmlspecialchars($link['href'], ENT_QUOTES, 'UTF-8');
-            $label   = htmlspecialchars($link['label'], ENT_QUOTES, 'UTF-8');
-            $classes = 'app-nav-link' . ($active === $link['href'] ? ' active' : '') . (!empty($link['class']) ? ' ' . $link['class'] : '');
-            $style  = !empty($link['right']) ? ' style="margin-left:auto"' : '';
+            $label = htmlspecialchars($link['label'], ENT_QUOTES, 'UTF-8');
 
-            $onclick = !empty($link['onclick']) ? ' onclick="' . htmlspecialchars($link['onclick'], ENT_QUOTES, 'UTF-8') . '"' : '';
-            $html .= '<a href="' . $href . '" class="' . $classes . '"' . $style . $onclick . '>' . $label . '</a>';
+            if (isset($link['type']) && $link['type'] === 'header') {
+                $html .= '<span class="app-nav-header">' . $label . '</span>';
+                continue;
+            }
+
+            // Determine active state — for links with a tab param, match against current tab too
+            $isActive = $active === $link['href'];
+            if (!$isActive && isset($link['tab'])) {
+                $isActive = $active === 'catalogue.php' && $currentTab === $link['tab'];
+            }
+
+            $href      = htmlspecialchars($link['href'], ENT_QUOTES, 'UTF-8');
+            $classes   = 'app-nav-link' . ($isActive ? ' active' : '') . (!empty($link['class']) ? ' ' . $link['class'] : '');
+            $style     = !empty($link['right']) ? ' style="margin-left:auto"' : '';
+            $onclick   = !empty($link['onclick']) ? ' onclick="' . htmlspecialchars($link['onclick'], ENT_QUOTES, 'UTF-8') . '"' : '';
+            $icon      = !empty($link['icon']) ? '<i class="bi ' . htmlspecialchars($link['icon'], ENT_QUOTES, 'UTF-8') . ' app-nav-icon" aria-hidden="true"></i>' : '';
+            $ariaLabel = ' aria-label="' . $label . '" title="' . $label . '"';
+            $html .= '<a href="' . $href . '" class="' . $classes . '"' . $style . $onclick . $ariaLabel . '>' . $icon . '<span class="app-nav-label">' . $label . '</span></a>';
         }
+        $html .= '<a href="feedback_submit.php" class="app-nav-feedback-glyph" aria-label="Feedback" title="Submit Feedback"><i class="bi bi-chat-left-dots" aria-hidden="true"></i></a>';
+
+        $user      = $_SESSION['user'] ?? [];
+        $firstName = $user['first_name'] ?? '';
+        $lastName  = $user['last_name'] ?? '';
+        $fullName  = htmlspecialchars(trim($firstName . ' ' . $lastName), ENT_QUOTES, 'UTF-8');
+        $email     = htmlspecialchars($user['email'] ?? '', ENT_QUOTES, 'UTF-8');
+
+        $html .= '<button type="button" class="app-nav-user" id="accountPanelTrigger"'
+               . ' aria-label="Account settings for ' . $fullName . '"'
+               . ' aria-haspopup="dialog" aria-controls="accountPanel" aria-expanded="false">'
+               . '<span class="app-nav-user-name">' . $fullName . '</span>'
+               . '<span class="app-nav-user-email">' . $email . '</span>'
+               . '</button>';
+
         $html .= '</nav>';
+
+        $html .= '<div class="account-panel-backdrop" id="accountPanelBackdrop" aria-hidden="true"></div>'
+               . '<aside class="account-panel" id="accountPanel" role="dialog" aria-modal="true" aria-label="My Account">'
+               . '<div class="account-panel-header">'
+               . '<span class="account-panel-title">My Account</span>'
+               . '<button type="button" class="account-panel-close" id="accountPanelClose" aria-label="Close account panel">'
+               . '<i class="bi bi-x-lg" aria-hidden="true"></i>'
+               . '</button>'
+               . '</div>'
+               . '<div class="account-panel-body" id="accountPanelBody"></div>'
+               . '<div class="account-panel-footer">'
+               . '<a href="logout.php" class="btn btn-outline-danger btn-sm w-100">Log out</a>'
+               . '</div>'
+               . '</aside>';
 
         $html .= layout_discord_link_banner();
 
+        return $html;
+    }
+}
+
+if (!function_exists('layout_render_topbar')) {
+    /**
+     * Render the fixed top bar showing the current page title.
+     */
+    function layout_render_topbar(string $active, string $subtitle = ''): string
+    {
+        $titles = [
+            'index.php'              => 'Dashboard',
+            'catalogue.php'          => 'Catalogue',
+            'reservations.php'       => 'Reservations',
+            'quick_checkout.php'     => 'Quick Checkout',
+            'quick_checkin.php'      => 'Quick Checkin',
+            'activity_log.php'       => 'Admin',
+            'my_bookings.php'        => 'My Gear',
+            'basket.php'             => 'Basket',
+            'reservation_detail.php' => 'Reservation Detail',
+            'reservation_edit.php'   => 'Edit Reservation',
+            'settings.php'           => 'Settings',
+            'checkout_history.php'   => 'Checkout History',
+            'checked_out_assets.php' => 'Checked Out Assets',
+            'feedback.php'           => 'Feedback',
+            'opening_hours.php'      => 'Opening Hours',
+            'overdue_report.php'     => 'Overdue Report',
+            'staff_checkout.php'     => 'Staff Checkout',
+            'staff_reservations.php'       => 'Staff Reservations',
+            'purchase_request_submit.php'  => 'Purchase Requests',
+            'my_account.php'               => 'My Account',
+            'feedback_submit.php'          => 'Feedback',
+        ];
+
+        $title = $titles[$active] ?? '';
+        $html  = '<div class="app-topbar">';
+        $html .= '<button class="app-topbar-hamburger" type="button" aria-label="Open navigation menu" aria-expanded="false" aria-controls="app-nav"><i class="bi bi-list" aria-hidden="true"></i></button>';
+        $html .= '<span class="app-topbar-crumbs" id="app-topbar-crumbs">';
+        $html .= '<span class="app-topbar-title">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</span>';
+        if ($subtitle !== '') {
+            $html .= '<span class="app-topbar-sep" aria-hidden="true">›</span>';
+            $html .= '<span class="app-topbar-subtitle" id="app-topbar-crumb-1">' . htmlspecialchars($subtitle, ENT_QUOTES, 'UTF-8') . '</span>';
+        }
+        $html .= '</span>';
+        if ($active === 'catalogue.php') {
+            $html .= '<div class="cat-topbar-view">';
+            $html .= '<button type="button" class="cat-topbar-view-btn cat-view-toggle" id="cat-view-btn-top" aria-haspopup="true" aria-expanded="false">';
+            $html .= '<i class="bi bi-list-ul" id="cat-view-icon-top" aria-hidden="true"></i>';
+            $html .= '<span id="cat-view-label-top">List</span>';
+            $html .= '<svg class="cat-toggle-chevron ms-1" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+            $html .= '</button>';
+            $html .= '<div class="cat-view-menu" id="cat-view-menu-top" hidden>';
+            $html .= '<button type="button" class="cat-view-option" data-view="list"><i class="bi bi-list-ul" aria-hidden="true"></i> List</button>';
+            $html .= '<button type="button" class="cat-view-option" data-view="grid"><i class="bi bi-grid" aria-hidden="true"></i> Grid</button>';
+            $html .= '</div>';
+            $html .= '</div>';
+        }
+        if ($active === 'catalogue.php') {
+            $html .= '<a href="basket.php" class="app-topbar-basket"><i class="bi bi-basket" aria-hidden="true"></i> View Basket</a>';
+        }
+        $html .= '</div>';
         return $html;
     }
 }
@@ -349,14 +449,12 @@ if (!function_exists('layout_footer')) {
             ]) . ');</script>';
         }
 
-        echo '<footer class="text-center text-muted mt-4 small">'
-            . 'SnipeScheduler Version ' . $versionEsc . $commitSuffix . ' - Created by '
-            . '<a href="https://www.linkedin.com/in/ben-pirozzolo-76212a88" target="_blank" rel="noopener noreferrer">Ben Pirozzolo</a>'
-            . '</footer>';
-
-        // Render feedback modal for staff/admin users
-        if (!empty($_SESSION['user']['is_staff']) || !empty($_SESSION['user']['is_admin'])) {
-            layout_feedback_modal();
+        $currentPage = basename($_SERVER['PHP_SELF'] ?? '');
+        if (in_array($currentPage, ['index.php', 'activity_log.php'], true)) {
+            echo '<footer class="text-center text-muted mt-4 small">'
+                . 'SnipeScheduler Version ' . $versionEsc . $commitSuffix . ' - Created by '
+                . '<a href="https://www.linkedin.com/in/ben-pirozzolo-76212a88" target="_blank" rel="noopener noreferrer">Ben Pirozzolo</a>'
+                . '</footer>';
         }
 
         // Render active announcements
@@ -416,13 +514,13 @@ if (!function_exists('layout_announcements')) {
         ?>
 <div id="announcementBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1050;" onclick="dismissAnnouncement()"></div>
 <div id="announcementModal" style="display:none; position:fixed; inset:0; z-index:1055; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)dismissAnnouncement()">
-    <div style="max-width:550px; margin:0 auto; background:#fff; border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid #dee2e6;">
+    <div style="max-width:550px; margin:0 auto; background:var(--panel, #fff); border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid var(--border, #dee2e6);">
             <h5 style="margin:0;" id="announcementTitle"></h5>
             <button type="button" onclick="dismissAnnouncement()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
         </div>
         <div style="padding:1rem;" id="announcementBody"></div>
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:.75rem 1rem; border-top:1px solid #dee2e6;">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:.75rem 1rem; border-top:1px solid var(--border, #dee2e6);">
             <span class="text-muted small" id="announcementCounter"></span>
             <div class="d-flex gap-2">
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="announcementNextBtn" onclick="nextAnnouncement()" style="display:none;">Next</button>
@@ -498,146 +596,6 @@ if (!function_exists('layout_announcements')) {
         setTimeout(function() { show(0); }, 300);
     });
 })();
-</script>
-        <?php
-    }
-}
-
-if (!function_exists('layout_feedback_modal')) {
-    /**
-     * Output the feedback submission modal + JS. Called automatically from layout_footer() for staff.
-     */
-    function layout_feedback_modal(): void
-    {
-        ?>
-<div id="feedbackBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1050;" onclick="closeFeedbackModal()"></div>
-<div id="feedbackModal" style="display:none; position:fixed; inset:0; z-index:1055; overflow-y:auto; padding:1.75rem;" onclick="if(event.target===this)closeFeedbackModal()">
-    <div style="max-width:550px; margin:0 auto; background:#fff; border-radius:.5rem; box-shadow:0 .5rem 1rem rgba(0,0,0,.15);">
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid #dee2e6;">
-            <h5 style="margin:0;">Submit Feedback</h5>
-            <button type="button" onclick="closeFeedbackModal()" style="background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; padding:0;">&times;</button>
-        </div>
-        <div style="padding:1rem;">
-            <form id="feedbackForm" enctype="multipart/form-data">
-                <div class="mb-3">
-                    <label for="feedbackCategory" class="form-label">Category</label>
-                    <select id="feedbackCategory" name="category" class="form-select" required>
-                        <option value="general">General</option>
-                        <option value="bug">Bug Report</option>
-                        <option value="feature_request">Feature Request</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label for="feedbackMessage" class="form-label">Message</label>
-                    <textarea id="feedbackMessage" name="message" class="form-control" rows="4" required minlength="10" placeholder="Describe your feedback (min 10 characters)..."></textarea>
-                </div>
-                <div class="mb-3">
-                    <label for="feedbackScreenshot" class="form-label">Screenshot <span class="text-muted small">(optional, max 5MB)</span></label>
-                    <input type="file" id="feedbackScreenshot" name="screenshot" class="form-control" accept="image/*">
-                    <div id="feedbackPreview" style="display:none; margin-top:.5rem;">
-                        <img id="feedbackPreviewImg" src="" alt="Preview" style="max-width:100%; max-height:200px; border-radius:4px; border:1px solid #dee2e6;">
-                    </div>
-                </div>
-                <div id="feedbackMsg" style="display:none;" class="mb-3"></div>
-                <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-primary" id="feedbackSubmitBtn">Submit Feedback</button>
-                    <button type="button" class="btn btn-secondary" onclick="closeFeedbackModal()">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-<script>
-function openFeedbackModal() {
-    document.getElementById('feedbackBackdrop').style.display = 'block';
-    document.getElementById('feedbackModal').style.display = 'block';
-    document.body.style.overflow = 'hidden';
-}
-
-function closeFeedbackModal() {
-    document.getElementById('feedbackBackdrop').style.display = 'none';
-    document.getElementById('feedbackModal').style.display = 'none';
-    document.body.style.overflow = '';
-    // Reset form
-    var form = document.getElementById('feedbackForm');
-    if (form) form.reset();
-    var preview = document.getElementById('feedbackPreview');
-    if (preview) preview.style.display = 'none';
-    var msg = document.getElementById('feedbackMsg');
-    if (msg) { msg.style.display = 'none'; msg.innerHTML = ''; }
-    var btn = document.getElementById('feedbackSubmitBtn');
-    if (btn) { btn.disabled = false; btn.textContent = 'Submit Feedback'; }
-}
-
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && document.getElementById('feedbackModal').style.display === 'block') {
-        closeFeedbackModal();
-    }
-});
-
-// Screenshot preview
-document.getElementById('feedbackScreenshot').addEventListener('change', function() {
-    var preview = document.getElementById('feedbackPreview');
-    var img = document.getElementById('feedbackPreviewImg');
-    if (this.files && this.files[0]) {
-        var reader = new FileReader();
-        reader.onload = function(e) {
-            img.src = e.target.result;
-            preview.style.display = 'block';
-        };
-        reader.readAsDataURL(this.files[0]);
-    } else {
-        preview.style.display = 'none';
-    }
-});
-
-// Form submission
-document.getElementById('feedbackForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    var form = this;
-    var msg = document.getElementById('feedbackMsg');
-    var btn = document.getElementById('feedbackSubmitBtn');
-    var message = document.getElementById('feedbackMessage').value.trim();
-
-    if (message.length < 10) {
-        msg.innerHTML = '<div class="alert alert-warning py-1 px-2 mb-0 small">Message must be at least 10 characters.</div>';
-        msg.style.display = 'block';
-        return;
-    }
-
-    btn.disabled = true;
-    btn.textContent = 'Submitting...';
-    msg.style.display = 'none';
-
-    var formData = new FormData(form);
-
-    fetch('ajax_feedback.php', {
-        method: 'POST',
-        body: formData
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.success) {
-            msg.innerHTML = '<div class="alert alert-success py-1 px-2 mb-0 small">Feedback submitted successfully. Thank you!</div>';
-            msg.style.display = 'block';
-            form.reset();
-            var preview = document.getElementById('feedbackPreview');
-            if (preview) preview.style.display = 'none';
-            setTimeout(function() { closeFeedbackModal(); }, 1500);
-        } else {
-            msg.innerHTML = '<div class="alert alert-danger py-1 px-2 mb-0 small">' + (data.error || 'Failed to submit.') + '</div>';
-            msg.style.display = 'block';
-            btn.disabled = false;
-            btn.textContent = 'Submit Feedback';
-        }
-    })
-    .catch(function() {
-        msg.innerHTML = '<div class="alert alert-danger py-1 px-2 mb-0 small">Network error. Please try again.</div>';
-        msg.style.display = 'block';
-        btn.disabled = false;
-        btn.textContent = 'Submit Feedback';
-    });
-});
 </script>
         <?php
     }

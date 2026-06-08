@@ -113,12 +113,13 @@ $pageTitle = 'My Account';
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= h($pageTitle) ?> - <?= $appName ?></title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
     <?= layout_theme_styles() ?>
 </head>
-<body>
+<body class="p-4">
 <?= layout_logo_tag() ?>
 <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
+<?= layout_render_topbar($active) ?>
 
 <div class="container py-4" style="max-width:700px;">
     <h4 class="mb-3"><?= h($pageTitle) ?></h4>

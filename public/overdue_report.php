@@ -123,6 +123,7 @@ if (($_GET['format'] ?? '') === 'pdf') {
         </div>
 
         <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
+        <?= layout_render_topbar($active) ?>
     </div>
 
     <!-- Print-only header -->

@@ -353,6 +353,91 @@
     color: #ffffff;
 }
 
+/* ---- Window modal: calendar left / slots right layout ---- */
+
+#windowModal .slot-picker {
+    display: grid;
+    grid-template-columns: auto minmax(260px, 1fr);
+    grid-template-areas:
+        "calendar slots"
+        "summary  summary";
+    column-gap: 1.5rem;
+}
+
+#windowModal .sp-calendar-col  { grid-area: calendar; }
+#windowModal .sp-slots-col     { grid-area: slots; }
+#windowModal .sp-selection-col { display: none; }
+#windowModal .sp-slots-panel   { margin-top: 0; }
+
+@media (min-width: 601px) {
+    #windowModal .slot-picker {
+        flex: 1;
+        min-height: 0;
+        grid-template-rows: minmax(0, 1fr) auto;
+    }
+
+    #windowModal .sp-slots-col {
+        min-height: 0;
+        overflow-y: auto;
+    }
+}
+
+/* Larger day cells in window modal */
+#windowModal .sp-day {
+    max-width: 48px;
+    max-height: 48px;
+    font-size: 0.95rem;
+}
+
+#windowModal .sp-calendar th {
+    font-size: 0.78rem;
+    padding: 0.5rem 0;
+}
+
+#windowModal .sp-calendar td {
+    padding: 0.25rem;
+}
+
+#windowModal .sp-month-label {
+    font-size: 1.05rem;
+}
+
+/* Dark grey slot buttons in window modal */
+#windowModal .sp-slot {
+    background: #222;
+    border-color: #383838;
+    color: #e8e8e8;
+}
+
+#windowModal .sp-slot:hover {
+    background: #2e2e2e;
+    border-color: rgba(var(--primary-rgb), 0.5);
+}
+
+#windowModal .sp-slot-selected,
+#windowModal .sp-slot-selected:hover {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary-strong);
+    box-shadow: none;
+}
+
+#windowModal .sp-slots-col {
+    background: #222;
+    border-radius: 0.6rem;
+    padding: 0.75rem;
+}
+
+#windowModal .sp-slots-panel {
+}
+
+@media (max-width: 600px) {
+    #windowModal .slot-picker {
+        grid-template-columns: 1fr;
+        grid-template-areas: "calendar" "slots" "summary";
+    }
+}
+
 /* ---- Responsive ---- */
 
 @media (max-width: 400px) {

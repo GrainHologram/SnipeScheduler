@@ -649,6 +649,7 @@ function layout_checked_out_url(string $base, array $params): string
 
         <?php if (!$embedded): ?>
             <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
+            <?= layout_render_topbar($active) ?>
         <?php endif; ?>
 
         <?php
@@ -674,20 +675,14 @@ function layout_checked_out_url(string $base, array $params): string
             </li>
         </ul>
 
-        <div class="border rounded-3 p-4 mb-4">
-            <form method="get" class="row g-2 mb-0 align-items-end" action="<?= h($pageBase) ?>" id="checked-out-filter-form">
-            <?php foreach ($baseQuery as $k => $v): ?>
-                <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
-            <?php endforeach; ?>
-            <input type="hidden" name="view" value="<?= htmlspecialchars($view) ?>">
-            <div class="col-md-4">
-                <input type="text"
-                       name="q"
-                       value="<?= htmlspecialchars($search) ?>"
-                       class="form-control form-control-lg"
-                       placeholder="Filter by asset tag, name, model, or user">
-            </div>
-            <div class="col-md-2">
+        <form method="get" action="<?= h($pageBase) ?>" id="checked-out-filter-form">
+        <?php foreach ($baseQuery as $k => $v): ?>
+            <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
+        <?php endforeach; ?>
+        <input type="hidden" name="view" value="<?= htmlspecialchars($view) ?>">
+        <div class="border rounded-3 p-3 mb-3">
+            <div class="row g-2 align-items-end">
+            <div class="col-auto">
                 <select id="checked-out-sort" name="sort" class="form-select form-select-lg" aria-label="Sort checked-out assets">
                     <option value="expected_asc" <?= $sort === 'expected_asc' ? 'selected' : '' ?>>Expected check-in (soonest first)</option>
                     <option value="expected_desc" <?= $sort === 'expected_desc' ? 'selected' : '' ?>>Expected check-in (latest first)</option>
@@ -701,32 +696,44 @@ function layout_checked_out_url(string $base, array $params): string
                     <option value="checkout_asc" <?= $sort === 'checkout_asc' ? 'selected' : '' ?>>Assigned since (oldest first)</option>
                 </select>
             </div>
-            <div class="col-md-2">
-                <select name="per_page" class="form-select form-select-lg">
+            <div class="col-auto">
+                <select name="per_page" class="form-select form-select-lg" style="min-width: 140px;">
                     <?php foreach ($perPageOptions as $opt): ?>
-                        <option value="<?= $opt ?>" <?= $perPage === $opt ? 'selected' : '' ?>>
-                            <?= $opt ?> per page
-                        </option>
+                        <option value="<?= $opt ?>" <?= $perPage === $opt ? 'selected' : '' ?>><?= $opt ?> per page</option>
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-md-2 d-flex gap-2">
-                <button type="submit" class="btn btn-primary w-100">Filter</button>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-primary btn-lg">Filter</button>
             </div>
-            <div class="col-md-2 d-flex gap-2">
+            <div class="col-auto">
                 <?php
                     $clearParams = $tabBaseParams;
                     $clearParams['view'] = $view;
                     $clearParams['per_page'] = $perPage;
                     $clearUrl = layout_checked_out_url($pageBase, $clearParams);
                 ?>
-                <a href="<?= h($clearUrl) ?>" class="btn btn-outline-secondary w-100">Clear</a>
+                <a href="<?= h($clearUrl) ?>" class="btn btn-outline-secondary btn-lg">Clear</a>
             </div>
-        </form>
+            </div>
         </div>
+        </form>
 
+        <div class="res-history-body">
+            <div class="res-history-search-header">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-search text-muted flex-shrink-0"></i>
+                    <input type="text"
+                           name="q"
+                           form="checked-out-filter-form"
+                           value="<?= htmlspecialchars($search) ?>"
+                           class="form-control"
+                           placeholder="Filter by asset tag, name, model, or user">
+                </div>
+            </div>
+            <div class="res-history-content">
         <?php if ($view === 'overdue'): ?>
-            <div class="mb-2">
+            <div class="mb-3">
                 <a href="overdue_report.php" class="btn btn-sm btn-outline-primary">Print Report</a>
             </div>
         <?php endif; ?>
@@ -748,8 +755,9 @@ function layout_checked_out_url(string $base, array $params): string
         <?php endif; ?>
 
         <?php if (empty($assets) && !$error): ?>
-            <div class="alert alert-secondary">
-                No <?= $view === 'overdue' ? 'overdue ' : '' ?>checked-out requestable assets.
+            <div class="panel-empty-state">
+                <i class="bi bi-box2 panel-empty-icon"></i>
+                <p class="panel-empty-text">No <?= $view === 'overdue' ? 'overdue ' : '' ?>checked-out requestable assets.</p>
             </div>
         <?php else: ?>
             <form method="post">
@@ -893,6 +901,8 @@ function layout_checked_out_url(string $base, array $params): string
                 </nav>
             <?php endif; ?>
         <?php endif; ?>
+            </div><!-- /.res-history-content -->
+        </div><!-- /.res-history-body -->
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const scrollKey = 'checked_out_scroll_y';

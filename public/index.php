@@ -6,10 +6,10 @@ require_once SRC_PATH . '/layout.php';
 require_once SRC_PATH . '/snipeit_client.php';
 require_once SRC_PATH . '/booking_helpers.php';
 
-$config  = load_config();
-$active  = basename($_SERVER['PHP_SELF']);
-$isAdmin = !empty($currentUser['is_admin']);
-$isStaff = !empty($currentUser['is_staff']) || $isAdmin;
+$config        = load_config();
+$active        = basename($_SERVER['PHP_SELF']);
+$isAdmin       = !empty($currentUser['is_admin']);
+$isStaff       = !empty($currentUser['is_staff']) || $isAdmin;
 
 // ── AJAX: user search (staff only) ──────────────────────────────────
 if ($isStaff && ($_GET['ajax'] ?? '') === 'user_search') {
@@ -225,6 +225,7 @@ foreach ($overdueGrouped as $email => $_grp) {
         </div>
 
         <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
+        <?= layout_render_topbar($active) ?>
 
         <div class="top-bar mb-3">
             <div class="top-bar-user">
@@ -238,42 +239,6 @@ foreach ($overdueGrouped as $email => $_grp) {
         </div>
 
         <?php if ($isStaff): ?>
-
-        <!-- Quick user lookup -->
-        <div class="card mb-3" style="overflow:visible; z-index:10;">
-            <div class="card-body" style="overflow:visible;">
-                <div class="row g-2 align-items-end">
-                    <div class="col-md-5">
-                        <label class="form-label fw-semibold">Quick user lookup</label>
-                        <div class="position-relative">
-                            <input type="search" id="dash_user_input" name="user_lookup" class="form-control"
-                                   placeholder="Start typing name or email" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="dash_user_suggestions">
-                            <div class="list-group position-absolute w-100" id="dash_user_suggestions"
-                                 style="z-index:9999; max-height:260px; overflow-y:auto; display:none;
-                                        box-shadow:0 12px 24px rgba(0,0,0,0.18);"></div>
-                        </div>
-                    </div>
-                    <div class="col-md-7 d-flex gap-2 flex-wrap" id="dash_action_buttons" style="display:none !important">
-                        <a href="reservations.php?tab=today" class="btn btn-outline-primary" id="dash_btn_checkout">
-                            Start Checkout
-                        </a>
-                        <a href="quick_checkin.php" class="btn btn-outline-primary" id="dash_btn_checkin">
-                            Quick Checkin
-                        </a>
-                        <form method="post" action="catalogue.php" id="dash_catalogue_form" style="display:inline;">
-                            <input type="hidden" name="mode" value="set_booking_user">
-                            <input type="hidden" name="booking_user_email" id="dash_catalogue_email">
-                            <input type="hidden" name="booking_user_name" id="dash_catalogue_name">
-                            <button type="submit" class="btn btn-outline-primary">Browse Catalogue</button>
-                        </form>
-                    </div>
-                </div>
-                <div id="dash_user_selected" class="mt-2" style="display:none">
-                    <span class="badge bg-primary" id="dash_user_badge"></span>
-                    <button type="button" class="btn btn-sm btn-link" id="dash_user_clear">Clear</button>
-                </div>
-            </div>
-        </div>
 
         <!-- Summary stat cards -->
         <div class="row g-3 mb-3">
@@ -313,12 +278,11 @@ foreach ($overdueGrouped as $email => $_grp) {
             </div>
         </div>
 
-        <!-- Two-column layout -->
-        <div class="row g-3">
-            <!-- Left column -->
-            <div class="col-md-7">
-                <!-- Upcoming pickups -->
-                <div class="card mb-3">
+        <!-- Pickups and Due Today side by side -->
+        <div class="row g-3 mb-3">
+            <!-- Upcoming pickups -->
+            <div class="col-md-6">
+                <div class="card h-100">
                     <div class="card-header fw-semibold">Upcoming Pickups Today</div>
                     <?php if (empty($pendingPickups)): ?>
                         <div class="card-body text-muted">No pending pickups for today.</div>
@@ -372,9 +336,11 @@ foreach ($overdueGrouped as $email => $_grp) {
                         </div>
                     <?php endif; ?>
                 </div>
+            </div>
 
-                <!-- Equipment due today -->
-                <div class="card mb-3">
+            <!-- Equipment due today -->
+            <div class="col-md-6">
+                <div class="card h-100">
                     <div class="card-header fw-semibold">Equipment Due Today</div>
                     <?php if (empty($dueToday)): ?>
                         <div class="card-body text-muted">No equipment due back today.</div>
@@ -422,84 +388,62 @@ foreach ($overdueGrouped as $email => $_grp) {
                     <?php endif; ?>
                 </div>
             </div>
+        </div>
 
-            <!-- Right column -->
-            <div class="col-md-5">
-                <!-- Quick actions -->
-                <div class="card mb-3">
-                    <div class="card-header fw-semibold">Quick Actions</div>
-                    <div class="list-group list-group-flush">
-                        <a href="reservations.php?tab=today" class="list-group-item list-group-item-action">
-                            Process Reservations
-                        </a>
-                        <a href="quick_checkout.php" class="list-group-item list-group-item-action">
-                            Quick Checkout
-                        </a>
-                        <a href="quick_checkin.php" class="list-group-item list-group-item-action">
-                            Quick Checkin
-                        </a>
-                        <a href="catalogue.php" class="list-group-item list-group-item-action">
-                            Browse Catalogue
-                        </a>
-                    </div>
-                </div>
-
-                <!-- Overdue -->
-                <div class="card mb-3 <?= $overdueCount > 0 ? 'border-danger' : '' ?>">
-                    <div class="card-header fw-semibold <?= $overdueCount > 0 ? 'bg-danger text-white' : '' ?>">
-                        Overdue Items
-                    </div>
-                    <?php if (empty($overdueItems)): ?>
-                        <div class="card-body text-muted">No overdue items.</div>
-                    <?php else: ?>
-                        <div class="list-group list-group-flush">
-                            <?php foreach ($overdueGrouped as $odEmail => $odGroup): ?>
+        <!-- v2: Overdue full-width -->
+        <div class="card mb-3 <?= $overdueCount > 0 ? 'border-danger' : '' ?>">
+            <div class="card-header fw-semibold <?= $overdueCount > 0 ? 'bg-danger text-white' : '' ?>">
+                Overdue Items
+            </div>
+            <?php if (empty($overdueItems)): ?>
+                <div class="card-body text-muted">No overdue items.</div>
+            <?php else: ?>
+                <div class="list-group list-group-flush">
+                    <?php foreach ($overdueGrouped as $odEmail => $odGroup): ?>
+                        <?php
+                            $earliestOverdue = $odGroup['checkouts'][0]['end_datetime'];
+                            $overdueTime = app_format_datetime($earliestOverdue);
+                        ?>
+                        <div class="list-group-item">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <span class="fw-semibold" style="min-width:0; flex:1;"><?= h($odGroup['user_name']) ?></span>
+                                <span class="text-muted small flex-shrink-0">Due <?= h($overdueTime) ?></span>
+                                <?php if (!empty($odGroup['snipeit_user_id'])): ?>
+                                    <a href="quick_checkin.php?user=<?= (int)$odGroup['snipeit_user_id'] ?>" class="btn btn-sm btn-outline-danger flex-shrink-0">Checkin</a>
+                                <?php endif; ?>
+                            </div>
+                            <?php foreach ($odGroup['checkouts'] as $coRow): ?>
                                 <?php
-                                    $earliestOverdue = $odGroup['checkouts'][0]['end_datetime'];
-                                    $overdueTime = app_format_datetime($earliestOverdue);
+                                    $coItems = $overdueCheckoutItems[(int)$coRow['checkout_id']] ?? [];
+                                    $coName = $coRow['checkout_name'] ?: ($coRow['reservation_name'] ?: ($coRow['asset_name_cache'] ?: null));
+                                    if (!$coName && !empty($coItems)) {
+                                        $names = array_column($coItems, 'asset_name');
+                                        $coName = implode(', ', array_filter($names));
+                                    }
+                                    $coLabel = $coName ?: ($coRow['item_count'] . ' item' . ($coRow['item_count'] != 1 ? 's' : ''));
+                                    $itemCount = (int)$coRow['item_count'];
                                 ?>
-                                <div class="list-group-item">
-                                    <div class="d-flex align-items-center gap-2 mb-1">
-                                        <span class="fw-semibold" style="min-width:0; flex:1;"><?= h($odGroup['user_name']) ?></span>
-                                        <span class="text-muted small flex-shrink-0">Due <?= h($overdueTime) ?></span>
-                                        <?php if (!empty($odGroup['snipeit_user_id'])): ?>
-                                            <a href="quick_checkin.php?user=<?= (int)$odGroup['snipeit_user_id'] ?>" class="btn btn-sm btn-outline-danger flex-shrink-0">Checkin</a>
-                                        <?php endif; ?>
-                                    </div>
-                                    <?php foreach ($odGroup['checkouts'] as $coRow): ?>
-                                        <?php
-                                            $coItems = $overdueCheckoutItems[(int)$coRow['checkout_id']] ?? [];
-                                            $coName = $coRow['checkout_name'] ?: ($coRow['reservation_name'] ?: ($coRow['asset_name_cache'] ?: null));
-                                            if (!$coName && !empty($coItems)) {
-                                                $names = array_column($coItems, 'asset_name');
-                                                $coName = implode(', ', array_filter($names));
-                                            }
-                                            $coLabel = $coName ?: ($coRow['item_count'] . ' item' . ($coRow['item_count'] != 1 ? 's' : ''));
-                                            $itemCount = (int)$coRow['item_count'];
-                                        ?>
-                                        <div class="d-flex align-items-center gap-2 ps-2" style="min-width:0;">
-                                            <span class="text-muted small" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1;">
-                                                <?= h($coLabel) ?>
-                                            </span>
-                                            <?php if ($itemCount > 0): ?>
-                                                <a href="javascript:void(0)" onclick="showDashItems('overdue',<?= (int)$coRow['checkout_id'] ?>)"
-                                                   class="text-muted small flex-shrink-0" style="text-decoration:underline; cursor:pointer;">
-                                                    (<?= $itemCount ?> item<?= $itemCount !== 1 ? 's' : '' ?>)
-                                                </a>
-                                            <?php endif; ?>
-                                        </div>
-                                    <?php endforeach; ?>
+                                <div class="d-flex align-items-center gap-2 ps-2" style="min-width:0;">
+                                    <span class="text-muted small" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1;">
+                                        <?= h($coLabel) ?>
+                                    </span>
+                                    <?php if ($itemCount > 0): ?>
+                                        <a href="javascript:void(0)" onclick="showDashItems('overdue',<?= (int)$coRow['checkout_id'] ?>)"
+                                           class="text-muted small flex-shrink-0" style="text-decoration:underline; cursor:pointer;">
+                                            (<?= $itemCount ?> item<?= $itemCount !== 1 ? 's' : '' ?>)
+                                        </a>
+                                    <?php endif; ?>
                                 </div>
                             <?php endforeach; ?>
                         </div>
-                    <?php endif; ?>
-                    <?php if ($overdueCount > 0): ?>
-                        <div class="card-footer text-center">
-                            <a href="overdue_report.php" class="btn btn-sm btn-outline-danger">View Full Report</a>
-                        </div>
-                    <?php endif; ?>
+                    <?php endforeach; ?>
                 </div>
-            </div>
+            <?php endif; ?>
+            <?php if ($overdueCount > 0): ?>
+                <div class="card-footer text-center">
+                    <a href="overdue_report.php" class="btn btn-sm btn-outline-danger">View Full Report</a>
+                </div>
+            <?php endif; ?>
         </div>
 
         <!-- Items detail modal -->
@@ -513,6 +457,62 @@ foreach ($overdueGrouped as $email => $_grp) {
                 <div id="dashItemsBody" style="padding:1rem; max-height:70vh; overflow-y:auto;"></div>
             </div>
         </div>
+
+<script>
+var dashCheckoutItems = <?= json_encode($dueCheckoutItems, JSON_HEX_TAG) ?>;
+var dashOverdueItems = <?= json_encode($overdueCheckoutItems, JSON_HEX_TAG) ?>;
+var dashReservationItems = <?= json_encode($pendingResItems, JSON_HEX_TAG) ?>;
+
+function escHtml(s) {
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(s));
+    return d.innerHTML;
+}
+
+function showDashItems(type, id) {
+    var title = document.getElementById('dashItemsTitle');
+    var body = document.getElementById('dashItemsBody');
+    var items, html;
+
+    if (type === 'checkout' || type === 'overdue') {
+        items = (type === 'overdue' ? dashOverdueItems[id] : dashCheckoutItems[id]) || [];
+        title.textContent = type === 'overdue' ? 'Overdue Items' : 'Checkout Items';
+        html = '<table class="table table-sm mb-0"><thead><tr><th>Asset Tag</th><th>Name</th><th>Model</th><th>Status</th></tr></thead><tbody>';
+        items.forEach(function(ci) {
+            var status = ci.checked_in_at ? '<span class="badge bg-secondary">Returned</span>' : '<span class="badge bg-success">Out</span>';
+            html += '<tr><td>' + escHtml(ci.asset_tag || '') + '</td><td>' + escHtml(ci.asset_name || '') + '</td><td>' + escHtml(ci.model_name || '') + '</td><td>' + status + '</td></tr>';
+        });
+        html += '</tbody></table>';
+    } else {
+        items = dashReservationItems[id] || [];
+        title.textContent = 'Reservation Items';
+        html = '<table class="table table-sm mb-0"><thead><tr><th>Model</th><th>Qty</th></tr></thead><tbody>';
+        items.forEach(function(ri) {
+            html += '<tr><td>' + escHtml(ri.name || '') + '</td><td>' + (ri.qty || 0) + '</td></tr>';
+        });
+        html += '</tbody></table>';
+    }
+
+    if (!items.length) {
+        html = '<p class="text-muted mb-0">No items found.</p>';
+    }
+
+    body.innerHTML = html;
+    document.getElementById('dashItemsBackdrop').style.display = 'block';
+    document.getElementById('dashItemsModal').style.display = 'block';
+}
+
+function closeDashItemsModal() {
+    document.getElementById('dashItemsBackdrop').style.display = 'none';
+    document.getElementById('dashItemsModal').style.display = 'none';
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('dashItemsModal').style.display === 'block') {
+        closeDashItemsModal();
+    }
+});
+</script>
 
         <?php else: ?>
 
@@ -551,11 +551,6 @@ foreach ($overdueGrouped as $email => $_grp) {
 
         <?php endif; ?>
 
-        <div class="mt-4">
-            <div class="alert alert-secondary mb-0">
-                Need help or something is missing from the catalogue? Please contact staff.
-            </div>
-        </div>
     </div>
 </div>
 
@@ -612,212 +607,6 @@ function closeWelcomeModal() {
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape' && document.getElementById('welcomeModal').style.display === 'block') {
         closeWelcomeModal();
-    }
-});
-</script>
-<?php endif; ?>
-
-<?php if ($isStaff): ?>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    var input = document.getElementById('dash_user_input');
-    var list  = document.getElementById('dash_user_suggestions');
-    var selected = document.getElementById('dash_user_selected');
-    var badge = document.getElementById('dash_user_badge');
-    var clearBtn = document.getElementById('dash_user_clear');
-    var actionBtns = document.getElementById('dash_action_buttons');
-    var timer = null;
-    var lastQuery = '';
-    var selectedUser = null;
-
-    var activeIndex = -1;
-
-    function hideSuggestions() {
-        list.style.display = 'none';
-        list.innerHTML = '';
-        input.setAttribute('aria-expanded', 'false');
-        activeIndex = -1;
-    }
-
-    function showActions() {
-        actionBtns.style.display = '';
-        actionBtns.classList.add('d-flex');
-    }
-
-    function hideActions() {
-        actionBtns.style.display = 'none !important';
-        actionBtns.classList.remove('d-flex');
-        actionBtns.setAttribute('style', 'display:none !important');
-    }
-
-    var catEmail = document.getElementById('dash_catalogue_email');
-    var catName  = document.getElementById('dash_catalogue_name');
-
-    function selectUser(user) {
-        selectedUser = user;
-        var label = user.name;
-        if (user.email && user.email !== user.name) label += ' (' + user.email + ')';
-        badge.textContent = label;
-        selected.style.display = '';
-        input.value = '';
-        hideSuggestions();
-        showActions();
-        if (catEmail) catEmail.value = user.email || '';
-        if (catName) catName.value = user.name || user.email || '';
-        var checkinBtn = document.getElementById('dash_btn_checkin');
-        if (checkinBtn && user.id) checkinBtn.href = 'quick_checkin.php?user=' + encodeURIComponent(user.id);
-    }
-
-    function clearUser() {
-        selectedUser = null;
-        selected.style.display = 'none';
-        badge.textContent = '';
-        hideActions();
-        input.value = '';
-        if (catEmail) catEmail.value = '';
-        if (catName) catName.value = '';
-        var checkinBtn = document.getElementById('dash_btn_checkin');
-        if (checkinBtn) checkinBtn.href = 'quick_checkin.php';
-    }
-
-    input.addEventListener('input', function() {
-        var q = input.value.trim();
-        if (q.length < 2) {
-            hideSuggestions();
-            return;
-        }
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(function() {
-            lastQuery = q;
-            fetch('index.php?ajax=user_search&q=' + encodeURIComponent(q), {
-                headers: { 'X-Requested-With': 'XMLHttpRequest' }
-            })
-            .then(function(res) { return res.ok ? res.json() : null; })
-            .then(function(data) {
-                if (lastQuery !== q) return;
-                if (!data || !data.results || !data.results.length) {
-                    hideSuggestions();
-                    return;
-                }
-                list.innerHTML = '';
-                data.results.forEach(function(item) {
-                    var email = item.email || '';
-                    var name = item.name || '';
-                    var label = (name && email && name !== email) ? (name + ' (' + email + ')') : (name || email);
-                    var btn = document.createElement('button');
-                    btn.type = 'button';
-                    btn.className = 'list-group-item list-group-item-action';
-                    btn.textContent = label;
-                    btn.addEventListener('click', function() {
-                        selectUser(item);
-                    });
-                    list.appendChild(btn);
-                });
-                list.style.display = 'block';
-                input.setAttribute('aria-expanded', 'true');
-                activeIndex = -1;
-            })
-            .catch(function() {
-                hideSuggestions();
-            });
-        }, 250);
-    });
-
-    input.addEventListener('keydown', function(e) {
-        var items = list.querySelectorAll('.list-group-item');
-        if (!items.length) return;
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            activeIndex = (activeIndex + 1) % items.length;
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            activeIndex = (activeIndex - 1 + items.length) % items.length;
-        } else if (e.key === 'Enter' && activeIndex >= 0 && activeIndex < items.length) {
-            e.preventDefault();
-            items[activeIndex].click();
-            return;
-        } else if (e.key === 'Escape') {
-            hideSuggestions();
-            return;
-        } else {
-            return;
-        }
-        items.forEach(function(el, i) {
-            el.classList.toggle('active', i === activeIndex);
-        });
-        items[activeIndex].scrollIntoView({ block: 'nearest' });
-    });
-
-    input.addEventListener('blur', function() {
-        setTimeout(hideSuggestions, 150);
-    });
-
-    clearBtn.addEventListener('click', clearUser);
-
-    // Auto-refresh every 60 seconds (skip if feedback, welcome, or items modal is open)
-    setInterval(function() {
-        var feedback = document.getElementById('feedbackModal');
-        var welcome = document.getElementById('welcomeModal');
-        var dashItems = document.getElementById('dashItemsModal');
-        if ((!feedback || feedback.style.display !== 'block') &&
-            (!welcome || welcome.style.display !== 'block') &&
-            (!dashItems || dashItems.style.display !== 'block')) {
-            window.location.reload();
-        }
-    }, 60000);
-});
-
-var dashCheckoutItems = <?= json_encode($dueCheckoutItems, JSON_HEX_TAG) ?>;
-var dashOverdueItems = <?= json_encode($overdueCheckoutItems, JSON_HEX_TAG) ?>;
-var dashReservationItems = <?= json_encode($pendingResItems, JSON_HEX_TAG) ?>;
-
-function escHtml(s) {
-    var d = document.createElement('div');
-    d.appendChild(document.createTextNode(s));
-    return d.innerHTML;
-}
-
-function showDashItems(type, id) {
-    var title = document.getElementById('dashItemsTitle');
-    var body = document.getElementById('dashItemsBody');
-    var items, html;
-
-    if (type === 'checkout' || type === 'overdue') {
-        items = (type === 'overdue' ? dashOverdueItems[id] : dashCheckoutItems[id]) || [];
-        title.textContent = type === 'overdue' ? 'Overdue Items' : 'Checkout Items';
-        html = '<table class="table table-sm mb-0"><thead><tr><th>Asset Tag</th><th>Name</th><th>Model</th><th>Status</th></tr></thead><tbody>';
-        items.forEach(function(ci) {
-            var status = ci.checked_in_at ? '<span class="badge bg-secondary">Returned</span>' : '<span class="badge bg-success">Out</span>';
-            html += '<tr><td>' + escHtml(ci.asset_tag || '') + '</td><td>' + escHtml(ci.asset_name || '') + '</td><td>' + escHtml(ci.model_name || '') + '</td><td>' + status + '</td></tr>';
-        });
-        html += '</tbody></table>';
-    } else {
-        items = dashReservationItems[id] || [];
-        title.textContent = 'Reservation Items';
-        html = '<table class="table table-sm mb-0"><thead><tr><th>Model</th><th>Qty</th></tr></thead><tbody>';
-        items.forEach(function(ri) {
-            html += '<tr><td>' + escHtml(ri.name || '') + '</td><td>' + (ri.qty || 0) + '</td></tr>';
-        });
-        html += '</tbody></table>';
-    }
-
-    if (!items.length) {
-        html = '<p class="text-muted mb-0">No items found.</p>';
-    }
-
-    body.innerHTML = html;
-    document.getElementById('dashItemsBackdrop').style.display = 'block';
-    document.getElementById('dashItemsModal').style.display = 'block';
-}
-
-function closeDashItemsModal() {
-    document.getElementById('dashItemsBackdrop').style.display = 'none';
-    document.getElementById('dashItemsModal').style.display = 'none';
-}
-
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && document.getElementById('dashItemsModal').style.display === 'block') {
-        closeDashItemsModal();
     }
 });
 </script>

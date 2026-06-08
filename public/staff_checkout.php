@@ -29,14 +29,9 @@ $isStaff    = !empty($currentUser['is_staff']) || $isAdmin;
 $tz       = new DateTimeZone($timezone);
 $utc      = new DateTimeZone('UTC');
 $now      = new DateTime('now', $tz);
-$todayStr = $now->format('Y-m-d');
 $clCfg    = checkout_limits_config();
 $staffDateOverride = !empty($clCfg['staff_date_override']);
-// UTC boundaries of "today" in the app's local timezone (start_datetime is stored in UTC)
-$todayLocalStart = new DateTime($todayStr . ' 00:00:00', $tz);
-$todayLocalEnd   = new DateTime($todayStr . ' 23:59:59', $tz);
-$todayUtcStart   = $todayLocalStart->setTimezone($utc)->format('Y-m-d H:i:s');
-$todayUtcEnd     = $todayLocalEnd->setTimezone($utc)->format('Y-m-d H:i:s');
+$nowUtcStr = $now->setTimezone($utc)->format('Y-m-d H:i:s');
 
 // Only staff/admin allowed
 if (!$isStaff) {
@@ -209,26 +204,25 @@ function model_booked_elsewhere(PDO $pdo, int $modelId, string $start, string $e
 }
 
 // ---------------------------------------------------------------------
-// Load today's bookings from reservations table
+// Load all upcoming (future pending/confirmed) bookings
 // ---------------------------------------------------------------------
-$todayBookings = [];
-$todayError    = '';
+$upcomingBookings = [];
+$upcomingError    = '';
 
 try {
     $sql = "
         SELECT *
         FROM reservations
-        WHERE start_datetime >= :today_start
-          AND start_datetime <= :today_end
+        WHERE end_datetime >= :now_utc
           AND status IN ('pending','confirmed')
         ORDER BY start_datetime ASC
     ";
     $stmt = $pdo->prepare($sql);
-    $stmt->execute([':today_start' => $todayUtcStart, ':today_end' => $todayUtcEnd]);
-    $todayBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt->execute([':now_utc' => $nowUtcStr]);
+    $upcomingBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
-    $todayBookings = [];
-    $todayError    = $e->getMessage();
+    $upcomingBookings = [];
+    $upcomingError    = $e->getMessage();
 }
 
 // ---------------------------------------------------------------------
@@ -272,6 +266,16 @@ foreach ($checkoutAssets as $existing) {
     if ($mid > 0) {
         $currentModelCounts[$mid] = ($currentModelCounts[$mid] ?? 0) + 1;
     }
+}
+
+// Handle reservation rename
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'rename_reservation' && $selectedReservationId > 0) {
+    $newName = trim($_POST['new_name'] ?? '');
+    $pdo->prepare("UPDATE reservations SET name = :name WHERE id = :id")
+        ->execute([':name' => $newName !== '' ? $newName : null, ':id' => $selectedReservationId]);
+    $_SESSION['selected_reservation_fresh'] = 1;
+    header('Location: ' . $selfUrl);
+    exit;
 }
 
 // Handle reservation selection (POST)
@@ -322,14 +326,9 @@ if ($selectedReservationId) {
         SELECT *
         FROM reservations
         WHERE id = :id
-          AND start_datetime >= :today_start
-          AND start_datetime <= :today_end
+          AND status IN ('pending','confirmed')
     ");
-    $stmt->execute([
-        ':id'          => $selectedReservationId,
-        ':today_start' => $todayUtcStart,
-        ':today_end'   => $todayUtcEnd,
-    ]);
+    $stmt->execute([':id' => $selectedReservationId]);
     $selectedReservation = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
 
     if ($selectedReservation) {
@@ -1088,6 +1087,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $note = trim($_POST['reservation_note'] ?? '');
             $reservationNoteValue = $note;
+            // Persist updated notes back to the reservation record
+            $pdo->prepare("UPDATE reservations SET notes = :notes WHERE id = :id")
+                ->execute([':notes' => $note !== '' ? $note : null, ':id' => $selectedReservationId]);
             $selectedReservationUserId = (int)($_POST['reservation_user_id'] ?? 0);
             if ($checkoutTo === '') {
                 $checkoutErrors[] = 'This reservation has no associated user name.';
@@ -1688,16 +1690,21 @@ $active  = basename($_SERVER['PHP_SELF']);
     <div class="page-shell">
         <?= layout_logo_tag() ?>
 <?php endif; ?>
+<?php if ($embedded): ?>
+<div class="res-history-body">
+<?php else: ?>
         <div class="page-header">
             <h1>Today’s Reservations (Checkout)</h1>
             <div class="page-subtitle">
                 View today’s reservations and perform bulk checkouts via Snipe-IT.
             </div>
         </div>
+<?php endif; ?>
 
         <!-- App navigation -->
         <?php if (!$embedded): ?>
             <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
+            <?= layout_render_topbar($active) ?>
         <?php endif; ?>
 
         <!-- Top bar -->
@@ -1714,7 +1721,437 @@ $active  = basename($_SERVER['PHP_SELF']);
             </div>
         <?php endif; ?>
 
-        <!-- Reservation selector (today only) -->
+<?php if ($embedded): ?>
+    <!-- EMBEDDED: new list/detail layout -->
+    <?php
+        $rebookSuccess = $_SESSION['rebook_success'] ?? null;
+        unset($_SESSION['rebook_success']);
+        $scanFlash = $_SESSION['scan_flash'] ?? null;
+        unset($_SESSION['scan_flash']);
+    ?>
+    <?php if (!$selectedReservation): ?>
+        <?php if (!empty($checkoutMessages)): ?>
+            <div class="alert alert-success">
+                <ul class="mb-0"><?php foreach ($checkoutMessages as $m): ?><li><?= h($m) ?></li><?php endforeach; ?></ul>
+            </div>
+        <?php endif; ?>
+        <?php if ($rebookSuccess): ?>
+            <div class="alert alert-success">
+                <strong>Rebook successful.</strong> New reservation <strong>#<?= (int)$rebookSuccess['new_id'] ?></strong> created with: <?= h(implode(', ', $rebookSuccess['models'] ?? [])) ?>.
+            </div>
+        <?php endif; ?>
+        <?php if ($scanFlash): ?>
+            <?php $flashClass = match($scanFlash['type'] ?? '') { 'success' => 'alert-success', 'warning' => 'alert-warning', 'error' => 'alert-danger', default => 'alert-info' }; ?>
+            <div class="alert <?= $flashClass ?>"><?= h($scanFlash['msg']) ?></div>
+        <?php endif; ?>
+    <div class="res-history-body">
+        <div class="res-history-search-header">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-search text-muted flex-shrink-0"></i>
+                <input type="text" id="res-today-search" class="form-control"
+                       placeholder="Search by name, user, or items...">
+            </div>
+        </div>
+        <div class="res-history-content res-today-list-view">
+        <div class="res-today-list" id="res-today-list">
+            <?php if (!empty($upcomingError)): ?>
+                <div class="alert alert-danger"><?= h($upcomingError) ?></div>
+            <?php elseif (empty($upcomingBookings)): ?>
+                <div class="panel-empty-state">
+                    <div class="panel-empty-icon"><i class="bi bi-calendar-x"></i></div>
+                    <p class="panel-empty-text">No upcoming pending reservations.</p>
+                </div>
+            <?php else: ?>
+                <?php foreach ($upcomingBookings as $res): ?>
+                    <?php
+                        $resId   = (int)$res['id'];
+                        $listItems = get_reservation_items_with_names($pdo, $resId);
+                        $summary = build_items_summary_text($listItems);
+                        $start   = display_datetime($res['start_datetime'] ?? '');
+                        $end     = display_datetime($res['end_datetime'] ?? '');
+                        $resName = trim($res['name'] ?? '') !== '' ? $res['name'] : '#' . $resId;
+                        $searchText = strtolower(trim(implode(' ', [
+                            $res['name'] ?? '', '#' . $resId,
+                            $res['user_name'] ?? '', $res['user_email'] ?? '', $summary,
+                        ])));
+                    ?>
+                    <form method="post" action="<?= h($selfUrl) ?>">
+                        <?php foreach ($baseQuery as $k => $v): ?>
+                            <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
+                        <?php endforeach; ?>
+                        <input type="hidden" name="mode" value="select_reservation">
+                        <input type="hidden" name="reservation_id" value="<?= $resId ?>">
+                        <button type="submit" class="res-today-list-item"
+                                data-search-text="<?= h($searchText) ?>">
+                            <div class="res-today-list-item-header">
+                                <span class="res-today-list-item-name"><?= h($resName) ?></span>
+                                <?= layout_status_badge($res['status']) ?>
+                            </div>
+                            <div class="res-today-list-item-meta">
+                                <span><?= h($res['user_name'] ?? '') ?></span>
+                                <span><?= h($start) ?> → <?= h($end) ?></span>
+                            </div>
+                            <?php if ($summary !== ''): ?>
+                                <div class="res-today-list-item-summary"><?= h($summary) ?></div>
+                            <?php endif; ?>
+                        </button>
+                    </form>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+        </div><!-- /.res-history-content res-today-list-view -->
+    </div><!-- /.res-history-body -->
+    <?php else: /* reservation selected — detail view */ ?>
+    <?php
+        $reservationDisplayName = trim($selectedReservation['name'] ?? '') !== ''
+            ? $selectedReservation['name'] : '#' . (int)$selectedReservation['id'];
+        $rUserName  = trim($selectedReservation['user_name'] ?? '');
+        $rUserEmail = trim($selectedReservation['user_email'] ?? '');
+    ?>
+    <style>
+        .reservations-subtabs { display: none !important; }
+        .tab-content .res-history-body { border: none !important; border-radius: 0 !important; background: transparent !important; }
+    </style>
+    <div class="res-today-detail">
+        <div class="res-today-split">
+
+            <!-- ====== LEFT SIDEBAR ====== -->
+            <aside class="res-today-sidebar">
+
+                <!-- Reservation name with inline rename -->
+                <div class="res-today-sidebar-name-section">
+                    <div id="res-name-display-wrap">
+                        <div class="d-flex align-items-center gap-1">
+                            <span id="res-name-display" class="res-today-sidebar-name-text"><?= h($reservationDisplayName) ?></span>
+                            <button type="button" id="res-name-edit-btn" class="btn btn-link btn-sm p-0 ms-1 text-muted" aria-label="Rename reservation">
+                                <i class="bi bi-pencil-fill" style="font-size:0.75rem;"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <form id="res-name-form" method="post" action="<?= h($selfUrl) ?>" style="display:none;">
+                        <?php foreach ($baseQuery as $k => $v): ?>
+                            <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
+                        <?php endforeach; ?>
+                        <input type="hidden" name="mode" value="rename_reservation">
+                        <div class="d-flex gap-1 align-items-center mt-1">
+                            <input type="text" name="new_name" id="res-name-input"
+                                   class="form-control form-control-sm"
+                                   value="<?= h(trim($selectedReservation['name'] ?? '')) ?>"
+                                   placeholder="Reservation name">
+                            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                            <button type="button" id="res-name-cancel" class="btn btn-link btn-sm p-0 text-muted">&#x2715;</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Reservation user -->
+                <div class="res-today-sidebar-section">
+                    <div class="res-today-sidebar-label">Reservation User</div>
+                    <?php if ($rUserName !== ''): ?>
+                        <div class="res-today-sidebar-value"><?= h($rUserName) ?></div>
+                    <?php endif; ?>
+                    <?php if ($rUserEmail !== ''): ?>
+                        <div class="res-today-sidebar-value" style="font-size:0.78rem; color:var(--muted);"><?= h($rUserEmail) ?></div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Check-Out / Check-In dates button -->
+                <div class="res-today-sidebar-section">
+                <div class="res-today-sidebar-label">Check-Out / Check-In</div>
+                <button type="button" class="cat-sidebar-window-display"
+                        onclick="openResDatesModal()"
+                        aria-haspopup="dialog" aria-controls="res-dates-modal">
+                    <div class="cat-sidebar-window-row">
+                        <span class="cat-sidebar-window-label">Pick-up</span>
+                        <span class="cat-sidebar-window-value"><?= h(display_datetime($selectedReservation['start_datetime'] ?? '')) ?></span>
+                    </div>
+                    <div class="cat-sidebar-window-row">
+                        <span class="cat-sidebar-window-label">Return</span>
+                        <span class="cat-sidebar-window-value"><?= h(display_datetime($selectedReservation['end_datetime'] ?? '')) ?></span>
+                    </div>
+                </button>
+                </div><!-- /.res-today-sidebar-section (dates) -->
+
+                <!-- Checkout form: user candidate, notes, errors, button -->
+                <form id="reservationCheckoutForm" method="post" action="<?= h($selfUrl) ?>"
+                      class="basket-checkout-form" data-loading="Processing checkout...">
+                    <?php foreach ($baseQuery as $k => $v): ?>
+                        <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
+                    <?php endforeach; ?>
+                    <input type="hidden" name="mode" value="reservation_checkout">
+
+                    <?php if (!empty($reservationUserCandidates)): ?>
+                    <div class="res-today-sidebar-section">
+                        <label class="res-today-sidebar-label d-block">Select matching user <span class="text-muted fw-normal" style="text-transform:none;letter-spacing:0">(multiple found)</span></label>
+                        <select name="reservation_user_id" class="form-select form-select-sm" required>
+                            <option value="">-- Choose user --</option>
+                            <?php foreach ($reservationUserCandidates as $candidate): ?>
+                                <?php
+                                    $cid    = (int)($candidate['id'] ?? 0);
+                                    $cEmail = $candidate['email'] ?? '';
+                                    $cName  = $candidate['name'] ?? ($candidate['username'] ?? '');
+                                    $cLabel = $cName !== '' && $cEmail !== '' ? "{$cName} ({$cEmail})" : ($cName !== '' ? $cName : $cEmail);
+                                    $selAttr = $selectedReservationUserId === $cid ? 'selected' : '';
+                                ?>
+                                <option value="<?= $cid ?>" <?= $selAttr ?>><?= h($cLabel) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <?php endif; ?>
+
+                    <div class="res-today-sidebar-section">
+                        <label for="res-checkout-notes" class="res-today-sidebar-label d-block">
+                            Notes <span class="text-muted fw-normal" style="text-transform:none;letter-spacing:0">(optional)</span>
+                        </label>
+                        <textarea id="res-checkout-notes" name="reservation_note"
+                                  class="form-control form-control-sm"
+                                  rows="3" placeholder="Any additional details..."><?= h($selectedReservation['notes'] ?? '') ?></textarea>
+                    </div>
+
+                    <div class="basket-confirm-section">
+                        <?php if (!empty($checkoutErrors)): ?>
+                            <div class="alert alert-danger py-2 px-3 mb-2 small">
+                                <ul class="mb-0 ps-3"><?php foreach ($checkoutErrors as $err): ?><li><?= h($err) ?></li><?php endforeach; ?></ul>
+                                <?php if ($showAppendOverride && $selectedReservation): ?>
+                                    <hr class="my-2">
+                                    <p class="mb-2 small">Append items to user's active checkout.<?php if ($activeCheckoutExpected !== ''): ?> Existing check-in: <strong><?= h(display_datetime($activeCheckoutExpected)) ?></strong>.<?php endif; ?></p>
+                                    <form method="post">
+                                        <?php foreach ($baseQuery as $k => $v): ?><input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>"><?php endforeach; ?>
+                                        <input type="hidden" name="mode" value="reservation_checkout">
+                                        <input type="hidden" name="append_to_active" value="1">
+                                        <input type="hidden" name="reservation_note" value="<?= h($reservationNoteValue) ?>">
+                                        <input type="hidden" name="reservation_user_id" value="<?= (int)$selectedReservationUserId ?>">
+                                        <?php foreach ($selectedItems as $item): ?><?php $mid=(int)$item['model_id'];foreach($presetSelections[$mid]??[] as $idx=>$aid):?><input type="hidden" name="selected_assets[<?=$mid?>][<?=(int)$idx?>]" value="<?=(int)$aid?>"><?php endforeach;?><?php endforeach; ?>
+                                        <button type="submit" class="btn btn-warning btn-sm w-100">Append to existing checkout</button>
+                                    </form>
+                                <?php endif; ?>
+                                <?php if ($showOverdueOverride && $selectedReservation): ?>
+                                    <hr class="my-2">
+                                    <p class="mb-2 small">This user has overdue items. Override to proceed.</p>
+                                    <form method="post">
+                                        <?php foreach ($baseQuery as $k => $v): ?><input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>"><?php endforeach; ?>
+                                        <input type="hidden" name="mode" value="reservation_checkout">
+                                        <input type="hidden" name="overdue_override" value="1">
+                                        <input type="hidden" name="reservation_note" value="<?= h($reservationNoteValue) ?>">
+                                        <input type="hidden" name="reservation_user_id" value="<?= (int)$selectedReservationUserId ?>">
+                                        <?php foreach ($selectedItems as $item): ?><?php $mid=(int)$item['model_id'];foreach($presetSelections[$mid]??[] as $idx=>$aid):?><input type="hidden" name="selected_assets[<?=$mid?>][<?=(int)$idx?>]" value="<?=(int)$aid?>"><?php endforeach;?><?php endforeach; ?>
+                                        <button type="submit" class="btn btn-warning btn-sm w-100">Override — proceed with checkout</button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
+                        <?php if (!empty($checkoutWarnings)): ?>
+                            <div class="alert alert-warning py-2 px-3 mb-2 small">
+                                <ul class="mb-0 ps-3"><?php foreach ($checkoutWarnings as $w): ?><li><?= h($w) ?></li><?php endforeach; ?></ul>
+                            </div>
+                        <?php endif; ?>
+                        <button type="submit" class="btn btn-primary w-100" id="res-checkout-btn">
+                            Check out (<span id="res-selected-count">0</span>/<?= $selectedTotalQty ?> selected)
+                        </button>
+                    </div>
+                </form><!-- /#reservationCheckoutForm -->
+            </aside><!-- /.res-today-sidebar -->
+
+            <!-- ====== RIGHT MAIN AREA ====== -->
+            <div class="res-today-main">
+                <!-- Scan bar: catalogue-style capsule -->
+                <div class="res-today-scan-bar">
+                    <form method="post" action="<?= h($selfUrl) ?>" id="scan-form" class="d-flex align-items-center gap-2">
+                        <?php foreach ($baseQuery as $k => $v): ?>
+                            <input type="hidden" name="<?= h($k) ?>" value="<?= h($v) ?>">
+                        <?php endforeach; ?>
+                        <input type="hidden" name="mode" value="scan_asset">
+                        <div class="catalogue-search-capsule flex-grow-1">
+                            <span class="search-icon" aria-hidden="true">
+                                <i class="bi bi-upc-scan"></i>
+                            </span>
+                            <div class="position-relative flex-grow-1 asset-autocomplete-wrapper" style="min-width:0;">
+                                <input type="text" name="scan_tag" id="scan-tag-input"
+                                       class="asset-autocomplete"
+                                       autocomplete="off"
+                                       placeholder="Scan barcode or search asset tag..." autofocus>
+                                <div class="list-group position-absolute w-100"
+                                     data-asset-suggestions
+                                     style="z-index:1050; max-height:220px; overflow-y:auto; display:none;"></div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm">Assign</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                                title="Refresh page to sync all scanned items"
+                                onclick="var f=document.getElementById('reservationCheckoutForm');if(f){var h=document.createElement('input');h.type='hidden';h.name='action_refresh';h.value='1';f.appendChild(h);f.submit();}else{location.href='<?= h($selfUrl . (str_contains($selfUrl, '?') ? '&' : '?') . 'refresh=1') ?>';}">Refresh</button>
+                    </form>
+                </div>
+                <!-- Item list: same style as res-history-content -->
+                <div class="res-today-main-scroll">
+                    <?php if ($rebookSuccess): ?>
+                        <div class="alert alert-success">
+                            <strong>Rebook successful.</strong> New reservation <strong>#<?= (int)$rebookSuccess['new_id'] ?></strong> created with: <?= h(implode(', ', $rebookSuccess['models'] ?? [])) ?>.
+                            <?php if (!empty($rebookSuccess['original_cancelled'])): ?><br>The original reservation was cancelled (no remaining items).<?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                    <?php if ($scanFlash): ?>
+                        <?php $flashClass = match($scanFlash['type'] ?? '') { 'success' => 'alert-success', 'warning' => 'alert-warning', 'error' => 'alert-danger', default => 'alert-info' }; ?>
+                        <div class="alert <?= $flashClass ?>"><?= h($scanFlash['msg']) ?></div>
+                    <?php endif; ?>
+                    <?php if (!empty($checkoutMessages)): ?>
+                        <div class="alert alert-success">
+                            <ul class="mb-0"><?php foreach ($checkoutMessages as $m): ?><li><?= h($m) ?></li><?php endforeach; ?></ul>
+                            <?php $qzConfig = load_config()['qz_tray'] ?? []; if (isset($newCheckoutId) && $newCheckoutId > 0 && !empty($qzConfig['enabled'])): ?>
+                                <hr class="my-2">
+                                <button type="button" class="btn btn-sm btn-outline-dark" data-checkout-id="<?= (int)$newCheckoutId ?>" onclick="qzPrintPickSheet(this)">Print Pick Sheet</button>
+                                <?php if (!empty($qzConfig['auto_print_checkout'])): ?><script>document.addEventListener('DOMContentLoaded',function(){SnipePrint.printCheckoutReceipt(<?= (int)$newCheckoutId ?>).catch(function(err){console.error('Auto-print failed:',err);});});</script><?php endif; ?>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!empty($dateConflictWarnings)): ?>
+                        <div class="alert alert-warning"><strong>Date window conflicts:</strong><ul class="mb-0"><?php foreach ($dateConflictWarnings as $w): ?><li><?= h($w) ?></li><?php endforeach; ?></ul></div>
+                    <?php endif; ?>
+                    <?php if (!empty($alreadyCheckedOut)): ?>
+                        <?php $acoTotal = 0; $acoTags = []; foreach ($alreadyCheckedOut as $_m => $_items) { foreach ($_items as $_i) { $acoTotal++; $acoTags[] = $_i['asset_tag']; } } ?>
+                        <div class="alert alert-warning"><strong>Partial checkout in progress:</strong> <?= $acoTotal ?> item<?= $acoTotal !== 1 ? 's' : '' ?> already checked out (<?= h(implode(', ', $acoTags)) ?>). Remaining items still need assignment.</div>
+                    <?php endif; ?>
+                    <?php $qzConfig = load_config()['qz_tray'] ?? []; if (!empty($qzConfig['enabled']) && !empty($selectedItems)): ?>
+                        <div class="mb-2"><button type="button" class="btn btn-sm btn-outline-dark" data-reservation-id="<?= (int)$selectedReservation['id'] ?>" onclick="qzPrintReservationPickList(this)">Print Pick List</button></div>
+                    <?php endif; ?>
+                    <?php $allStatusWarnings = $_SESSION['scan_status_warnings'][$selectedReservationId] ?? []; if (!empty($allStatusWarnings)): ?>
+                        <div class="alert alert-danger mb-3"><strong>Some scanned assets may fail checkout:</strong><ul class="mb-0 mt-1"><?php foreach ($allStatusWarnings as $_warnAid => $_warnMsg): ?><?php $warnTag = ''; $injected = $_SESSION['scan_injected_assets'][$selectedReservationId] ?? []; if (isset($injected[$_warnAid])) { $warnTag = $injected[$_warnAid]['asset_tag'] ?? ''; } ?><li><?= h($warnTag !== '' ? $warnTag . ': ' . $_warnMsg : $_warnMsg) ?></li><?php endforeach; ?></ul></div>
+                    <?php endif; ?>
+                    <!-- Item rows (selects use form="reservationCheckoutForm") -->
+                    <?php foreach ($selectedItems as $item): ?>
+                        <?php
+                            $mid         = (int)$item['model_id'];
+                            $qty         = (int)$item['qty'];
+                            $acoForModel = $alreadyCheckedOut[$mid] ?? [];
+                            $options     = $modelAssets[$mid] ?? [];
+                            $imagePath   = $item['image'] ?? '';
+                            $proxiedImage = $imagePath !== '' ? 'image_proxy.php?src=' . urlencode($imagePath) : '';
+                        ?>
+                        <div class="mb-3">
+                            <table class="table table-sm align-middle reservation-model-table">
+                                <tbody><tr>
+                                    <td class="reservation-model-cell">
+                                        <div class="reservation-model-header">
+                                            <?php if ($proxiedImage !== ''): ?><img src="<?= h($proxiedImage) ?>" alt="<?= h($item['name'] ?? ('Model #' . $mid)) ?>" class="reservation-model-image"><?php else: ?><div class="reservation-model-image reservation-model-image--placeholder">No image</div><?php endif; ?>
+                                            <div class="reservation-model-title">
+                                                <div class="form-label mb-1">
+                                                    <a href="#" class="model-history-link" onclick="openModelHistory(<?= (int)$mid ?>, <?= htmlspecialchars(json_encode($item['name'] ?? ('Model #' . $mid)), ENT_QUOTES) ?>); return false;"><?= h($item['name'] ?? ('Model #' . $mid)) ?></a> (need <?= $qty ?>)
+                                                </div>
+                                                <div class="mt-2">
+                                                    <?php $removeAllDeletes = $selectedTotalQty > 0 && $selectedTotalQty <= $qty; ?>
+                                                    <button type="submit" form="reservationCheckoutForm" name="remove_model_id_all" value="<?= $mid ?>" class="btn btn-sm btn-outline-danger" <?= $removeAllDeletes ? 'data-confirm-delete="1"' : '' ?>>Remove all</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <?php if (empty($options)): ?>
+                                            <?php if (!empty($modelUnavailable[$mid]['count'])): ?><div class="alert alert-warning mb-0">All <?= (int)$modelUnavailable[$mid]['count'] ?> requestable unit(s) unavailable (<?= h(implode(', ', $modelUnavailable[$mid]['statuses'])) ?>).</div><?php else: ?><div class="alert alert-warning mb-0">No assets found in Snipe-IT for this model.</div><?php endif; ?>
+                                        <?php else: ?>
+                                            <div class="d-flex flex-column gap-2">
+                                                <?php $acoSlotIdx = 0; ?>
+                                                <?php for ($i = 0; $i < $qty; $i++): ?>
+                                                    <?php if (isset($acoForModel[$acoSlotIdx])): ?>
+                                                        <?php $acoItem = $acoForModel[$acoSlotIdx]; $acoLabel = $acoItem['asset_tag']; if ($acoItem['asset_name'] !== '') { $acoLabel .= ' – ' . $acoItem['asset_name']; } $acoSlotIdx++; ?>
+                                                        <div class="d-flex gap-2 align-items-center">
+                                                            <input type="text" class="form-control bg-success-subtle text-success border-success" value="<?= h($acoLabel) ?>" disabled>
+                                                            <input type="hidden" form="reservationCheckoutForm" name="selected_assets[<?= $mid ?>][]" value="<?= (int)$acoItem['asset_id'] ?>">
+                                                            <span class="badge bg-success">Checked out</span>
+                                                        </div>
+                                                    <?php else: ?>
+                                                        <div class="d-flex gap-2 align-items-center">
+                                                            <?php
+                                                                $slotSelectedId = $presetSelections[$mid][$i] ?? 0;
+                                                                $authOverrides  = $_SESSION['scan_auth_overrides'][$selectedReservationId] ?? [];
+                                                                $slotOverride   = ($slotSelectedId > 0 && isset($authOverrides[$slotSelectedId])) ? $authOverrides[$slotSelectedId] : '';
+                                                                $statusWarnArr  = $_SESSION['scan_status_warnings'][$selectedReservationId] ?? [];
+                                                                $slotStatusWarn = ($slotSelectedId > 0 && isset($statusWarnArr[$slotSelectedId])) ? $statusWarnArr[$slotSelectedId] : '';
+                                                                $slotHasWarning = $slotOverride !== '' || $slotStatusWarn !== '';
+                                                            ?>
+                                                            <select class="form-select<?= $slotHasWarning ? ' border-danger' : '' ?>" form="reservationCheckoutForm" name="selected_assets[<?= $mid ?>][]" data-model-select="<?= $mid ?>">
+                                                                <option value="">-- Select asset --</option>
+                                                                <?php foreach ($options as $opt): ?>
+                                                                    <?php $aid = (int)($opt['id'] ?? 0); $atag = $opt['asset_tag'] ?? ('ID ' . $aid); $aname = $opt['name'] ?? ''; $label = $aname !== '' ? trim($atag . ' – ' . $aname) : $atag; $selectedAttr = $aid > 0 && $slotSelectedId === $aid ? 'selected' : ''; ?>
+                                                                    <option value="<?= $aid ?>" <?= $selectedAttr ?>><?= h($label) ?></option>
+                                                                <?php endforeach; ?>
+                                                            </select>
+                                                            <?php if ($slotOverride !== ''): ?><span class="badge bg-warning text-dark" title="<?= h($slotOverride) ?>">Override</span><?php endif; ?>
+                                                            <?php if ($slotStatusWarn !== ''): ?><span class="badge bg-danger" title="<?= h($slotStatusWarn) ?>"><?= h($slotStatusWarn) ?></span><?php endif; ?>
+                                                            <?php $removeOneDeletes = $selectedTotalQty <= 1; ?>
+                                                            <button type="submit" form="reservationCheckoutForm" name="remove_slot" value="<?= $mid ?>:<?= $i ?>" class="btn btn-sm btn-outline-danger" <?= $removeOneDeletes ? 'data-confirm-delete="1"' : '' ?>>Remove</button>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                <?php endfor; ?>
+                                            </div>
+                                            <?php if (count($options) < $qty && !empty($modelUnavailable[$mid]['count'])): ?><div class="form-text text-warning mt-1"><?= (int)$modelUnavailable[$mid]['count'] ?> of <?= (int)($modelUnavailable[$mid]['count'] + count($options)) ?> unit(s) unavailable.</div><?php endif; ?>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr></tbody>
+                            </table>
+                        </div>
+                    <?php endforeach; ?>
+                    <?php
+                        $totalRebookQty = 0;
+                        foreach ($selectedItems as $item) { $mid = (int)($item['model_id'] ?? 0); $requestedQty = (int)($item['qty'] ?? 0); $deployableCount = count($modelAssets[$mid] ?? []); $shortfall = max(0, $requestedQty - $deployableCount); if ($shortfall > 0 && !empty($modelUnavailable[$mid]['count'])) { $totalRebookQty += $shortfall; } }
+                    ?>
+                    <?php if ($totalRebookQty > 0): ?><button type="submit" form="reservationCheckoutForm" name="mode" value="rebook_unavailable" class="btn btn-outline-warning mb-2">Rebook <?= $totalRebookQty ?> unavailable item(s) as new reservation</button><br><?php endif; ?>
+                    <button type="submit" form="reservationCheckoutForm" name="action_refresh" value="1" class="btn btn-outline-secondary btn-sm" title="Refresh page to sync assets">Refresh</button>
+                </div><!-- /.res-today-main-scroll -->
+            </div><!-- /.res-today-main -->
+        </div><!-- /.res-today-split -->
+    </div><!-- /.res-today-detail -->
+    <!-- Dates info modal -->
+    <div id="res-dates-modal-backdrop"
+         style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1070;"
+         onclick="closeResDatesModal()"></div>
+    <div id="res-dates-modal" role="dialog" aria-modal="true" aria-labelledby="res-dates-modal-title"
+         style="display:none; position:fixed; inset:0; z-index:1075; align-items:center; justify-content:center; padding:1.75rem;"
+         onclick="if(event.target===this)closeResDatesModal()">
+        <div class="window-modal-inner" style="max-width:340px; height:auto; min-height:unset;">
+            <div class="window-modal-header">
+                <h5 id="res-dates-modal-title" class="mb-0">Reservation Dates</h5>
+                <button type="button" class="window-modal-close" onclick="closeResDatesModal()" aria-label="Close">&times;</button>
+            </div>
+            <div class="window-modal-body" style="padding:1.25rem 1.5rem;">
+                <div class="cat-sidebar-window-row mb-3">
+                    <span class="cat-sidebar-window-label">Pick-up</span>
+                    <span class="cat-sidebar-window-value"><?= h(display_datetime($selectedReservation['start_datetime'] ?? '')) ?></span>
+                </div>
+                <div class="cat-sidebar-window-row">
+                    <span class="cat-sidebar-window-label">Return</span>
+                    <span class="cat-sidebar-window-value"><?= h(display_datetime($selectedReservation['end_datetime'] ?? '')) ?></span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        if (window.TopbarCrumbs) {
+            TopbarCrumbs.push('Check Out', function () {
+                window.location.href = <?= json_encode($selfUrl) ?>;
+            });
+        }
+    });
+    function openResDatesModal() {
+        document.getElementById('res-dates-modal-backdrop').style.display = 'block';
+        var modal = document.getElementById('res-dates-modal');
+        modal.style.display = 'flex';
+        var closeBtn = modal.querySelector('.window-modal-close');
+        if (closeBtn) closeBtn.focus();
+    }
+    function closeResDatesModal() {
+        document.getElementById('res-dates-modal-backdrop').style.display = 'none';
+        document.getElementById('res-dates-modal').style.display = 'none';
+    }
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeResDatesModal();
+    });
+    </script>
+    <?php endif; /* selectedReservation / no selection */ ?>
+</div><!-- /.res-history-body -->
+
+<?php else: /* !$embedded — standalone page */ ?>
+
+        <!-- Reservation selector (upcoming) -->
         <div class="card mb-3">
             <div class="card-body">
                 <form method="post" class="row g-3 align-items-end" action="<?= h($selfUrl) ?>">
@@ -1723,10 +2160,10 @@ $active  = basename($_SERVER['PHP_SELF']);
                     <?php endforeach; ?>
                     <input type="hidden" name="mode" value="select_reservation">
                     <div class="col-md-8">
-                        <label class="form-label">Select today’s reservation to check out</label>
+                        <label class="form-label">Select reservation to check out</label>
                         <select name="reservation_id" class="form-select">
                             <option value="0">-- No reservation selected --</option>
-                            <?php foreach ($todayBookings as $res): ?>
+                            <?php foreach ($upcomingBookings as $res): ?>
                                 <?php
                         $resId   = (int)$res['id'];
                         $items   = get_reservation_items_with_names($pdo, $resId);
@@ -2289,6 +2726,7 @@ $active  = basename($_SERVER['PHP_SELF']);
             </div>
         <?php endif; ?>
 
+<?php endif; /* $embedded */ ?>
 <?php if (!$embedded): ?>
     </div>
 </div>
@@ -2300,12 +2738,27 @@ $active  = basename($_SERVER['PHP_SELF']);
 
 <script>
 (function () {
+    // Keep the reservation ID in the URL so page refresh re-selects it instead
+    // of clearing the session and dropping back to the empty checkout state.
+    <?php if ($selectedReservationId): ?>
+    (function () {
+        var selfUrl = <?= json_encode($selfUrl) ?>;
+        var sep = selfUrl.indexOf('?') !== -1 ? '&' : '?';
+        history.replaceState(null, '', selfUrl + sep + 'res=' + <?= (int)$selectedReservationId ?>);
+    })();
+    <?php endif; ?>
+
     const scrollKey = 'staff_checkout_scroll_y';
+    const scrollEl = document.querySelector('.res-today-main-scroll')
+                  || document.querySelector('.res-history-content')
+                  || window;
+    const getScrollY = () => scrollEl === window ? window.scrollY : scrollEl.scrollTop;
+    const setScrollY = (y) => scrollEl === window ? window.scrollTo(0, y) : (scrollEl.scrollTop = y);
     const savedY = sessionStorage.getItem(scrollKey);
     if (savedY !== null) {
         const y = parseInt(savedY, 10);
         if (!Number.isNaN(y)) {
-            window.scrollTo(0, y);
+            setScrollY(y);
         }
         sessionStorage.removeItem(scrollKey);
     }
@@ -2314,25 +2767,6 @@ $active  = basename($_SERVER['PHP_SELF']);
     const scanInput = document.getElementById('scan-tag-input');
     if (scanInput) {
         setTimeout(() => scanInput.focus(), 50);
-    }
-
-    // Reset dates button for staff date override
-    const resetBtn = document.getElementById('reset-dates-btn');
-    if (resetBtn) {
-        resetBtn.addEventListener('click', function () {
-            const startInput = document.getElementById('override-start');
-            const endInput = document.getElementById('override-end');
-            const origStart = resetBtn.dataset.origStart;
-            const origEnd = resetBtn.dataset.origEnd;
-            if (startInput) {
-                if (startInput._flatpickr) startInput._flatpickr.setDate(origStart, true);
-                else startInput.value = origStart;
-            }
-            if (endInput) {
-                if (endInput._flatpickr) endInput._flatpickr.setDate(origEnd, true);
-                else endInput.value = origEnd;
-            }
-        });
     }
 
     document.addEventListener('click', (event) => {
@@ -2431,19 +2865,63 @@ $active  = basename($_SERVER['PHP_SELF']);
     });
 
     document.addEventListener('submit', () => {
-        sessionStorage.setItem(scrollKey, String(window.scrollY));
+        sessionStorage.setItem(scrollKey, String(getScrollY()));
     });
 
+    // Standalone-mode dropdown: auto-submit on change (no-op in embedded list-card mode)
     const reservationSelectForm = document.querySelector('form input[name="mode"][value="select_reservation"]');
     if (reservationSelectForm) {
         const form = reservationSelectForm.closest('form');
         const select = form ? form.querySelector('select[name="reservation_id"]') : null;
         if (form && select) {
-            select.addEventListener('change', () => {
-                form.submit();
-            });
+            select.addEventListener('change', () => form.submit());
         }
     }
+
+    // List-view search filter
+    const searchInput = document.getElementById('res-today-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', function () {
+            const q = this.value.toLowerCase();
+            document.querySelectorAll('.res-today-list-item').forEach((item) => {
+                const text = (item.dataset.searchText || '').toLowerCase();
+                item.closest('form').style.display = text.includes(q) ? '' : 'none';
+            });
+        });
+    }
+
+    // Inline reservation name editing
+    const nameWrap  = document.getElementById('res-name-display-wrap');
+    const editBtn   = document.getElementById('res-name-edit-btn');
+    const nameForm  = document.getElementById('res-name-form');
+    const nameInput = document.getElementById('res-name-input');
+    const cancelBtn = document.getElementById('res-name-cancel');
+    if (editBtn && nameWrap && nameForm && nameInput && cancelBtn) {
+        editBtn.addEventListener('click', () => {
+            nameWrap.style.display = 'none';
+            nameForm.style.display = 'block';
+            nameInput.focus();
+            nameInput.select();
+        });
+        cancelBtn.addEventListener('click', () => {
+            nameForm.style.display = 'none';
+            nameWrap.style.display = '';
+        });
+    }
+
+    // Checkout button selected-count badge
+    function updateCheckoutCount() {
+        let count = 0;
+        document.querySelectorAll('select[data-model-select]').forEach((s) => {
+            if (s.value && s.value !== '') count++;
+        });
+        const span = document.getElementById('res-selected-count');
+        if (span) span.textContent = String(count);
+    }
+    document.querySelectorAll('select[data-model-select]').forEach((s) => {
+        s.addEventListener('change', updateCheckoutCount);
+    });
+    updateCheckoutCount();
 })();
 
 // Prevent selecting the same asset twice for a model
@@ -2591,12 +3069,12 @@ $active  = basename($_SERVER['PHP_SELF']);
     const scanQueue = [];
     let processing = false;
 
-    // Flash container — inserted after the sticky scan bar
+    // Flash container — inserted after the scan bar wrapper
     const flashContainer = document.createElement('div');
     flashContainer.id = 'scan-flash-container';
-    const stickyBar = scanForm.closest('.sticky-scan-bar');
-    if (stickyBar) {
-        stickyBar.insertAdjacentElement('afterend', flashContainer);
+    const scanBar = scanForm.closest('.sticky-scan-bar') || scanForm.closest('.res-today-scan-bar');
+    if (scanBar) {
+        scanBar.insertAdjacentElement('afterend', flashContainer);
     } else {
         scanForm.parentElement.appendChild(flashContainer);
     }

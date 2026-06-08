@@ -55,52 +55,30 @@ if (!$tabFile || !is_file($tabFile)) {
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
     <?= layout_theme_styles() ?>
-    <style>
-        /* Make reservations tabs more prominent */
-        .reservations-tabs {
-            border-bottom: 3px solid var(--primary-strong);
-            gap: 0.25rem;
-        }
-        .reservations-tabs .nav-link {
-            border: 1px solid transparent;
-            color: var(--primary-strong);
-            font-weight: 600;
-            padding: 0.9rem 1.2rem;
-            border-radius: 0.5rem 0.5rem 0 0;
-            background: linear-gradient(180deg, rgba(var(--primary-soft-rgb),0.18), rgba(255,255,255,0));
-            transition: all 120ms ease;
-        }
-        .reservations-tabs .nav-link:hover {
-            color: var(--primary);
-            background: linear-gradient(180deg, rgba(var(--primary-soft-rgb),0.36), rgba(255,255,255,0.08));
-            border-color: rgba(var(--primary-rgb),0.25);
-        }
-        .reservations-tabs .nav-link.active {
-            color: #fff;
-            background: linear-gradient(135deg, var(--primary), var(--primary-strong));
-            border-color: var(--primary-strong) var(--primary-strong) #fff;
-            box-shadow: 0 8px 18px rgba(var(--primary-rgb), 0.22);
-        }
-        .reservations-shell {
-            background: #fff;
-            border: 1px solid rgba(0,0,0,0.05);
-            border-radius: 0 0 0.75rem 0.75rem;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.05);
-        }
-    </style>
 </head>
-<body class="p-4">
+<body class="p-4 page-reservations">
 <div class="container">
     <div class="page-shell">
         <?= layout_logo_tag() ?>
         <div class="page-header">
             <h1>Reservations</h1>
             <div class="page-subtitle">
-                Manage reservation history, today’s checkouts, and checked-out assets from one place.
+                Manage reservation history, today's checkouts, and checked-out assets from one place.
             </div>
         </div>
 
-            <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
+        <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
+        <?php
+        $tabSubtitles = [
+            'today'            => 'Upcoming Reservations',
+            'checked_out'      => 'Checked Out Items',
+            'history'          => 'Reservation History',
+            'checkout_history' => 'Checkout History',
+            'unmatched'        => 'Unmatched Checkins',
+            'kit_audit'        => 'Kit Audit',
+        ];
+        ?>
+        <?= layout_render_topbar($active, $tabSubtitles[$tab] ?? '') ?>
 
         <div class="top-bar mb-3">
             <div class="top-bar-user">
@@ -113,10 +91,10 @@ if (!$tabFile || !is_file($tabFile)) {
             </div>
         </div>
 
-        <ul class="nav nav-tabs reservations-tabs">
+        <ul class="nav nav-tabs reservations-subtabs mb-3">
             <li class="nav-item">
                 <a class="nav-link <?= $tab === 'today' ? 'active' : '' ?>"
-                   href="reservations.php?tab=today">Today’s Reservations (Checkout)</a>
+                   href="reservations.php?tab=today">Upcoming Reservations</a>
             </li>
             <li class="nav-item">
                 <a class="nav-link <?= $tab === 'checked_out' ? 'active' : '' ?>"
@@ -142,7 +120,7 @@ if (!$tabFile || !is_file($tabFile)) {
             <?php endif; ?>
         </ul>
 
-        <div class="tab-content border border-top-0 p-3 bg-white reservations-shell">
+        <div class="tab-content">
             <?= $tabContent ?>
         </div>
     </div>

@@ -79,6 +79,7 @@ $active  = 'staff_reservations.php'; // Treat detail view as part of booking his
 
         <!-- App navigation -->
         <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
+        <?= layout_render_topbar($active) ?>
 
         <div class="top-bar mb-3">
             <div class="top-bar-user">

@@ -29,6 +29,7 @@ class SlotPicker {
         this.onSelect = opts.onSelect || null;
         this.dateFormat = opts.dateFormat || 'd/m/Y';
         this.timeFormat = opts.timeFormat || 'H:i';
+        this.noCollapse = !!opts.noCollapse;
 
         // State
         this.currentMonth = null; // 'YYYY-MM'
@@ -158,6 +159,10 @@ class SlotPicker {
         this._updateHiddenInput();
         this._collapse();
 
+        if (this.noCollapse) {
+            this._renderSlots();
+        }
+
         if (this.onSelect) {
             this.onSelect(this.getSelectedDatetime());
         }
@@ -180,6 +185,26 @@ class SlotPicker {
 
         this._updateHiddenInput();
         this._collapse();
+
+        if (this.noCollapse) {
+            this._renderCalendar();
+            this.fetchSlotData(dateStr);
+        }
+    }
+
+    /**
+     * Clear the current selection and re-render.
+     */
+    reset() {
+        this.selectedDate = null;
+        this.selectedTime = null;
+        this._collapsed = false;
+        this._calendarEl.style.display = '';
+        this._slotsEl.style.display = '';
+        this._updateHiddenInput();
+        this._renderCalendar();
+        this._renderSlots();
+        this._renderSelection();
     }
 
     /**
@@ -225,8 +250,11 @@ class SlotPicker {
         this.container.classList.add('slot-picker');
 
         this._calendarEl = document.createElement('div');
+        this._calendarEl.className = 'sp-calendar-col';
         this._slotsEl = document.createElement('div');
+        this._slotsEl.className = 'sp-slots-col';
         this._selectionEl = document.createElement('div');
+        this._selectionEl.className = 'sp-selection-col';
 
         this.container.appendChild(this._calendarEl);
         this.container.appendChild(this._slotsEl);
@@ -398,10 +426,17 @@ class SlotPicker {
         if (!el) return;
         el.innerHTML = '';
 
-        if (!this.selectedDate) return;
-
         var panel = document.createElement('div');
         panel.className = 'sp-slots-panel';
+
+        if (!this.selectedDate) {
+            var ph = document.createElement('div');
+            ph.className = 'sp-empty';
+            ph.textContent = 'Select a date to see available times.';
+            panel.appendChild(ph);
+            el.appendChild(panel);
+            return;
+        }
 
         var label = document.createElement('div');
         label.className = 'sp-slots-label';
@@ -517,7 +552,7 @@ class SlotPicker {
         div.appendChild(labelSpan);
         div.appendChild(valueSpan);
 
-        if (this._collapsed) {
+        if (this._collapsed && !this.noCollapse) {
             var changeLink = document.createElement('a');
             changeLink.href = '#';
             changeLink.className = 'sp-change-link';
@@ -540,8 +575,10 @@ class SlotPicker {
     /** Collapse to just the selection summary. */
     _collapse() {
         this._collapsed = true;
-        this._calendarEl.style.display = 'none';
-        this._slotsEl.style.display = 'none';
+        if (!this.noCollapse) {
+            this._calendarEl.style.display = 'none';
+            this._slotsEl.style.display = 'none';
+        }
         this._renderSelection();
     }
 
