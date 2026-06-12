@@ -87,9 +87,14 @@ try {
 }
 
 // Redirect back with a “deleted” flag
-$redirect = $isStaff
-    ? 'staff_reservations.php?deleted=' . $resId
-    : 'my_bookings.php?deleted=' . $resId;
+$from = $_POST['from'] ?? '';
+if ($from === 'my_bookings') {
+    $redirect = 'my_bookings.php?deleted=' . $resId;
+} elseif ($isStaff) {
+    $redirect = 'staff_reservations.php?deleted=' . $resId;
+} else {
+    $redirect = 'my_bookings.php?deleted=' . $resId;
+}
 
 header('Location: ' . $redirect);
 exit;

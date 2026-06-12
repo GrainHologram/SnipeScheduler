@@ -345,6 +345,41 @@ function get_model_categories(): array
 }
 
 /**
+ * Return sorted unique manufacturer names across all requestable models.
+ */
+function get_bookable_manufacturers(): array
+{
+    $manufacturers = [];
+    $offset = 0;
+    $limit  = 500;
+
+    while (true) {
+        $data = snipeit_request('GET', 'models', [
+            'requestable' => 'true',
+            'limit'       => $limit,
+            'offset'      => $offset,
+        ]);
+        $rows = $data['rows'] ?? [];
+        if (!is_array($rows) || empty($rows)) {
+            break;
+        }
+        foreach ($rows as $model) {
+            $name = trim($model['manufacturer']['name'] ?? '');
+            if ($name !== '') {
+                $manufacturers[$name] = true;
+            }
+        }
+        if (count($rows) < $limit) {
+            break;
+        }
+        $offset += $limit;
+    }
+
+    ksort($manufacturers);
+    return array_keys($manufacturers);
+}
+
+/**
  * Fetch a single model by ID.
  *
  * @param int $modelId
