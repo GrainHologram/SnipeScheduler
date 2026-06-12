@@ -102,12 +102,22 @@ foreach ($files as $f) {
     }
 
     if (!$isLinksTxt) {
+        // Snipe-IT stores files as "model-{id}-{hash}-{originalName}". Strip
+        // that prefix so users see the human filename. Prefer the uploader's
+        // note when present.
+        $cleanName = preg_replace('/^model-\d+-[A-Za-z0-9]{6,16}-/', '', $fnameRaw);
+        if ($cleanName === null || $cleanName === '') {
+            $cleanName = $fnameRaw;
+        }
+        $note = (string)($f['note'] ?? $f['notes'] ?? '');
+        $primary = $note !== '' ? $note : $cleanName;
+        $secondary = $note !== '' ? $cleanName : '';
         $entries[] = [
             'kind'  => 'file',
-            'label' => $fnameRaw,
+            'label' => $primary,
+            'sub'   => $secondary,
             'ext'   => $ext,
             'href'  => $downloadHref,
-            'notes' => (string)($f['notes'] ?? ''),
         ];
     }
 
@@ -144,22 +154,60 @@ $pageTitle = $modelName !== '' ? ($modelName . ' — Documentation') : 'Asset Do
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 <link rel="stylesheet" href="assets/style.css">
 <style>
-  body { background: var(--surface-page, #f6f7fb); }
+  /* Explicit colors throughout — these pages inherit from the main app
+     stylesheet and we don't want themed variables fading anything out. */
+  body.v-page { background: #f6f7fb; color: #1f2937; }
+  body.v-page a { color: #0d6efd; }
   .v-shell { max-width: 760px; margin: 2rem auto; padding: 0 1rem 4rem; }
   .v-header { margin-bottom: 1.5rem; }
-  .v-header h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
-  .v-header .tag { font-family: ui-monospace, monospace; color: var(--text-muted, #6c757d); }
-  .v-empty { padding: 2rem; text-align: center; color: var(--text-muted, #6c757d); border: 1px dashed var(--border-color, #dee2e6); border-radius: 8px; }
-  .v-entry { display: flex; gap: .75rem; align-items: center; padding: .75rem; border: 1px solid var(--border-color, #dee2e6); border-radius: 8px; margin-bottom: .5rem; background: #fff; text-decoration: none; color: inherit; }
-  .v-entry:hover { background: #f9fafc; border-color: #adb5bd; }
-  .v-entry .icon { font-size: 1.5rem; color: var(--text-muted, #6c757d); flex: 0 0 auto; }
-  .v-entry .label { flex: 1 1 auto; min-width: 0; word-break: break-word; }
-  .v-entry .sub { display: block; font-size: .8125rem; color: var(--text-muted, #6c757d); margin-top: .125rem; }
-  .v-entry img.thumb { width: 96px; height: 54px; object-fit: cover; border-radius: 4px; flex: 0 0 auto; }
-  .v-footer { margin-top: 2rem; text-align: center; font-size: .8125rem; color: var(--text-muted, #6c757d); }
+  .v-header h1 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    margin: 0 0 .25rem;
+    color: #111827;
+    line-height: 1.2;
+  }
+  .v-header .tag {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .9rem;
+    color: #4b5563;
+  }
+  .v-empty {
+    padding: 2rem;
+    text-align: center;
+    color: #4b5563;
+    border: 1px dashed #d1d5db;
+    border-radius: 8px;
+    background: #fff;
+  }
+  .v-entry {
+    display: flex;
+    gap: .875rem;
+    align-items: center;
+    padding: .875rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    margin-bottom: .5rem;
+    background: #fff;
+    text-decoration: none;
+    color: #111827;
+    transition: background-color .12s, border-color .12s;
+  }
+  .v-entry:hover, .v-entry:focus { background: #f3f4f6; border-color: #9ca3af; color: #111827; }
+  .v-entry .icon { font-size: 1.5rem; color: #4b5563; flex: 0 0 auto; line-height: 1; }
+  .v-entry .label { flex: 1 1 auto; min-width: 0; word-break: break-word; font-weight: 500; }
+  .v-entry .sub {
+    display: block;
+    font-size: .8125rem;
+    color: #6b7280;
+    font-weight: 400;
+    margin-top: .125rem;
+  }
+  .v-entry img.thumb { width: 112px; height: 63px; object-fit: cover; border-radius: 4px; flex: 0 0 auto; background: #e5e7eb; }
+  .v-footer { margin-top: 2.5rem; text-align: center; font-size: .8125rem; color: #6b7280; }
 </style>
 </head>
-<body>
+<body class="v-page">
 <div class="v-shell">
 
   <?php if ($lookupErr !== ''): ?>
@@ -210,8 +258,8 @@ $pageTitle = $modelName !== '' ? ($modelName . ' — Documentation') : 'Asset Do
             <i class="icon bi <?= h(v_icon_for_ext($e['ext'])) ?>"></i>
             <span class="label">
               <?= h($e['label']) ?>
-              <?php if (!empty($e['notes'])): ?>
-                <span class="sub"><?= h($e['notes']) ?></span>
+              <?php if (!empty($e['sub'])): ?>
+                <span class="sub"><?= h($e['sub']) ?></span>
               <?php endif; ?>
             </span>
           </a>
