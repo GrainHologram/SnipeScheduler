@@ -84,7 +84,15 @@ layout_page_start([
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/qz-tray@2/qz-tray.js"></script>
+  <?php
+    // layout.php already loads qz-tray.js when admin Settings has QZ Tray
+    // enabled. Loading it twice re-runs the IIFE and breaks the connection
+    // state (isActive() flips false). Only emit the tag when layout didn't.
+    $qzCfg = load_config()['qz_tray'] ?? [];
+    if (empty($qzCfg['enabled'])):
+  ?>
+    <script src="https://cdn.jsdelivr.net/npm/qz-tray@2/qz-tray.js"></script>
+  <?php endif; ?>
   <script src="assets/print-label.js"></script>
   <script>
     // ?printer=Name uses a named printer with forceRaw:true (bypass driver
