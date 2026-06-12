@@ -37,16 +37,23 @@ try {
     exit;
 }
 
-$assetTag  = (string)($asset['asset_tag'] ?? $tag);
-$assetName = (string)($asset['name'] ?? '');
-$modelName = (string)($asset['model']['name'] ?? '');
+// Snipe-IT's API returns HTML-encoded text (e.g. apostrophes become
+// &#039;) which would print literally on the label. Decode once for
+// every text field before handing back to the JS.
+$decode = static function ($value): string {
+    return html_entity_decode((string)$value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+};
+
+$assetTag  = $decode($asset['asset_tag'] ?? $tag);
+$assetName = $decode($asset['name'] ?? '');
+$modelName = $decode($asset['model']['name'] ?? '');
 
 // custom_fields is keyed by friendly field name; each value is
 // { field, value, field_format, element }.
 $cf       = is_array($asset['custom_fields'] ?? null) ? $asset['custom_fields'] : [];
 $svadName = '';
 if (isset($cf['SVAD Name']['value'])) {
-    $svadName = trim((string)$cf['SVAD Name']['value']);
+    $svadName = trim($decode($cf['SVAD Name']['value']));
 }
 
 // Description priority: SVAD Name → asset name → model name.
