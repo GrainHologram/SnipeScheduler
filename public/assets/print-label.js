@@ -1,0 +1,288 @@
+/**
+ * print-label.js
+ *
+ * Bench label printing controller for print_label.php. Wraps QZ Tray to:
+ *   - Connect once (cert + sign + websocket)
+ *   - Upload Zebra fonts on first call per browser session
+ *   - Look up an asset_tag via ajax_asset_label_data.php
+ *   - Build ZPL for the chosen label type and send to the network printer
+ *
+ * Exposes window.PrintLabel.init(opts).
+ */
+(function () {
+    'use strict';
+
+    var FONTS_SESSION_KEY = 'printLabel.fontsLoaded';
+
+    var _cfg = null;
+    var _printerConfig = null;
+    var _ready = false;
+
+    function init(opts) {
+        _cfg = opts;
+        if (typeof qz === 'undefined') {
+            setStatus('error', 'QZ Tray library failed to load.');
+            return;
+        }
+        _printerConfig = qz.configs.create({
+            host: opts.printerHost,
+            port: opts.printerPort
+        }, {
+            encoding: 'UTF-8'
+        });
+
+        wireUI();
+        connectAndPrepare();
+    }
+
+    function wireUI() {
+        var form = document.getElementById('scan-form');
+        var input = document.getElementById('scan-tag');
+        var btn = document.getElementById('print-btn');
+        if (form && input && btn) {
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                handlePrint(input.value);
+            });
+            btn.addEventListener('click', function (e) {
+                e.preventDefault();
+                handlePrint(input.value);
+            });
+        }
+    }
+
+    function connectAndPrepare() {
+        configureQzSecurity();
+        ensureConnected()
+            .then(ensureFontsUploaded)
+            .then(function () {
+                _ready = true;
+                setStatus('ready', 'Printer ready');
+                enableInput();
+            })
+            .catch(function (err) {
+                console.error('print-label init failed:', err);
+                setStatus('error', String(err && err.message || err));
+            });
+    }
+
+    function configureQzSecurity() {
+        qz.security.setCertificatePromise(function (resolve) {
+            fetch(_cfg.certUrl, { credentials: 'same-origin' })
+                .then(function (r) { return r.text(); })
+                .then(resolve)
+                .catch(function () { resolve(''); });
+        });
+        qz.security.setSignatureAlgorithm('SHA512');
+        qz.security.setSignaturePromise(function (toSign) {
+            return function (resolve, reject) {
+                fetch(_cfg.signUrl, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ request: toSign })
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (data.signature) resolve(data.signature);
+                        else reject(data.error || 'Signing failed');
+                    })
+                    .catch(reject);
+            };
+        });
+    }
+
+    function ensureConnected() {
+        if (qz.websocket.isActive()) return Promise.resolve();
+        return qz.websocket.connect().catch(function (err) {
+            var msg = (err && err.message) || String(err);
+            if (msg.indexOf('Unable to connect') !== -1 || msg.indexOf('CLOSE_EVENT') !== -1) {
+                throw new Error('QZ Tray not detected. Install and start QZ Tray, then reload.');
+            }
+            throw err;
+        });
+    }
+
+    function ensureFontsUploaded() {
+        try {
+            if (sessionStorage.getItem(FONTS_SESSION_KEY) === '1') {
+                return Promise.resolve();
+            }
+        } catch (e) { /* sessionStorage might be unavailable; just re-upload */ }
+
+        setStatus('busy', 'Uploading fonts to printer…');
+        return fetch(_cfg.fontsUrl, { credentials: 'same-origin' })
+            .then(function (r) {
+                if (!r.ok) throw new Error('Could not fetch fonts (HTTP ' + r.status + ')');
+                return r.text();
+            })
+            .then(function (zpl) {
+                return qz.print(_printerConfig, [{ type: 'raw', format: 'plain', data: zpl }]);
+            })
+            .then(function () {
+                try { sessionStorage.setItem(FONTS_SESSION_KEY, '1'); } catch (e) {}
+            });
+    }
+
+    function enableInput() {
+        var input = document.getElementById('scan-tag');
+        var btn = document.getElementById('print-btn');
+        if (input) {
+            input.disabled = false;
+            input.focus();
+        }
+        if (btn) btn.disabled = false;
+    }
+
+    function handlePrint(rawValue) {
+        if (!_ready) return;
+        var tag = stripWrapitUrlSafe(rawValue).trim();
+        if (tag === '') return;
+        var input = document.getElementById('scan-tag');
+        if (input) input.value = '';
+
+        showFlash('info', 'Looking up ' + tag + '…');
+
+        fetch(_cfg.assetLookupUrl + '?tag=' + encodeURIComponent(tag), {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+        })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+            .then(function (res) {
+                if (!res.ok || !res.body.ok) {
+                    throw new Error(res.body.error || 'Asset lookup failed');
+                }
+                var zpl = buildLabelZpl(res.body, _cfg.labelType);
+                showFlash('info', 'Printing ' + tag + '…');
+                return qz.print(_printerConfig, [{ type: 'raw', format: 'plain', data: zpl }])
+                    .then(function () {
+                        showFlash('success', 'Printed ' + (res.body.asset_tag || tag) + ' — ' + (res.body.description || ''));
+                        setLastPrinted(res.body);
+                    });
+            })
+            .catch(function (err) {
+                showFlash('error', String(err && err.message || err));
+            })
+            .finally(function () {
+                if (input) input.focus();
+            });
+    }
+
+    function buildLabelZpl(asset, labelType) {
+        if (labelType === 'cable') {
+            return buildCableWrapZpl(asset);
+        }
+        return buildGenericZpl(asset);
+    }
+
+    /**
+     * Generic 2" × 1" label (203 dpi → 406 × 203 dots).
+     * Layout: large asset tag centered top, QR top-left, description below
+     * the asset tag, footer line, vertical Code 128 of the asset tag right edge.
+     */
+    function buildGenericZpl(asset) {
+        var tag = sanitizeZpl(asset.asset_tag);
+        var description = sanitizeZpl(asset.description || asset.asset_name || asset.model_name || '');
+        return [
+            '^XA~TA000~JSN^LT5^LS5^MNW^MTT^PON^PMN^LH0,0^JMA^PR3,3~SD25^JUS^LRN^CI28^PW406^LL203^XZ',
+            '^XA^CWL,e:SWISS^XZ',
+            '^XA^CWK,e:JBM_RG^XZ',
+            '^XA',
+            '^CI28',
+            '^BY2,2',
+            '^ARN,',
+            '^FT138,56^AKN,56^FB220,1,0,C^FD' + tag + '\\&^FS',
+            '^FT138,154^ALN,18,18^FB220,5,0,C^FD' + description + '\\&^FS',
+            '^FO10,15',
+            '^BQN,2,5',
+            '^FDLA,https://wrapit.us/v/' + tag + '^FS',
+            '^FT0,186^A0N,14,14^FB346,1,0,C^FDProperty of Southern Adventist University-SVAD\\&^FS',
+            '^BY2,2,20',
+            '^FT380,180^BCB^FD' + tag + '^FS',
+            '^PQ1^XZ'
+        ].join('\n');
+    }
+
+    /**
+     * Cable-wrap label (1" × 2.25"). Layout TBD — placeholder uses the
+     * generic ZPL so end-to-end works while you design the wrap layout.
+     */
+    function buildCableWrapZpl(asset) {
+        // TODO: bespoke 1"×2.25" wrap layout (^PW203^LL457 portrait, smaller text)
+        return buildGenericZpl(asset);
+    }
+
+    /**
+     * ZPL data fields use ^ and ~ as control prefixes. Strip both from
+     * user-supplied data so a stray caret in an asset name can't break the
+     * field parse. Backslashes are kept (the templates use \& and \\ for
+     * literals); the asset tag regex already excludes \.
+     */
+    function sanitizeZpl(s) {
+        return String(s == null ? '' : s).replace(/[\^~]/g, ' ');
+    }
+
+    /**
+     * Mirrors stripWrapitUrl in nav.js. Defined locally so this page works
+     * even if nav.js hasn't loaded yet (autofocus on the scan input fires
+     * very early on bench pages).
+     */
+    function stripWrapitUrlSafe(value) {
+        if (typeof window.stripWrapitUrl === 'function') {
+            return window.stripWrapitUrl(value);
+        }
+        var s = String(value == null ? '' : value).trim();
+        var m = s.match(/^https?:\/\/(?:www\.)?wrapit\.us\/v\/([^\/\s?#]+)\/?$/i);
+        return m ? decodeURIComponent(m[1]) : s;
+    }
+
+    function setStatus(kind, text) {
+        var el = document.getElementById('printer-status');
+        if (!el) return;
+        el.classList.remove('text-muted', 'text-success', 'text-danger', 'text-info');
+        var icon = '';
+        if (kind === 'ready') {
+            el.classList.add('text-success');
+            icon = '<i class="bi bi-check-circle-fill me-1"></i>';
+        } else if (kind === 'error') {
+            el.classList.add('text-danger');
+            icon = '<i class="bi bi-exclamation-triangle-fill me-1"></i>';
+        } else if (kind === 'busy') {
+            el.classList.add('text-info');
+            icon = '<span class="spinner-border spinner-border-sm align-middle me-1" role="status"></span>';
+        } else {
+            el.classList.add('text-muted');
+        }
+        el.innerHTML = icon + escapeHtml(text);
+    }
+
+    function showFlash(kind, text) {
+        var el = document.getElementById('print-flash');
+        if (!el) return;
+        var bsClass = 'alert-info';
+        if (kind === 'success') bsClass = 'alert-success';
+        else if (kind === 'error') bsClass = 'alert-danger';
+        el.innerHTML = '<div class="alert ' + bsClass + ' py-2 mb-0">' + escapeHtml(text) + '</div>';
+    }
+
+    function setLastPrinted(asset) {
+        var el = document.getElementById('last-printed');
+        if (!el) return;
+        var lines = [
+            'Tag: ' + (asset.asset_tag || ''),
+            'Description: ' + (asset.description || ''),
+            'Model: ' + (asset.model_name || ''),
+            'Asset name: ' + (asset.asset_name || '')
+        ];
+        if (asset.svad_name) lines.unshift('SVAD Name: ' + asset.svad_name);
+        el.innerHTML = lines.map(function (l) { return escapeHtml(l); }).join('<br>');
+    }
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]);
+        });
+    }
+
+    window.PrintLabel = { init: init };
+})();
