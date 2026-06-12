@@ -87,8 +87,12 @@ layout_page_start([
   <script src="https://cdn.jsdelivr.net/npm/qz-tray@2/qz-tray.js"></script>
   <script src="assets/print-label.js"></script>
   <script>
+    // ?printer=Name uses a named printer with forceRaw:true (bypass driver
+    // mode). Otherwise default to direct network host:port.
+    var __printerName = new URLSearchParams(window.location.search).get('printer');
     PrintLabel.init({
       labelType: <?= json_encode($labelType, JSON_UNESCAPED_SLASHES) ?>,
+      printerName: __printerName || null,
       printerHost: '10.31.0.28',
       printerPort: 9100,
       certUrl: 'ajax_qz_cert.php',
