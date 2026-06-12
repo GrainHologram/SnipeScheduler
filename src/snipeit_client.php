@@ -449,6 +449,117 @@ function get_kit_models(int $kitId): array
 }
 
 /**
+ * Fetch files attached to a Snipe-IT model.
+ *
+ * Returns the raw row array from /api/v1/models/{id}/files. Each row's
+ * exact field set depends on Snipe-IT version, but typically includes
+ * id, filename (or name), url, size, created_at, notes.
+ *
+ * Cached 1h since model documentation changes infrequently.
+ */
+function get_model_files(int $modelId): array
+{
+    if ($modelId <= 0) {
+        throw new InvalidArgumentException('Invalid model ID');
+    }
+
+    $cacheKey = 'model_' . $modelId . '_files';
+    $cached = snipeit_cache_get($cacheKey, 3600);
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    $data = snipeit_request('GET', 'models/' . $modelId . '/files');
+    $rows = isset($data['rows']) && is_array($data['rows']) ? $data['rows'] : [];
+
+    snipeit_cache_set($cacheKey, $rows);
+    return $rows;
+}
+
+/**
+ * Stream a Snipe-IT model file from the API.
+ *
+ * Returns [$contentType, $contentDisposition, $body] for a model file.
+ * Used by both the file proxy (for end-user downloads) and by the .txt
+ * URL scanner (which needs the body in memory). Not cached — proxy use
+ * is per-request and .txt scans cache at a higher layer.
+ *
+ * @return array{0:string,1:string,2:string}
+ * @throws Exception on HTTP error
+ */
+function fetch_model_file(int $modelId, int $fileId): array
+{
+    global $snipeBaseUrl, $snipeApiToken;
+    if ($modelId <= 0 || $fileId <= 0) {
+        throw new InvalidArgumentException('Invalid model/file ID');
+    }
+    if (!isset($snipeBaseUrl) || $snipeBaseUrl === '') {
+        $cfg = load_config();
+        $snipeBaseUrl  = rtrim($cfg['snipeit']['base_url'] ?? '', '/');
+        $snipeApiToken = $cfg['snipeit']['api_token'] ?? '';
+    }
+
+    $url = $snipeBaseUrl . '/api/v1/models/' . $modelId . '/files/' . $fileId;
+    $ch  = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HEADER, true);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $snipeApiToken,
+        'Accept: */*',
+    ]);
+    $response = curl_exec($ch);
+    if ($response === false) {
+        $err = curl_error($ch);
+        curl_close($ch);
+        throw new Exception("Snipe-IT file fetch failed: $err");
+    }
+    $code        = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $headerSize  = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+    curl_close($ch);
+
+    if ($code !== 200) {
+        throw new Exception("Snipe-IT file fetch returned HTTP $code");
+    }
+
+    $headerBlob = substr($response, 0, $headerSize);
+    $body       = substr($response, $headerSize);
+
+    $contentType        = 'application/octet-stream';
+    $contentDisposition = '';
+    foreach (preg_split('/\r?\n/', $headerBlob) as $line) {
+        if (stripos($line, 'Content-Type:') === 0) {
+            $contentType = trim(substr($line, 13));
+        } elseif (stripos($line, 'Content-Disposition:') === 0) {
+            $contentDisposition = trim(substr($line, 20));
+        }
+    }
+
+    return [$contentType, $contentDisposition, $body];
+}
+
+/**
+ * Strip a wrapit.us QR URL down to its embedded asset_tag.
+ * Pass-through for any input that doesn't match the QR URL pattern.
+ *
+ * Why: QR labels carry "https://wrapit.us/v/{asset_tag}" so a USB scanner
+ * can type the same code a phone camera navigates to. POST handlers should
+ * run scanned input through this before treating it as a bare tag.
+ */
+function normalize_scanned_tag(string $value): string
+{
+    $s = trim($value);
+    if ($s === '') {
+        return '';
+    }
+    if (preg_match('#^https?://(?:www\.)?wrapit\.us/v/([^/\s?#]+)/?$#i', $s, $m)) {
+        return urldecode($m[1]);
+    }
+    return $s;
+}
+
+/**
  * Find a single asset by asset_tag.
  *
  * This uses the /hardware endpoint with a search, then looks for an

@@ -1018,4 +1018,14 @@
         });
     });
 
+    // QR-code dual-purpose URL strip.
+    // Physical asset labels carry "https://wrapit.us/v/{tag}" which works both
+    // as a phone-camera link and as scanner input. When a USB scanner submits
+    // the full URL into a scan field, peel it back to the bare asset_tag.
+    window.stripWrapitUrl = function (value) {
+        var s = String(value == null ? '' : value).trim();
+        var m = s.match(/^https?:\/\/(?:www\.)?wrapit\.us\/v\/([^\/\s?#]+)\/?$/i);
+        return m ? decodeURIComponent(m[1]) : s;
+    };
+
 })();

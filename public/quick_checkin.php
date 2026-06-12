@@ -123,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $mode = $_POST['mode'] ?? '';
 
     if ($mode === 'add_asset' || $mode === 'add_asset_by_id') {
-        $tag     = trim($_POST['asset_tag'] ?? '');
+        $tag     = normalize_scanned_tag($_POST['asset_tag'] ?? '');
         $assetIdInput = (int)($_POST['asset_id'] ?? 0);
 
         if ($mode === 'add_asset_by_id' && $assetIdInput <= 0) {
@@ -1056,7 +1056,7 @@ layout_page_start([
     // Intercept form submit
     scanForm.addEventListener('submit', function(e) {
         e.preventDefault();
-        enqueueTag(scanInput.value.trim());
+        enqueueTag(stripWrapitUrl(scanInput.value));
     });
 
     function enqueueTag(tag) {

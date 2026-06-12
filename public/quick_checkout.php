@@ -136,7 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $mode = $_POST['mode'] ?? '';
 
     if ($mode === 'add_asset') {
-        $tag = trim($_POST['asset_tag'] ?? '');
+        $tag = normalize_scanned_tag($_POST['asset_tag'] ?? '');
         if ($tag === '') {
             $errors[] = 'Please scan or enter an asset tag.';
         } else {
