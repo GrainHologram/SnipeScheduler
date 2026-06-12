@@ -195,9 +195,9 @@ if (!function_exists('layout_render_nav')) {
             ['type' => 'header', 'label' => 'Processing',  'staff' => true],
             ['href' => 'quick_checkout.php', 'label' => 'Quick Checkout', 'staff' => true, 'enabled' => $quickCheckoutEnabled, 'icon' => 'bi-box-arrow-right'],
             ['href' => 'quick_checkin.php',  'label' => 'Quick Checkin',  'staff' => true,  'icon' => 'bi-box-arrow-in-left'],
-            ['href' => 'print_label.php',    'label' => 'Print Label',    'staff' => false, 'admin_only' => true, 'icon' => 'bi-printer'],
 
             ['type' => 'header', 'label' => 'Admin',       'staff' => false, 'admin_only' => true],
+            ['href' => 'print_label.php',    'label' => 'Print Label',    'staff' => false, 'admin_only' => true, 'icon' => 'bi-printer'],
             ['href' => 'activity_log.php',   'label' => 'Admin',          'staff' => false, 'admin_only' => true, 'icon' => 'bi-gear'],
         ];
 
