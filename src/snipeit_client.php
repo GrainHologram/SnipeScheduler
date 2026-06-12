@@ -49,6 +49,14 @@ function snipeit_cache_get(string $key, int $ttl)
     return is_array($decoded) ? $decoded : null;
 }
 
+function snipeit_cache_delete(string $key): void
+{
+    $path = snipeit_cache_path($key);
+    if (is_file($path)) {
+        @unlink($path);
+    }
+}
+
 function snipeit_cache_set(string $key, array $data): void
 {
     global $cacheDir;
@@ -520,7 +528,9 @@ function fetch_model_file(int $modelId, int $fileId): array
     curl_close($ch);
 
     if ($code !== 200) {
-        throw new Exception("Snipe-IT file fetch returned HTTP $code");
+        // Pass the upstream HTTP code through as the exception code so the
+        // caller can detect 404 (file deleted upstream) and bust caches.
+        throw new Exception("Snipe-IT file fetch returned HTTP $code", (int)$code);
     }
 
     $headerBlob = substr($response, 0, $headerSize);
