@@ -815,7 +815,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } elseif ($mode === 'scan_asset') {
-        $tag = trim($_POST['scan_tag'] ?? '');
+        $tag = normalize_scanned_tag($_POST['scan_tag'] ?? '');
         $resId = $selectedReservationId;
 
         if (!$selectedReservation) {
@@ -1009,7 +1009,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . $selfUrl);
         exit;
     } elseif ($mode === 'add_asset') {
-        $tag = trim($_POST['asset_tag'] ?? '');
+        $tag = normalize_scanned_tag($_POST['asset_tag'] ?? '');
         if (!$selectedReservation) {
             $checkoutErrors[] = 'Please select a reservation for today before adding assets.';
         } elseif ($tag === '') {
@@ -3040,7 +3040,7 @@ layout_page_start([
     // Intercept form submit
     scanForm.addEventListener('submit', function(e) {
         e.preventDefault();
-        enqueueTag(scanInput.value.trim());
+        enqueueTag(stripWrapitUrl(scanInput.value));
     });
 
     function enqueueTag(tag) {
