@@ -232,8 +232,10 @@
         var description = sanitizeZpl(asset.description || asset.asset_name || asset.model_name || '');
         return [
             '^XA~TA000~JSN^LT5^LS5^MNW^MTT^PON^PMN^LH0,0^JMA^PR3,3~SD25^JUS^LRN^CI28^PW406^LL203^XZ',
-            '^XA^CWL,e:SWISS^XZ',
-            '^XA^CWK,e:JBM_RG^XZ',
+            // Fonts live in RAM (R:) — re-uploaded once per browser session
+            // (sessionStorage flag) so flash doesn't fragment from writes.
+            '^XA^CWL,r:SWISS^XZ',
+            '^XA^CWK,r:JBM_RG^XZ',
             '^XA',
             '^CI28',
             '^BY2,2',
