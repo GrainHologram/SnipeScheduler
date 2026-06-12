@@ -34,12 +34,22 @@
 
     function ensurePrinterConfig() {
         if (_printerConfig) return _printerConfig;
-        _printerConfig = qz.configs.create({
-            host: _cfg.printerHost,
-            port: _cfg.printerPort
-        }, {
-            encoding: 'UTF-8'
-        });
+        if (_cfg.printerName) {
+            // Named printer + bypass driver mode (per https://qz.io/docs/raw).
+            console.log('[print-label] config: named printer', _cfg.printerName, 'forceRaw=true');
+            _printerConfig = qz.configs.create(_cfg.printerName, {
+                forceRaw: true,
+                encoding: 'UTF-8'
+            });
+        } else {
+            console.log('[print-label] config: network', _cfg.printerHost + ':' + _cfg.printerPort);
+            _printerConfig = qz.configs.create({
+                host: _cfg.printerHost,
+                port: _cfg.printerPort
+            }, {
+                encoding: 'UTF-8'
+            });
+        }
         return _printerConfig;
     }
 
