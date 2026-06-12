@@ -20,16 +20,24 @@
 
     function init(opts) {
         _cfg = opts;
-        if (typeof qz === 'undefined') {
-            setStatus('error', 'QZ Tray library failed to load.');
-            return;
+        // layout.php loads qz-tray.js from layout_footer, which runs AFTER
+        // this page's body scripts. So qz may not exist yet — poll briefly.
+        var waited = 0;
+        function whenReady() {
+            if (typeof qz !== 'undefined') {
+                _printerConfig = null;
+                wireUI();
+                connectAndPrepare();
+                return;
+            }
+            if (waited > 5000) {
+                setStatus('error', 'QZ Tray library failed to load.');
+                return;
+            }
+            waited += 50;
+            setTimeout(whenReady, 50);
         }
-        // Defer qz.configs.create until after the websocket is fully active —
-        // creating it at init had no functional effect but also no benefit.
-        _printerConfig = null;
-
-        wireUI();
-        connectAndPrepare();
+        whenReady();
     }
 
     function ensurePrinterConfig() {
