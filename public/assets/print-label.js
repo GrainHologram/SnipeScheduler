@@ -101,10 +101,18 @@
     }
 
     function ensureConnected() {
-        if (qz.websocket.isActive()) return Promise.resolve();
+        if (qz.websocket.isActive()) {
+            console.log('[print-label] ensureConnected: already active');
+            return Promise.resolve();
+        }
+        console.log('[print-label] ensureConnected: calling qz.websocket.connect()');
         return qz.websocket.connect()
-            .then(waitForActive)
+            .then(function () {
+                console.log('[print-label] connect resolved. isActive=', qz.websocket.isActive(),
+                            ' connection=', qz.websocket.connection);
+            })
             .catch(function (err) {
+                console.error('[print-label] connect failed:', err);
                 var msg = (err && err.message) || String(err);
                 if (msg.indexOf('Unable to connect') !== -1 || msg.indexOf('CLOSE_EVENT') !== -1) {
                     throw new Error('QZ Tray not detected. Install and start QZ Tray, then reload.');
@@ -113,23 +121,13 @@
             });
     }
 
-    // qz.websocket.connect() can resolve before connection.established flips
-    // to true (race with the cert handshake ack). Poll briefly so a print()
-    // call right after connect() doesn't hit "no connection established".
-    function waitForActive() {
-        return new Promise(function (resolve, reject) {
-            var start = Date.now();
-            (function check() {
-                if (qz.websocket.isActive()) return resolve();
-                if (Date.now() - start > 5000) {
-                    return reject(new Error('QZ Tray opened a connection but it never became active. Check the cert in Site Manager (Allowed tab, set to Allow).'));
-                }
-                setTimeout(check, 50);
-            })();
-        });
-    }
-
     function ensureFontsUploaded() {
+        // Diagnostic escape hatch: ?nofonts=1 in the URL skips the upload
+        // entirely. Useful for proving whether the handshake itself works
+        // independent of the 412 KB ZPL transfer.
+        if (window.location.search.indexOf('nofonts=1') !== -1) {
+            return Promise.resolve();
+        }
         try {
             if (sessionStorage.getItem(FONTS_SESSION_KEY) === '1') {
                 return Promise.resolve();
@@ -143,6 +141,9 @@
                 return r.text();
             })
             .then(function (zpl) {
+                console.log('[print-label] about to qz.print() fonts.',
+                            'isActive=', qz.websocket.isActive(),
+                            'bytes=', zpl.length);
                 // Match the receipt code's payload shape (plain string array) —
                 // simpler and avoids any object-spec quirks for raw network printing.
                 return qz.print(ensurePrinterConfig(), [zpl]);
