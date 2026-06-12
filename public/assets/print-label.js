@@ -24,15 +24,23 @@
             setStatus('error', 'QZ Tray library failed to load.');
             return;
         }
-        _printerConfig = qz.configs.create({
-            host: opts.printerHost,
-            port: opts.printerPort
-        }, {
-            encoding: 'UTF-8'
-        });
+        // Defer qz.configs.create until after the websocket is fully active —
+        // creating it at init had no functional effect but also no benefit.
+        _printerConfig = null;
 
         wireUI();
         connectAndPrepare();
+    }
+
+    function ensurePrinterConfig() {
+        if (_printerConfig) return _printerConfig;
+        _printerConfig = qz.configs.create({
+            host: _cfg.printerHost,
+            port: _cfg.printerPort
+        }, {
+            encoding: 'UTF-8'
+        });
+        return _printerConfig;
     }
 
     function wireUI() {
@@ -94,12 +102,30 @@
 
     function ensureConnected() {
         if (qz.websocket.isActive()) return Promise.resolve();
-        return qz.websocket.connect().catch(function (err) {
-            var msg = (err && err.message) || String(err);
-            if (msg.indexOf('Unable to connect') !== -1 || msg.indexOf('CLOSE_EVENT') !== -1) {
-                throw new Error('QZ Tray not detected. Install and start QZ Tray, then reload.');
-            }
-            throw err;
+        return qz.websocket.connect()
+            .then(waitForActive)
+            .catch(function (err) {
+                var msg = (err && err.message) || String(err);
+                if (msg.indexOf('Unable to connect') !== -1 || msg.indexOf('CLOSE_EVENT') !== -1) {
+                    throw new Error('QZ Tray not detected. Install and start QZ Tray, then reload.');
+                }
+                throw err;
+            });
+    }
+
+    // qz.websocket.connect() can resolve before connection.established flips
+    // to true (race with the cert handshake ack). Poll briefly so a print()
+    // call right after connect() doesn't hit "no connection established".
+    function waitForActive() {
+        return new Promise(function (resolve, reject) {
+            var start = Date.now();
+            (function check() {
+                if (qz.websocket.isActive()) return resolve();
+                if (Date.now() - start > 5000) {
+                    return reject(new Error('QZ Tray opened a connection but it never became active. Check the cert in Site Manager (Allowed tab, set to Allow).'));
+                }
+                setTimeout(check, 50);
+            })();
         });
     }
 
@@ -117,7 +143,9 @@
                 return r.text();
             })
             .then(function (zpl) {
-                return qz.print(_printerConfig, [{ type: 'raw', format: 'plain', data: zpl }]);
+                // Match the receipt code's payload shape (plain string array) —
+                // simpler and avoids any object-spec quirks for raw network printing.
+                return qz.print(ensurePrinterConfig(), [zpl]);
             })
             .then(function () {
                 try { sessionStorage.setItem(FONTS_SESSION_KEY, '1'); } catch (e) {}
@@ -154,7 +182,7 @@
                 }
                 var zpl = buildLabelZpl(res.body, _cfg.labelType);
                 showFlash('info', 'Printing ' + tag + '…');
-                return qz.print(_printerConfig, [{ type: 'raw', format: 'plain', data: zpl }])
+                return qz.print(ensurePrinterConfig(), [zpl])
                     .then(function () {
                         showFlash('success', 'Printed ' + (res.body.asset_tag || tag) + ' — ' + (res.body.description || ''));
                         setLastPrinted(res.body);
