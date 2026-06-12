@@ -18,9 +18,9 @@ require_once __DIR__ . '/../src/bootstrap.php';
 require_once SRC_PATH . '/auth.php';
 require_once SRC_PATH . '/layout.php';
 
-if (empty($currentUser['is_staff']) && empty($currentUser['is_admin'])) {
+if (empty($currentUser['is_admin'])) {
     http_response_code(403);
-    echo '<p>Staff only.</p>';
+    echo '<p>Admins only.</p>';
     exit;
 }
 
@@ -28,7 +28,7 @@ $labelType = $_GET['type'] ?? '';
 $labelType = in_array($labelType, ['generic', 'cable'], true) ? $labelType : '';
 
 layout_page_start([
-    'active'          => 'print_label',
+    'active'          => 'print_label.php',
     'title'           => 'Print Label',
     'pageHeaderTitle' => 'Print Label',
 ]);
@@ -101,5 +101,5 @@ layout_page_start([
 
 <?php
 layout_page_end([
-    'active' => 'print_label',
+    'active' => 'print_label.php',
 ]);

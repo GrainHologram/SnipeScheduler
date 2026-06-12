@@ -16,11 +16,9 @@ require_once SRC_PATH . '/snipeit_client.php';
 
 header('Content-Type: application/json');
 
-$isAdmin = !empty($currentUser['is_admin']);
-$isStaff = !empty($currentUser['is_staff']) || $isAdmin;
-if (!$isStaff) {
+if (empty($currentUser['is_admin'])) {
     http_response_code(403);
-    echo json_encode(['ok' => false, 'error' => 'Staff only.']);
+    echo json_encode(['ok' => false, 'error' => 'Admins only.']);
     exit;
 }
 
