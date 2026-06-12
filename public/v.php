@@ -195,6 +195,7 @@ $pageTitle = $modelName !== '' ? ($modelName . ' — Documentation') : 'Asset Do
   }
   .v-entry:hover, .v-entry:focus { background: #f3f4f6; border-color: #9ca3af; color: #111827; }
   .v-entry .icon { font-size: 1.5rem; color: #4b5563; flex: 0 0 auto; line-height: 1; }
+  .v-entry .icon.bi-youtube { color: #cc0000; }
   .v-entry .label { flex: 1 1 auto; min-width: 0; word-break: break-word; font-weight: 500; }
   .v-entry .sub {
     display: block;
@@ -237,7 +238,7 @@ $pageTitle = $modelName !== '' ? ($modelName . ' — Documentation') : 'Asset Do
             <?php if (!empty($e['thumbnail'])): ?>
               <img class="thumb" src="<?= h($e['thumbnail']) ?>" alt="" loading="lazy">
             <?php else: ?>
-              <i class="icon bi bi-youtube" style="color:#c00;"></i>
+              <i class="icon bi bi-youtube"></i>
             <?php endif; ?>
             <span class="label">
               <?= h($e['title']) ?>
