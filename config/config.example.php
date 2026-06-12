@@ -142,6 +142,7 @@ return [
         'slot_capacity'         => 0,   // max checkouts+returns per slot (0 = unlimited)
         'cooldown_slots'        => 0,   // number of end-of-day slots with halved capacity (0 = disabled)
         'welcome_enabled'       => true, // show a welcome modal on first visit for new users
+        'suppress_manufacturers' => [], // manufacturer names hidden from catalogue cards (managed via settings UI)
     ],
 
     'reservations' => [

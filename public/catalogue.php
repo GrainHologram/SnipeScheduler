@@ -962,7 +962,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
 
             <div class="row g-3 align-items-end">
 
-                <!-- Sort + View toggle row, then Categories -->
+                <!-- Sort row, then Categories -->
                 <div class="col-12">
                     <div class="cat-sort-view-row">
                         <div class="cat-sort-item">
@@ -976,21 +976,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                 <option value="units_desc" <?= $sort === 'units_desc' ? 'selected' : '' ?>>Units (high–low)</option>
                             </select>
                         </div>
-                        <div class="cat-sort-item cat-view-dropdown">
-                            <label class="form-label mb-1 fw-semibold">View</label>
-                            <button type="button" class="cat-toggle-btn cat-view-toggle" id="cat-view-btn-side"
-                                    aria-haspopup="true" aria-expanded="false">
-                                <i class="bi bi-list-ul" id="cat-view-icon-side" aria-hidden="true"></i>
-                                <span id="cat-view-label-side">List</span>
-                                <svg class="cat-toggle-chevron ms-auto" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                                    <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
-                            </button>
-                            <div class="cat-view-menu cat-dropdown" id="cat-view-menu-side" hidden>
-                                <button type="button" class="cat-view-option cat-option" data-view="list"><i class="bi bi-list-ul" aria-hidden="true"></i> List</button>
-                                <button type="button" class="cat-view-option cat-option" data-view="grid"><i class="bi bi-grid" aria-hidden="true"></i> Grid</button>
-                            </div>
-                        </div>
+
                     </div>
                 </div>
 
@@ -1065,21 +1051,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                 <option value="units_desc" <?= $sort === 'units_desc' ? 'selected' : '' ?>>Units (high–low)</option>
                             </select>
                         </div>
-                        <div class="cat-mobile-filter-item cat-view-dropdown">
-                            <label class="form-label mb-1 fw-semibold">View</label>
-                            <button type="button" class="cat-toggle-btn cat-view-toggle" id="cat-view-btn-mobile"
-                                    aria-haspopup="true" aria-expanded="false">
-                                <i class="bi bi-list-ul" id="cat-view-icon-mobile" aria-hidden="true"></i>
-                                <span id="cat-view-label-mobile">List</span>
-                                <svg class="cat-toggle-chevron ms-auto" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                                    <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
-                            </button>
-                            <div class="cat-view-menu cat-dropdown" id="cat-view-menu-mobile" hidden>
-                                <button type="button" class="cat-view-option cat-option" data-view="list"><i class="bi bi-list-ul" aria-hidden="true"></i> List</button>
-                                <button type="button" class="cat-view-option cat-option" data-view="grid"><i class="bi bi-grid" aria-hidden="true"></i> Grid</button>
-                            </div>
-                        </div>
+
                     </div>
                     <div class="mt-2">
                         <p class="form-label mb-1 fw-semibold" id="cat-mobile-cat-label">Category</p>
@@ -1123,6 +1095,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
             <?php
                 $displayedModelIds = array_map(fn($m) => (int)($m['id'] ?? 0), $models);
                 $modelStats = prefetch_catalogue_model_stats($displayedModelIds);
+                $suppressedManus = array_map('strtolower', $config['app']['suppress_manufacturers'] ?? []);
             ?>
             <div class="row g-3">
                 <?php foreach ($models as $model): ?>
@@ -1136,6 +1109,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
 
                     $name       = $model['name'] ?? 'Model';
                     $manuName   = $model['manufacturer']['name'] ?? '';
+                    $showManu   = $manuName !== '' && !in_array(strtolower($manuName), $suppressedManus, true);
                     $catName    = $model['category']['name'] ?? '';
                     $imagePath  = $model['image'] ?? '';
                     $assetCount = null;
@@ -1259,139 +1233,117 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                         $proxiedImage = 'image_proxy.php?src=' . urlencode($imagePath);
                     }
                     ?>
+                    <?php
+                        $undeployInfo = $bulkStats ? $bulkStats['undeployable'] : ['undeployable_count' => 0, 'status_names' => []];
+                        $uCount    = $undeployInfo['undeployable_count'];
+                        $uStatuses = $uCount > 0 ? implode(', ', $undeployInfo['status_names']) : '';
+                        if ($assetCount !== null && $freeNow <= 0) $availDotClass = 'model-avail-dot--red';
+                        elseif ($assetCount !== null && $freeNow < $assetCount) $availDotClass = 'model-avail-dot--yellow';
+                        else $availDotClass = 'model-avail-dot--green';
+                    ?>
                     <div class="col-md-4">
-                        <div class="card h-100 model-card<?= ($isRequestable && $freeNow > 0) ? '' : ' model-card--unavailable' ?>">
-                            <?php if ($proxiedImage !== ''): ?>
-                                <div class="model-image-wrapper">
-                                    <a href="#" onclick="openModelDetail(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
-                                        <img src="<?= htmlspecialchars($proxiedImage) ?>"
-                                             alt=""
-                                             class="model-image img-fluid">
-                                    </a>
-                                </div>
-                            <?php else: ?>
-                                <div class="model-image-wrapper model-image-wrapper--placeholder">
-                                    <a href="#" onclick="openModelDetail(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
-                                        <div class="model-image-placeholder">
-                                            No image
-                                        </div>
-                                    </a>
-                                </div>
-                            <?php endif; ?>
+                        <div class="card h-100 model-card model-card-v2<?= ($isRequestable && $freeNow > 0) ? '' : ' model-card--unavailable' ?>">
 
-                            <?php
-                                $undeployInfo = $bulkStats ? $bulkStats['undeployable'] : ['undeployable_count' => 0, 'status_names' => []];
-                                $uCount   = $undeployInfo['undeployable_count'];
-                                $uStatuses = $uCount > 0 ? implode(', ', $undeployInfo['status_names']) : '';
-                            ?>
+                            <!-- Image area -->
+                            <div class="card-img-area">
+                                <a href="#" class="card-img-link"
+                                   onclick="openModelDetail(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
+                                    <?php if ($proxiedImage !== ''): ?>
+                                        <img src="<?= htmlspecialchars($proxiedImage) ?>" alt="" class="model-image">
+                                    <?php else: ?>
+                                        <div class="model-image-placeholder">No image</div>
+                                    <?php endif; ?>
+                                </a>
+                                <div class="card-img-overlay">
+                                    <div class="overlay-label">View Details</div>
+                                </div>
+                            </div>
+
+                            <!-- Card body -->
                             <div class="card-body d-flex flex-column">
-                                <div class="model-nameline">
-                                    <h5 class="card-title">
-                                        <a href="#" class="model-history-link" onclick="openModelDetail(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;">
-                                            <?= label_safe($name) ?>
-                                        </a>
-                                    </h5>
-                                    <?php if ($manuName): ?>
-                                        <span class="model-meta-manufacturer"><strong>Manufacturer:</strong> <?= label_safe($manuName) ?></span>
-                                    <?php endif; ?>
-                                </div>
-                                <?php if (!empty($notes)): ?>
-                                <p class="card-text small text-muted mb-2">
-                                    <div class="model-meta-notes clamp-3">
-                                        <?= label_safe($notes) ?>
-                                    </div>
-                                </p>
-                                <?php endif; ?>
 
-                                <?php if ($catName || !empty($authReqs['certs']) || !empty($authReqs['access_levels']) || $uCount > 0): ?>
-                                <div class="model-card-tags">
+                                <!-- Category + availability badge -->
+                                <div class="card-meta-row">
                                     <?php if ($catName): ?>
-                                        <span class="model-meta-category"><?= label_safe($catName) ?></span>
+                                        <span class="cat-tag"><?= label_safe($catName) ?></span>
                                     <?php endif; ?>
-                                    <?php foreach ($authReqs['certs'] as $certName): ?>
-                                        <span class="model-cert-tag"><?= h($certName) ?></span>
-                                    <?php endforeach; ?>
-                                    <?php foreach ($authReqs['access_levels'] as $level): ?>
-                                        <span class="model-access-tag"><?= h($level) ?></span>
-                                    <?php endforeach; ?>
-                                    <?php if ($uCount > 0): ?>
-                                        <span class="model-unavailable-tag" title="<?= h($uStatuses) ?>"><?= $uCount ?> unit<?= $uCount !== 1 ? 's' : '' ?> unavailable</span>
-                                    <?php endif; ?>
+                                    <span class="avail-badge <?= $freeNow > 0 ? 'avail-on' : 'avail-off' ?>">
+                                        <?= $freeNow > 0 ? 'Available' : 'Out' ?>
+                                    </span>
                                 </div>
+
+                                <!-- Name (with optional manufacturer prefix on same line) -->
+                                <div class="card-name model-nameline">
+                                    <a href="#" class="model-history-link"
+                                       onclick="openModelDetail(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>); return false;"><?php if ($showManu): ?><span class="card-manu-prefix"><?= label_safe($manuName) ?></span> <?php endif; ?><?= label_safe($name) ?></a>
+                                </div>
+
+                                <!-- Notes / specs -->
+                                <?php if (!empty($notes)): ?>
+                                    <div class="card-specs clamp-2"><?= label_safe($notes) ?></div>
                                 <?php endif; ?>
 
-                                <div class="model-card-right">
-                                    <div class="model-meta-availability">
-                                        <?php
-                                        if ($assetCount !== null && $freeNow <= 0) $availDotClass = 'model-avail-dot--red';
-                                        elseif ($assetCount !== null && $freeNow < $assetCount) $availDotClass = 'model-avail-dot--yellow';
-                                        else $availDotClass = 'model-avail-dot--green';
-                                        ?>
-                                        <?php if ($assetCount !== null): ?>
-                                            <span class="model-meta-requestable"><span class="model-avail-dot model-avail-dot--green"></span><strong>Requestable:</strong> <?= $assetCount ?></span>
+                                <!-- Cert / access / unavailable tags -->
+                                <?php if (!empty($authReqs['certs']) || !empty($authReqs['access_levels']) || $uCount > 0): ?>
+                                    <div class="model-card-tags">
+                                        <?php foreach ($authReqs['certs'] as $certName): ?>
+                                            <span class="model-cert-tag"><?= h($certName) ?></span>
+                                        <?php endforeach; ?>
+                                        <?php foreach ($authReqs['access_levels'] as $level): ?>
+                                            <span class="model-access-tag"><?= h($level) ?></span>
+                                        <?php endforeach; ?>
+                                        <?php if ($uCount > 0): ?>
+                                            <span class="model-unavailable-tag" title="<?= h($uStatuses) ?>"><?= $uCount ?> unit<?= $uCount !== 1 ? 's' : '' ?> unavailable</span>
                                         <?php endif; ?>
-                                        <span class="model-meta-available"><span class="model-avail-dot <?= $availDotClass ?>"></span><strong><?= $windowActive ? 'Available (dates):' : 'Available:' ?></strong> <?= $freeNow ?></span>
                                     </div>
-                                    <form method="post"
-                                          action="basket_add.php"
-                                          class="mt-auto add-to-basket-form">
-                                        <input type="hidden" name="model_id" value="<?= $modelId ?>">
-                                        <?php if ($windowActive): ?>
-                                            <input type="hidden" name="start_datetime" value="<?= h($windowStartRaw) ?>">
-                                            <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
-                                        <?php endif; ?>
+                                <?php endif; ?>
+
+                            </div>
+
+                            <!-- Card footer -->
+                            <div class="card-footer-v2">
+                                <form method="post" action="basket_add.php"
+                                      class="add-to-basket-form card-actions-form">
+                                    <input type="hidden" name="model_id" value="<?= $modelId ?>">
+                                    <?php if ($windowActive): ?>
+                                        <input type="hidden" name="start_datetime" value="<?= h($windowStartRaw) ?>">
+                                        <input type="hidden" name="end_datetime" value="<?= h($windowEndRaw) ?>">
+                                    <?php endif; ?>
+                                    <div class="card-actions">
+                                        <button type="button" class="btn card-btn-ghost btn-sm"
+                                                onclick="openModelDetail(<?= (int)$modelId ?>, <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>)">Details</button>
 
                                         <?php if ($staffNoUserSelected): ?>
+                                            <!-- staff must select a user first; no action shown -->
                                         <?php elseif ($accessBlocked): ?>
-                                            <div class="alert alert-warning small mb-0">
-                                                You do not have access to reserve equipment. Please contact an administrator to be assigned an Access group.
-                                            </div>
-                                            <button type="button"
-                                                    class="btn btn-sm btn-secondary w-100 mt-2"
-                                                    disabled>
-                                                Add to basket
-                                            </button>
+                                            <button type="button" class="btn card-btn-ghost btn-sm" disabled
+                                                    title="You do not have access to reserve equipment">Restricted</button>
                                         <?php elseif ($authBlocked): ?>
-                                            <div class="alert alert-warning small mb-0">
-                                                <?php if (!empty($authMissing['certs'])): ?>
-                                                    Requires certification: <?= h(implode(', ', $authMissing['certs'])) ?>
-                                                <?php else: ?>
-                                                    Requires access level: <?= h(implode(', ', $authMissing['access_levels'] ?? [])) ?>
-                                                <?php endif; ?>
-                                            </div>
-                                            <button type="button"
-                                                    class="btn btn-sm btn-secondary w-100 mt-2"
-                                                    disabled>
-                                                Add to basket
-                                            </button>
+                                            <button type="button" class="btn card-btn-ghost btn-sm" disabled
+                                                    title="<?= !empty($authMissing['certs']) ? 'Requires certification: ' . h(implode(', ', $authMissing['certs'])) : 'Requires access level: ' . h(implode(', ', $authMissing['access_levels'] ?? [])) ?>">Restricted</button>
                                         <?php elseif ($isRequestable && $freeNow > 0): ?>
-                                            <div class="row g-2 align-items-center mb-2">
-                                                <div class="col-6">
-                                                    <label class="form-label mb-0 small">Quantity</label>
-                                                    <input type="number"
-                                                           name="quantity"
-                                                           class="form-control form-control-sm"
-                                                           value="1"
-                                                           min="1"
-                                                           max="<?= $maxQty ?>">
+                                            <?php if ($maxQty > 1): ?>
+                                                <div class="btn-qty-group">
+                                                    <button type="submit" class="btn-qty-add">Add to Basket</button>
+                                                    <div class="btn-qty-sep"></div>
+                                                    <div class="btn-qty-ctrl">
+                                                        <input type="number" name="quantity" class="btn-qty-num"
+                                                               value="1" min="1" max="<?= $maxQty ?>">
+                                                        <div class="btn-qty-arrows">
+                                                            <button type="button" class="btn-qty-arr btn-qty-up" aria-label="Increase quantity"><i class="bi bi-chevron-up"></i></button>
+                                                            <button type="button" class="btn-qty-arr btn-qty-dn" aria-label="Decrease quantity"><i class="bi bi-chevron-down"></i></button>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            </div>
-
-                                            <button type="submit"
-                                                    class="btn btn-sm btn-success w-100">
-                                                Add to basket
-                                            </button>
+                                            <?php else: ?>
+                                                <input type="hidden" name="quantity" value="1">
+                                                <button type="submit" class="btn card-btn-primary btn-sm">Add to Basket</button>
+                                            <?php endif; ?>
                                         <?php else: ?>
-                                            <div class="alert alert-danger small mb-0">
-                                                <?php if (!$isRequestable): ?>
-                                                    No requestable units available.
-                                                <?php else: ?>
-                                                    <?= $windowActive ? 'No units available for selected dates.' : 'No units available right now.' ?>
-                                                <?php endif; ?>
-                                            </div>
+                                            <button type="button" class="btn card-btn-ghost btn-sm" disabled>Unavailable</button>
                                         <?php endif; ?>
-                                    </form>
-                                </div>
+                                    </div>
+                                </form>
                             </div>
                         </div>
                     </div>
@@ -1605,7 +1557,11 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                     $stmt->execute([':mid' => $mid, ':now' => $nowIso]);
                                     $pendingQty = (int)(($stmt->fetch(PDO::FETCH_ASSOC))['pending_qty'] ?? 0);
 
-                                    $cacheCheckedOut = $checkedOutCounts[$mid] ?? count_checked_out_assets_by_model($mid);
+                                    if (array_key_exists($mid, $checkedOutCounts)) {
+                                        $kitCacheCheckedOut = $checkedOutCounts[$mid];
+                                    } else {
+                                        $kitCacheCheckedOut = count_checked_out_assets_by_model($mid);
+                                    }
                                     $coNowStmt2 = $pdo->prepare("
                                         SELECT COUNT(*) AS co_qty
                                         FROM checkout_items ci
@@ -1616,8 +1572,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                                     ");
                                     $coNowStmt2->execute([':mid' => $mid]);
                                     $localCheckedOut = (int)(($coNowStmt2->fetch(PDO::FETCH_ASSOC))['co_qty'] ?? 0);
-                                    $activeCheckedOut = max($cacheCheckedOut, $localCheckedOut);
-                                    $booked = $pendingQty + $activeCheckedOut;
+                                    $booked = $pendingQty + max($kitCacheCheckedOut, $localCheckedOut);
                                 }
 
                                 $freeUnits = max(0, $requestableCount - $booked);
@@ -1772,22 +1727,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 <?php endif; ?>
             </button>
 
-            <hr class="cat-sidebar-section-divider">
-            <div class="cat-view-dropdown px-0">
-                <label class="form-label mb-1 fw-semibold">View</label>
-                <button type="button" class="cat-toggle-btn cat-view-toggle" id="cat-view-btn-side"
-                        aria-haspopup="true" aria-expanded="false">
-                    <i class="bi bi-list-ul" id="cat-view-icon-side" aria-hidden="true"></i>
-                    <span id="cat-view-label-side">List</span>
-                    <svg class="cat-toggle-chevron ms-auto" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                        <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </button>
-                <div class="cat-view-menu cat-dropdown" id="cat-view-menu-side" hidden>
-                    <button type="button" class="cat-view-option cat-option" data-view="list"><i class="bi bi-list-ul" aria-hidden="true"></i> List</button>
-                    <button type="button" class="cat-view-option cat-option" data-view="grid"><i class="bi bi-grid" aria-hidden="true"></i> Grid</button>
-                </div>
-            </div>
+
             <form class="filter-panel mb-4" method="get" action="catalogue.php" id="kits-filter-form">
                 <div class="filter-panel__header d-flex align-items-center gap-3">
                     <span class="filter-panel__dot"></span>
@@ -2140,8 +2080,21 @@ function closeWindowModal() {
      aria-live="polite"
      aria-hidden="true"></div>
 
+
+<!-- Quantity stepper arrows for split Add-to-Basket pill -->
+<script>
+document.addEventListener('click', function (e) {
+    const arr = e.target.closest('.btn-qty-up, .btn-qty-dn');
+    if (!arr) return;
+    const input = arr.closest('.btn-qty-ctrl').querySelector('.btn-qty-num');
+    if (!input) return;
+    const delta = arr.classList.contains('btn-qty-up') ? 1 : -1;
+    input.value = Math.min(Math.max(1, (parseInt(input.value, 10) || 1) + delta), parseInt(input.max, 10) || 1);
+});
+</script>
+
 <!-- AJAX add-to-basket + update basket count text -->
-<script src="assets/slot-picker.js"></script>
+<script src="assets/slot-picker.js<?= ($v = layout_asset_version()) !== '' ? '?v=' . $v : '' ?>"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const loadingOverlay = document.getElementById('catalogue-loading');
@@ -2715,87 +2668,7 @@ function revertToLoggedIn(e) {
 });
 </script>
 <script>window._modelDetailIsStaff = <?= $isStaff ? 'true' : 'false' ?>;</script>
-<script>
-// ---- View toggle (grid / list) — topbar (desktop) + sidebar (mobile) ----
-(function () {
-    var storageKey = 'catalogueView';
-    var defaultView = 'list';
-    var viewMeta = {
-        list: { icon: 'bi-list-ul', label: 'List' },
-        grid: { icon: 'bi-grid',    label: 'Grid'  }
-    };
 
-    function applyView(view) {
-        var scrollArea = document.querySelector('.catalogue-scroll-area');
-        if (scrollArea) scrollArea.setAttribute('data-catalogue-view', view);
-        var meta = viewMeta[view] || viewMeta[defaultView];
-        ['top', 'side'].forEach(function (s) {
-            var icon  = document.getElementById('cat-view-icon-' + s);
-            var label = document.getElementById('cat-view-label-' + s);
-            if (icon)  icon.className = 'bi ' + meta.icon;
-            if (label) label.textContent = meta.label;
-        });
-        document.querySelectorAll('.cat-view-option').forEach(function (opt) {
-            opt.classList.toggle('active', opt.getAttribute('data-view') === view);
-        });
-    }
-
-    function closeAll() {
-        document.querySelectorAll('.cat-view-menu').forEach(function (m) {
-            m.setAttribute('hidden', '');
-        });
-        document.querySelectorAll('.cat-view-toggle').forEach(function (b) {
-            b.setAttribute('aria-expanded', 'false');
-        });
-    }
-
-    function initToggle(btnId, menuId) {
-        var btn  = document.getElementById(btnId);
-        var menu = document.getElementById(menuId);
-        if (!btn || !menu) return;
-
-        btn.addEventListener('click', function (e) {
-            e.stopPropagation();
-            if (menu.hasAttribute('hidden')) {
-                closeAll();
-                menu.removeAttribute('hidden');
-                btn.setAttribute('aria-expanded', 'true');
-            } else {
-                menu.setAttribute('hidden', '');
-                btn.setAttribute('aria-expanded', 'false');
-            }
-        });
-
-        menu.querySelectorAll('.cat-view-option').forEach(function (opt) {
-            opt.addEventListener('click', function (e) {
-                e.stopPropagation();
-                var view = opt.getAttribute('data-view');
-                try { localStorage.setItem(storageKey, view); } catch (ex) {}
-                applyView(view);
-                menu.setAttribute('hidden', '');
-                btn.setAttribute('aria-expanded', 'false');
-            });
-        });
-
-        document.addEventListener('click', function (e) {
-            if (!btn.contains(e.target) && !menu.contains(e.target)) {
-                menu.setAttribute('hidden', '');
-                btn.setAttribute('aria-expanded', 'false');
-            }
-        });
-    }
-
-    initToggle('cat-view-btn-top',    'cat-view-menu-top');
-    initToggle('cat-view-btn-side',   'cat-view-menu-side');
-    initToggle('cat-view-btn-mobile', 'cat-view-menu-mobile');
-
-    document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') closeAll();
-    });
-
-    try { applyView(localStorage.getItem(storageKey) || defaultView); } catch (ex) { applyView(defaultView); }
-})();
-</script>
 <?php layout_footer(); ?>
 </body>
 </html>

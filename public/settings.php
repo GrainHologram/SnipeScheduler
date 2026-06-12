@@ -46,6 +46,15 @@ try {
     $categoryFetchError = $e->getMessage();
 }
 
+$manufacturerOptions    = [];
+$manufacturerFetchError = '';
+try {
+    $manufacturerOptions = get_bookable_manufacturers();
+} catch (Throwable $e) {
+    $manufacturerOptions    = [];
+    $manufacturerFetchError = $e->getMessage();
+}
+
 $snipeitGroups      = [];
 $groupsFetchError   = '';
 try {
@@ -390,6 +399,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $app['quick_checkout_enabled'] = isset($_POST['app_quick_checkout_enabled']);
     $app['slot_interval_minutes'] = max(5, min(60, (int)$post('app_slot_interval', $app['slot_interval_minutes'] ?? 15)));
     $app['slot_capacity'] = max(0, (int)$post('app_slot_capacity', $app['slot_capacity'] ?? 0));
+
+    $suppressRaw = $_POST['suppress_manufacturers'] ?? [];
+    $app['suppress_manufacturers'] = is_array($suppressRaw)
+        ? array_values(array_filter(array_map('trim', $suppressRaw), fn($v) => $v !== ''))
+        : [];
 
     $catalogue = $config['catalogue'] ?? [];
     $allowedRaw = $_POST['catalogue_allowed_categories'] ?? [];
@@ -766,6 +780,11 @@ if (!is_array($allowedCategoryIds)) {
     $allowedCategoryIds = [];
 }
 $allowedCategoryIds = array_map('intval', $allowedCategoryIds);
+
+$suppressedManuNames = $cfg(['app', 'suppress_manufacturers'], []);
+if (!is_array($suppressedManuNames)) {
+    $suppressedManuNames = [];
+}
 
 layout_page_start([
     'active'             => $active,
@@ -1381,6 +1400,41 @@ layout_page_start([
                                 <?php endforeach; ?>
                             </div>
                             <div class="form-text mt-2">Tip: leave all unchecked to allow every category to show in the dropdown.</div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-1">Suppressed manufacturers</h5>
+                        <p class="text-muted small mb-3">Choose which manufacturer names are hidden from catalogue cards. Checked manufacturers will not have their name shown. Only manufacturers with at least one requestable model appear here.</p>
+                        <?php if ($manufacturerFetchError): ?>
+                            <div class="alert alert-warning small mb-3">
+                                Could not load manufacturers from Snipe-IT: <?= h($manufacturerFetchError) ?>
+                            </div>
+                        <?php elseif (empty($manufacturerOptions)): ?>
+                            <div class="text-muted small">No manufacturers found (no requestable models).</div>
+                        <?php else: ?>
+                            <div class="row g-2">
+                                <?php foreach ($manufacturerOptions as $mname): ?>
+                                    <div class="col-md-3 col-sm-4 col-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input"
+                                                   type="checkbox"
+                                                   name="suppress_manufacturers[]"
+                                                   id="manu_suppress_<?= h(preg_replace('/[^a-z0-9]/i', '_', $mname)) ?>"
+                                                   value="<?= h($mname) ?>"
+                                                <?= in_array($mname, $suppressedManuNames, true) ? 'checked' : '' ?>>
+                                            <label class="form-check-label" for="manu_suppress_<?= h(preg_replace('/[^a-z0-9]/i', '_', $mname)) ?>">
+                                                <?= h($mname) ?>
+                                            </label>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                            <div class="form-text mt-2">Tip: leave all unchecked to show the manufacturer on every card.</div>
                         <?php endif; ?>
                     </div>
                 </div>

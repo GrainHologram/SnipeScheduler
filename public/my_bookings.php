@@ -307,6 +307,7 @@ layout_page_start([
                                                       action="delete_reservation.php"
                                                       onsubmit="return confirm('Delete reservation #<?= $resId ?>?\n\nThis will permanently remove the reservation and all its items. This cannot be undone.');">
                                                     <input type="hidden" name="reservation_id" value="<?= $resId ?>">
+                                                    <input type="hidden" name="from" value="my_bookings">
                                                     <button type="submit" class="btn btn-outline-danger btn-sm">
                                                         Delete reservation
                                                     </button>
@@ -409,6 +410,7 @@ layout_page_start([
                                                           action="delete_reservation.php"
                                                           onsubmit="return confirm('Delete reservation #<?= $resId ?>?\n\nThis will permanently remove the reservation and all its items. This cannot be undone.');">
                                                         <input type="hidden" name="reservation_id" value="<?= $resId ?>">
+                                                        <input type="hidden" name="from" value="my_bookings">
                                                         <button type="submit" class="btn btn-outline-danger btn-sm">
                                                             Delete reservation
                                                         </button>

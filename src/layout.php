@@ -89,14 +89,43 @@ if (!function_exists('layout_adjust_lightness')) {
     }
 }
 
+if (!function_exists('layout_asset_version')) {
+    /**
+     * Returns the current git commit hash (7 chars) used as a cache-busting query param.
+     * Returns '' when the git HEAD file can't be read.
+     */
+    function layout_asset_version(): string
+    {
+        static $hash = null;
+        if ($hash !== null) {
+            return $hash;
+        }
+        $hash = '';
+        $headFile = APP_ROOT . '/.git/HEAD';
+        if (is_file($headFile)) {
+            $head = trim((string)@file_get_contents($headFile));
+            if (str_starts_with($head, 'ref: ')) {
+                $refPath = APP_ROOT . '/.git/' . substr($head, 5);
+                if (is_file($refPath)) {
+                    $hash = substr(trim((string)@file_get_contents($refPath)), 0, 7);
+                }
+            } else {
+                $hash = substr($head, 0, 7);
+            }
+        }
+        return $hash;
+    }
+}
+
 if (!function_exists('layout_stylesheet_url')) {
     /**
-     * Return the stylesheet URL.
+     * Return the stylesheet URL with a cache-busting version param.
      * Usage in page templates: <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
      */
     function layout_stylesheet_url(?array $cfg = null): string
     {
-        return 'assets/style.css';
+        $v = layout_asset_version();
+        return 'assets/style.css' . ($v !== '' ? '?v=' . $v : '');
     }
 }
 
@@ -154,7 +183,8 @@ if (!function_exists('layout_render_nav')) {
         $currentTab   = $_GET['tab'] ?? 'kits';
 
         $links = [
-            ['href' => 'index.php',       'label' => 'Dashboard', 'staff' => false, 'icon' => 'bi-speedometer2'],
+            ['type' => 'header', 'label' => 'Overview',    'staff' => false],
+            ['href' => 'index.php',       'label' => 'Dashboard', 'staff' => false, 'icon' => 'bi-grid-fill'],
             ['href' => 'my_bookings.php', 'label' => 'My Gear',   'staff' => false, 'icon' => 'bi-calendar-check'],
             ['href' => 'reservations.php',            'label' => 'Reservations',      'staff' => true,  'icon' => 'bi-calendar3'],
 
@@ -172,7 +202,7 @@ if (!function_exists('layout_render_nav')) {
 
         $html = '<nav id="app-nav" class="app-nav" aria-label="Main navigation">'
               . '<button class="app-nav-hamburger" type="button" aria-label="Expand navigation" aria-expanded="false" aria-controls="app-nav"><i class="bi bi-list" aria-hidden="true"></i></button>'
-              . '<a href="index.php" class="app-nav-brand">Wrap It</a>';
+              . '<a href="index.php" class="app-nav-brand">Wrap It<span class="app-nav-alpha-tag">Alpha</span></a>';
         foreach ($links as $link) {
             if (isset($link['enabled']) && !$link['enabled']) {
                 continue;
@@ -283,19 +313,7 @@ if (!function_exists('layout_render_topbar')) {
             $html .= '<span class="app-topbar-subtitle" id="app-topbar-crumb-1">' . htmlspecialchars($subtitle, ENT_QUOTES, 'UTF-8') . '</span>';
         }
         $html .= '</span>';
-        if ($active === 'catalogue.php') {
-            $html .= '<div class="cat-topbar-view">';
-            $html .= '<button type="button" class="cat-topbar-view-btn cat-view-toggle" id="cat-view-btn-top" aria-haspopup="true" aria-expanded="false">';
-            $html .= '<i class="bi bi-list-ul" id="cat-view-icon-top" aria-hidden="true"></i>';
-            $html .= '<span id="cat-view-label-top">List</span>';
-            $html .= '<svg class="cat-toggle-chevron ms-1" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-            $html .= '</button>';
-            $html .= '<div class="cat-view-menu" id="cat-view-menu-top" hidden>';
-            $html .= '<button type="button" class="cat-view-option" data-view="list"><i class="bi bi-list-ul" aria-hidden="true"></i> List</button>';
-            $html .= '<button type="button" class="cat-view-option" data-view="grid"><i class="bi bi-grid" aria-hidden="true"></i> Grid</button>';
-            $html .= '</div>';
-            $html .= '</div>';
-        }
+
         if ($active === 'catalogue.php') {
             $html .= '<a href="basket.php" class="app-topbar-basket"><i class="bi bi-basket" aria-hidden="true"></i> View Basket</a>';
         }
@@ -413,30 +431,19 @@ if (!function_exists('layout_footer')) {
         $version     = $versionRaw !== '' ? $versionRaw : 'dev';
         $versionEsc  = htmlspecialchars($version, ENT_QUOTES, 'UTF-8');
 
-        $commitHash = '';
-        $headFile = APP_ROOT . '/.git/HEAD';
-        if (is_file($headFile)) {
-            $head = trim((string)@file_get_contents($headFile));
-            if (str_starts_with($head, 'ref: ')) {
-                $refPath = APP_ROOT . '/.git/' . substr($head, 5);
-                if (is_file($refPath)) {
-                    $commitHash = substr(trim((string)@file_get_contents($refPath)), 0, 7);
-                }
-            } else {
-                $commitHash = substr($head, 0, 7);
-            }
-        }
+        $commitHash   = layout_asset_version();
+        $vSuffix      = $commitHash !== '' ? '?v=' . $commitHash : '';
         $commitSuffix = $commitHash !== '' ? ' (' . $commitHash . ')' : '';
 
-        echo '<script src="assets/nav.js"></script>';
+        echo '<script src="assets/nav.js' . $vSuffix . '"></script>';
         echo '<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>';
-        echo '<script src="assets/datetime-picker.js"></script>';
+        echo '<script src="assets/datetime-picker.js' . $vSuffix . '"></script>';
 
         // QZ Tray receipt printing (staff only)
         $qzConfig = load_config()['qz_tray'] ?? [];
         if (!empty($qzConfig['enabled']) && (!empty($_SESSION['user']['is_staff']) || !empty($_SESSION['user']['is_admin']))) {
             echo '<script src="https://cdn.jsdelivr.net/npm/qz-tray@2/qz-tray.js"></script>';
-            echo '<script src="assets/qz-print.js"></script>';
+            echo '<script src="assets/qz-print.js' . $vSuffix . '"></script>';
             echo '<script>SnipePrint.init(' . json_encode([
                 'connectionType' => $qzConfig['connection_type'] ?? 'usb',
                 'printerName'    => $qzConfig['printer_name'] ?? '',

@@ -82,6 +82,7 @@
     /* Status */
     --status-info: #3b82f6;
     --status-success: #22c55e;
+    --status-success-rgb: 34, 197, 94;
     --badge-secondary: #5a6268;
     --badge-danger: #b02a37;
 
@@ -357,7 +358,7 @@ input[type="checkbox"] {
     display: flex;
     flex-direction: column;
     flex-wrap: nowrap;
-    gap: 0.25rem;
+    gap: 1px;
     align-items: stretch;
     justify-content: flex-start;
     padding: calc((var(--topbar-height) - 1.3em) / 2) 0.75rem 2rem;
@@ -389,7 +390,7 @@ input[type="checkbox"] {
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: rgba(var(--white-rgb), 0.35);
-    padding: 0.9rem 0.75rem 0.25rem;
+    padding: 0.75rem 0.75rem 0.2rem;
 }
 
 .app-nav-brand,
@@ -405,55 +406,59 @@ input[type="checkbox"] {
     text-decoration: none;
 }
 
+.app-nav-alpha-tag {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--alert-danger);
+    margin-top: 0.15rem;
+}
+
 .app-nav-link,
 .app-nav-link:visited {
-    padding: 0.3rem 0.75rem;
-    border-radius: 0.4rem;
+    padding: 0.5rem 0.625rem;
+    border-radius: 0.44rem;
     text-decoration: none;
-    font-size: 0.92rem;
+    font-size: 0.82rem;
     font-weight: 500;
-    color: var(--white);
+    color: var(--muted);
     background: transparent;
     border: none;
     box-shadow: none;
     margin-left: 0 !important;
-    transition: background 0.15s ease;
+    transition: background 0.2s ease, color 0.2s ease;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.625rem;
 }
 
 .app-nav-icon {
-    font-size: 1rem;
-    opacity: 0.75;
+    font-size: 0.9rem;
     flex-shrink: 0;
     width: 1.1em;
     text-align: center;
 }
 
-.app-nav-link.active .app-nav-icon,
-.app-nav-link:hover .app-nav-icon {
-    opacity: 1;
-}
-
 .app-nav-link:hover {
-    background: rgba(var(--white-rgb), 0.15);
-    color: var(--white);
+    background: var(--surface-card);
+    color: var(--text);
     transform: none;
     box-shadow: none;
 }
 
 .app-nav-link:focus-visible {
-    background: rgba(var(--white-rgb), 0.15);
-    color: var(--white);
+    background: var(--surface-card);
+    color: var(--text);
     outline: 2px solid var(--white);
     outline-offset: 2px;
 }
 
 .app-nav-link.active {
-    background: rgba(var(--white-rgb), 0.15);
+    background: var(--surface-card);
     border-color: transparent;
-    color: var(--white);
+    color: var(--text);
     font-weight: 600;
     box-shadow: none;
 }
@@ -845,10 +850,6 @@ button.app-topbar-crumb--link {
     justify-content: center;
 }
 
-/* Hide view toggle while detail view is open */
-body[data-detail-open] .cat-topbar-view {
-    display: none;
-}
 
 /* Collapsible history panels in the detail view */
 .mh-panel {
@@ -1172,6 +1173,306 @@ body[data-detail-open] .cat-topbar-view {
     font-size: 0.85rem;
     color: var(--placeholder);
     text-align: center;
+}
+
+/* --------------------------------------------------
+   Catalogue card v2 (redesigned grid cards)
+   Scoped to .model-card-v2 so mobile list view is unaffected.
+-------------------------------------------------- */
+
+/* Override the base gradient and the global .card { background: var(--black) } rule.
+   Two-class selector (.card.model-card-v2) gives specificity (0,2,0) which beats
+   the single-class .card rule at (0,1,0) regardless of source order. */
+.card.model-card-v2 {
+    background: var(--surface);
+    --bs-card-bg: var(--surface);
+    overflow: hidden;
+    transition: border-color 0.2s;
+}
+
+.model-card-v2:hover {
+    border-color: rgba(var(--text-rgb), 0.5) !important;
+}
+
+/* Image area */
+.model-card-v2 .card-img-area {
+    position: relative;
+    height: 170px;
+    overflow: hidden;
+    border-radius: 0.9rem 0.9rem 0 0;
+    background: var(--bg);
+}
+
+.model-card-v2 .card-img-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
+.model-card-v2 .card-img-link .model-image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    transition: transform 0.3s ease;
+}
+
+.model-card-v2:hover .card-img-link .model-image {
+    transform: scale(1.06);
+}
+
+.model-card-v2 .card-img-link .model-image-placeholder {
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.model-card-v2 .card-img-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+}
+
+/* overlay intentionally kept hidden — hover shows border outline + image zoom instead */
+
+.overlay-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    border: 1px solid rgba(var(--text-rgb), 0.3);
+    padding: 7px 16px;
+    border-radius: 7px;
+    backdrop-filter: blur(4px);
+}
+
+/* Meta row: category tag + availability badge */
+.model-card-v2 .card-meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.cat-tag {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.avail-badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 99px;
+}
+
+.avail-badge.avail-on {
+    background: rgba(var(--status-success-rgb), 0.12);
+    color: var(--status-success);
+}
+
+.avail-badge.avail-off {
+    background: rgba(var(--alert-danger-rgb), 0.12);
+    color: var(--alert-danger);
+}
+
+/* Item name (manufacturer prefix + model name on one line) */
+.model-card-v2 .card-name {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.3;
+    margin-bottom: 4px;
+}
+
+.card-manu-prefix {
+    color: var(--text);
+    font-weight: 400;
+}
+
+/* Notes / specs */
+.model-card-v2 .card-specs {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 10px;
+}
+
+/* Footer */
+.model-card-v2 .card-footer-v2 {
+    padding: 10px 14px 12px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.model-card-v2 .card-footer-v2 .card-actions-form {
+    margin: 0;
+    width: 100%;
+}
+
+.model-card-v2 .card-footer-v2 .card-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    width: 100%;
+}
+
+/* Mock-style buttons scoped to v2 cards */
+.card-btn-ghost {
+    background: var(--surface-card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 5px 12px;
+    transition: border-color 0.15s, color 0.15s;
+}
+
+.card-btn-ghost:hover:not(:disabled) {
+    border-color: var(--muted);
+    color: var(--text);
+    background: var(--surface-card);
+}
+
+.card-btn-ghost:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.card-btn-primary {
+    background: var(--text);
+    color: var(--surface);
+    border: 1px solid transparent;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 12px;
+    transition: opacity 0.15s;
+}
+
+.card-btn-primary:hover {
+    background: var(--text);
+    color: var(--surface);
+    opacity: 0.88;
+}
+
+/* No purple visited color, no highlight on hover */
+.model-card-v2 .model-history-link,
+.model-card-v2 .model-history-link:visited,
+.model-card-v2 .model-history-link:hover,
+.model-card-v2 .card-img-link,
+.model-card-v2 .card-img-link:visited,
+.model-card-v2 .card-img-link:hover {
+    color: var(--text);
+    text-decoration: none;
+}
+
+/* Split "Add to Basket | ▲ qty ▼" pill for multi-unit cards */
+.btn-qty-group {
+    display: inline-flex;
+    align-items: stretch;
+    background: var(--text);
+    border-radius: 0.25rem;
+    overflow: hidden;
+    height: 30px;
+}
+
+.btn-qty-add {
+    background: transparent;
+    color: var(--surface);
+    border: none;
+    padding: 0 11px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+}
+
+.btn-qty-add:hover {
+    background: rgba(var(--black-rgb), 0.08);
+}
+
+.btn-qty-sep {
+    width: 1px;
+    background: rgba(var(--black-rgb), 0.18);
+    margin: 4px 0;
+    flex-shrink: 0;
+}
+
+.btn-qty-ctrl {
+    display: flex;
+    align-items: stretch;
+    width: 36px;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.btn-qty-num {
+    background: transparent;
+    border: none;
+    color: var(--surface);
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 0;
+    outline: none;
+    -moz-appearance: textfield;
+}
+
+.btn-qty-num::-webkit-outer-spin-button,
+.btn-qty-num::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.btn-qty-arrows {
+    display: flex;
+    flex-direction: column;
+    width: 14px;
+    border-left: 1px solid rgba(var(--black-rgb), 0.15);
+}
+
+.btn-qty-arr {
+    background: transparent;
+    border: none;
+    color: var(--surface);
+    flex: 1;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 7px;
+    opacity: 0.6;
+    transition: background 0.1s, opacity 0.1s;
+}
+
+.btn-qty-arr:hover {
+    background: rgba(var(--black-rgb), 0.1);
+    opacity: 1;
+}
+
+.btn-qty-up {
+    border-bottom: 1px solid rgba(var(--black-rgb), 0.12);
+}
+
+/* Extend whole-card overlay to new card structure */
+.model-card-v2 .model-history-link::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
 }
 
 /* Thumbnails for reservation checkout model selector */
@@ -3396,21 +3697,15 @@ body.page-catalogue {
     .app-nav.app-nav--expanded .app-nav-link,
     .app-nav.app-nav--expanded .app-nav-link:visited {
         justify-content: flex-start;
-        padding: 0.3rem 0.75rem;
-        gap: 0.5rem;
+        padding: 0.5rem 0.625rem;
+        gap: 0.625rem;
         min-height: unset;
         min-width: unset;
     }
 
     .app-nav.app-nav--expanded .app-nav-icon {
-        font-size: 1rem;
-        opacity: 0.75;
+        font-size: 0.9rem;
         width: 1.1em;
-    }
-
-    .app-nav.app-nav--expanded .app-nav-link.active .app-nav-icon,
-    .app-nav.app-nav--expanded .app-nav-link:hover .app-nav-icon {
-        opacity: 1;
     }
 }
 
@@ -3482,20 +3777,14 @@ body.page-catalogue {
     .app-nav-link,
     .app-nav-link:visited {
         justify-content: flex-start;
-        padding: 0.3rem 0.75rem;
+        padding: 0.5rem 0.625rem;
         min-height: 44px;
-        gap: 0.5rem;
+        gap: 0.625rem;
     }
 
     .app-nav-icon {
-        font-size: 1rem;
-        opacity: 0.75;
+        font-size: 0.9rem;
         width: 1.1em;
-    }
-
-    .app-nav-link.active .app-nav-icon,
-    .app-nav-link:hover .app-nav-icon {
-        opacity: 1;
     }
 }
 
@@ -4200,155 +4489,7 @@ body.page-catalogue {
     min-width: 0;
 }
 
-/* Sidebar view toggle: visible on desktop, side-by-side with sort */
-.cat-view-dropdown {
-    display: block;
-    position: relative;
-}
 
-/* Shrink controls to fit side-by-side in the narrow sidebar */
-.cat-sort-view-row .cat-toggle-btn {
-    font-size: 0.8rem;
-    padding: 0.28rem 0.45rem;
-}
-
-.cat-sort-view-row .form-label {
-    font-size: 0.75rem;
-}
-
-.catalogue-filter-sidebar .cat-sort-view-row .cat-rounded-select {
-    font-size: 0.8rem;
-    padding-left: 0.45rem;
-    padding-right: 1.5rem;
-}
-
-/* Mobile: topbar toggle hidden (sidebar toggle replaces it) */
-@media (max-width: 599px) {
-    .cat-topbar-view {
-        display: none !important;
-    }
-}
-
-/* ---- View toggle dropdown menu (absolute — does not push content) ---- */
-.cat-view-menu {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    min-width: 110px;
-    z-index: 300;
-    background: var(--cat-option-bg);
-    border: 1px solid var(--border);
-    border-top: none;
-    border-radius: 0 0 0.5rem 0.5rem;
-    overflow: hidden;
-}
-
-.cat-view-toggle[aria-expanded="true"] {
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-}
-
-/* Sidebar option buttons inherit .cat-option styles; topbar options need their own */
-.cat-view-option {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.45rem 0.75rem;
-    cursor: pointer;
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--text);
-    background: transparent;
-    border: none;
-    width: 100%;
-    text-align: left;
-    white-space: nowrap;
-}
-
-.cat-view-option+.cat-view-option {
-    border-top: 1px solid var(--border);
-}
-
-.cat-view-option:hover {
-    background: var(--cat-option-hover-bg);
-}
-
-.cat-view-option:focus-visible {
-    outline: 2px solid var(--primary);
-    outline-offset: -2px;
-}
-
-.cat-view-option.active {
-    background: rgba(var(--primary-rgb), 0.14);
-    color: var(--primary);
-    font-weight: 700;
-}
-
-/* ---- Topbar view toggle (desktop) — hidden; toggle moved to sidebar ---- */
-.cat-topbar-view {
-    display: none;
-}
-
-.cat-topbar-view-btn {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.28rem 0.6rem;
-    background: rgba(var(--white-rgb), 0.08);
-    border: 1px solid rgba(var(--white-rgb), 0.2);
-    border-radius: 0.4rem;
-    color: var(--white);
-    font-size: 0.82rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s ease;
-    white-space: nowrap;
-    line-height: 1.4;
-}
-
-.cat-topbar-view-btn:hover {
-    background: rgba(var(--white-rgb), 0.15);
-    border-color: rgba(var(--white-rgb), 0.35);
-}
-
-.cat-topbar-view-btn:focus-visible {
-    outline: 2px solid var(--white);
-    outline-offset: 2px;
-}
-
-.cat-topbar-view-btn[aria-expanded="true"] {
-    background: rgba(var(--white-rgb), 0.12);
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-}
-
-/* Topbar dropdown: darker colours to match the black topbar */
-.cat-topbar-view .cat-view-menu {
-    background: var(--surface-deep);
-    border-color: rgba(var(--white-rgb), 0.18);
-}
-
-.cat-topbar-view .cat-view-option {
-    color: var(--window-modal-slot-text);
-}
-
-.cat-topbar-view .cat-view-option+.cat-view-option {
-    border-top-color: rgba(var(--white-rgb), 0.1);
-}
-
-.cat-topbar-view .cat-view-option:hover {
-    background: rgba(var(--white-rgb), 0.1);
-}
-
-.cat-topbar-view .cat-view-option:focus-visible {
-    outline: 2px solid rgba(var(--white-rgb), 0.8);
-    outline-offset: -2px;
-}
-
-.cat-topbar-view .cat-view-option.active {
-    background: rgba(var(--primary-rgb), 0.35);
-    color: var(--white);
-}
 
 /* Sidebar user suggestions — allow popover to grow wider than the input */
 .cat-sidebar-user-card #booking_user_suggestions {
@@ -4357,7 +4498,7 @@ body.page-catalogue {
     min-width: 0;
 }
 
-/* ---- New wrapper base styles (grid view) ---- */
+/* ---- Catalogue card base styles (desktop grid) ---- */
 
 /* model-nameline and model-card-right are layout helpers; in grid view they
    act as transparent pass-through containers via display:contents */
@@ -4369,7 +4510,7 @@ body.page-catalogue {
     display: contents;
 }
 
-/* Manufacturer span: block element below the title in grid view (base/v1 fallback) */
+/* Manufacturer span: block element below the title in grid view */
 .model-meta-manufacturer {
     display: block;
     font-size: 1rem;
@@ -4380,23 +4521,23 @@ body.page-catalogue {
     display: none;
 }
 
-/* Grid view: divider below name section — on card-title by default,
+/* Divider below name section — on card-title by default,
    moves to manufacturer span when one is present. */
-.catalogue-scroll-area[data-catalogue-view="grid"] .card-title,
-.catalogue-scroll-area[data-catalogue-view="grid"] .model-meta-manufacturer {
+.catalogue-scroll-area .card-title,
+.catalogue-scroll-area .model-meta-manufacturer {
     border-bottom: 1px solid var(--border);
     padding-bottom: 0.55rem;
     margin-bottom: 0.5rem;
 }
 
-.catalogue-scroll-area[data-catalogue-view="grid"] .card-title:has(+ .model-meta-manufacturer) {
+.catalogue-scroll-area .card-title:has(+ .model-meta-manufacturer) {
     border-bottom: none;
     padding-bottom: 0;
     margin-bottom: 0;
 }
 
-/* Grid view: add-to-basket button left, quantity input right */
-.catalogue-scroll-area[data-catalogue-view="grid"] .add-to-basket-form {
+/* add-to-basket button left, quantity input right */
+.catalogue-scroll-area .add-to-basket-form {
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -4404,178 +4545,47 @@ body.page-catalogue {
     flex-wrap: wrap;
 }
 
-.catalogue-scroll-area[data-catalogue-view="grid"] .add-to-basket-form .row.g-2 {
+.catalogue-scroll-area .add-to-basket-form .row.g-2 {
     flex: 0 0 auto;
     margin: 0;
     order: 2;
 }
 
-.catalogue-scroll-area[data-catalogue-view="grid"] .add-to-basket-form .col-6 {
+.catalogue-scroll-area .add-to-basket-form .col-6 {
     flex: unset;
     width: auto;
     padding: 0;
 }
 
-.catalogue-scroll-area[data-catalogue-view="grid"] .add-to-basket-form label {
+.catalogue-scroll-area .add-to-basket-form label {
     display: none;
 }
 
-.catalogue-scroll-area[data-catalogue-view="grid"] .add-to-basket-form input[name="quantity"] {
+.catalogue-scroll-area .add-to-basket-form input[name="quantity"] {
     width: 58px;
     text-align: center;
 }
 
-.catalogue-scroll-area[data-catalogue-view="grid"] .add-to-basket-form .btn-success {
+.catalogue-scroll-area .add-to-basket-form .btn-success {
     flex: 1 0 auto;
     width: auto !important;
     order: 1;
 }
 
-/* Availability div: small muted text just above the form in grid view */
+/* Availability div: small muted text above the form */
 .model-meta-availability {
     font-size: 0.8rem;
     color: var(--muted);
     margin-bottom: 0.25rem;
 }
 
-/* Grid view: requestable/available side by side with extra spacing */
-.catalogue-scroll-area[data-catalogue-view="grid"] .model-meta-availability {
+/* Requestable/available side by side */
+.catalogue-scroll-area .model-meta-availability {
     display: flex;
     flex-direction: row;
     gap: 1rem;
     flex-wrap: wrap;
     margin-bottom: 0.5rem;
-}
-
-/* ---- Catalogue list view ---- */
-
-/* Outer padding */
-.catalogue-scroll-area[data-catalogue-view="list"] {
-    padding: 1.5rem;
-}
-
-/* Full-width rows — zero out Bootstrap's g-3 gutter margin (--bs-gutter-y)
-   so it doesn't stack on top of our gap */
-.catalogue-scroll-area[data-catalogue-view="list"] .row.g-3 {
-    --bs-gutter-y: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.8rem;
-}
-
-.catalogue-scroll-area[data-catalogue-view="list"] .col-md-4 {
-    width: 100%;
-    max-width: 100%;
-    flex: 0 0 100%;
-    padding: 0;
-}
-
-/* Card: horizontal row, solid black, border only — no gradient, no shadow */
-.catalogue-scroll-area[data-catalogue-view="list"] .model-card {
-    flex-direction: row;
-    align-items: stretch;
-    background: var(--black);
-    box-shadow: none;
-    border-radius: 0.5rem;
-}
-
-/* Thumbnail: fixed square, image fills it with contain */
-.catalogue-scroll-area[data-catalogue-view="list"] .model-image-wrapper,
-.catalogue-scroll-area[data-catalogue-view="list"] .model-image-wrapper--placeholder {
-    width: 110px;
-    min-width: 110px;
-    height: 110px;
-    flex-shrink: 0;
-    align-self: center;
-    border-bottom: none;
-    border-right: 1px solid var(--border-image-sep);
-    border-radius: 0.5rem 0 0 0.5rem;
-    padding: 8px 0 8px 8px;
-    overflow: hidden;
-}
-
-/* Image fills the square, scales to fit while keeping aspect ratio */
-.catalogue-scroll-area[data-catalogue-view="list"] .model-image {
-    width: 100%;
-    height: 100%;
-    max-width: unset;
-    max-height: unset;
-    object-fit: contain;
-}
-
-/* Card body: CSS grid — content left, actions right.
-   !important beats Bootstrap's d-flex utility class. */
-.catalogue-scroll-area[data-catalogue-view="list"] .card-body {
-    flex: 1;
-    min-width: 0;
-    display: grid !important;
-    grid-template-columns: 1fr 210px;
-    grid-template-rows: auto 1fr auto;
-    padding: 0.55rem 0;
-    align-items: start;
-}
-
-/* Row 1: item name + manufacturer inline */
-.catalogue-scroll-area[data-catalogue-view="list"] .model-nameline {
-    display: flex;
-    align-items: baseline;
-    gap: 0.55rem;
-    grid-column: 1;
-    grid-row: 1;
-    min-width: 0;
-    padding: 0 1rem;
-}
-
-.catalogue-scroll-area[data-catalogue-view="list"] .card-title {
-    font-size: 1.15rem;
-    font-weight: 600;
-    margin-bottom: 0;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex-shrink: 1;
-}
-
-/* Manufacturer: greyer, smaller, inline */
-.catalogue-scroll-area[data-catalogue-view="list"] .model-meta-manufacturer {
-    display: inline;
-    font-size: 0.95rem;
-    color: var(--muted);
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-.catalogue-scroll-area[data-catalogue-view="list"] .model-meta-manufacturer strong {
-    display: none;
-}
-
-/* Row 2: notes */
-.catalogue-scroll-area[data-catalogue-view="list"] .card-text {
-    grid-column: 1;
-    grid-row: 2;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    margin-bottom: 0;
-    padding: 0.2rem 1rem 0.3rem;
-}
-
-/* Notes: white, 2-line clamp */
-.catalogue-scroll-area[data-catalogue-view="list"] .model-meta-notes {
-    color: var(--text);
-    font-size: 0.82rem;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-}
-
-/* Row 3: tag pills (category + certs + access levels) */
-.catalogue-scroll-area[data-catalogue-view="list"] .model-card-tags {
-    grid-column: 1;
-    grid-row: 3;
-    padding: 0 1rem 0.55rem;
 }
 
 /* Base pill style shared by all tag types */
@@ -4636,156 +4646,146 @@ body.page-catalogue {
     opacity: 0.45;
 }
 
-/* Right panel: availability + qty+button row, vertically centred */
-.catalogue-scroll-area[data-catalogue-view="list"] .model-card-right {
-    grid-column: 2;
-    grid-row: 1 / span 3;
-    display: flex !important;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    justify-self: center;
-    align-self: stretch;
-    gap: 0.55rem;
-    padding: 0.55rem 1rem;
-    text-align: center;
-}
-
-/* Availability counts: centred, stacked */
-.catalogue-scroll-area[data-catalogue-view="list"] .model-meta-availability {
-    display: flex;
-    flex-direction: column;
-    gap: 0.05rem;
-    font-size: 0.8rem;
-    color: var(--muted);
-    text-align: center;
-    line-height: 1.5;
-    flex: 1;
-    justify-content: center;
-}
-
-.catalogue-scroll-area[data-catalogue-view="list"] .model-meta-requestable,
-.catalogue-scroll-area[data-catalogue-view="list"] .model-meta-available {
-    display: flex;
-    align-items: center;
-}
-
-/* Form: the form itself becomes a flex row so qty div + button sit side by side */
-.catalogue-scroll-area[data-catalogue-view="list"] .add-to-basket-form {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 0.4rem;
-    margin-top: 0;
-    width: 100%;
-}
-
-/* Qty wrapper: shrink-wrap the input, placed to the right of the button */
-.catalogue-scroll-area[data-catalogue-view="list"] .add-to-basket-form .row.g-2 {
-    flex: 0 0 auto;
-    display: block;
-    margin: 0;
-    padding: 0;
-    width: auto;
-    order: 2;
-}
-
-.catalogue-scroll-area[data-catalogue-view="list"] .add-to-basket-form .col-6 {
-    flex: unset;
-    width: auto;
-    padding: 0;
-}
-
-/* Hide the Quantity label */
-.catalogue-scroll-area[data-catalogue-view="list"] .add-to-basket-form label {
-    display: none;
-}
-
-/* Qty input: compact fixed width */
-.catalogue-scroll-area[data-catalogue-view="list"] .add-to-basket-form input[name="quantity"] {
-    width: 58px;
-    text-align: center;
-}
-
-/* Hide disabled (access/cert blocked) add-to-basket buttons — v2 shows only the warning alert */
+/* Hide disabled (access/cert blocked) add-to-basket buttons */
 .add-to-basket-form button[disabled] {
     display: none;
 }
 
-/* Hide the entire form unless it has an enabled button */
-.catalogue-scroll-area[data-catalogue-view="list"] .add-to-basket-form:not(:has(button:not([disabled]))) {
-    display: none !important;
-}
-
-/* Add to basket button: bigger, fills remaining width, placed left of qty */
-.catalogue-scroll-area[data-catalogue-view="list"] .add-to-basket-form .btn-success {
-    flex: 1;
-    width: auto !important;
-    order: 1;
-    padding: 0.4rem 0.8rem;
-    font-size: 0.85rem;
-    white-space: nowrap;
-}
-
-
-/* Mobile: keep horizontal row, collapse right panel below title */
+/* ---- Catalogue list view (mobile ≤ 767px) ---- */
 @media (max-width: 767px) {
-    .catalogue-scroll-area[data-catalogue-view="list"] .model-card {
+    .catalogue-scroll-area {
+        padding: 1.5rem;
+    }
+
+    .catalogue-scroll-area .row.g-3 {
+        --bs-gutter-y: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.8rem;
+    }
+
+    .catalogue-scroll-area .col-md-4 {
+        width: 100%;
+        max-width: 100%;
+        flex: 0 0 100%;
+        padding: 0;
+    }
+
+    .catalogue-scroll-area .model-card {
         flex-direction: row;
         align-items: stretch;
+        background: var(--black);
+        box-shadow: none;
+        border-radius: 0.5rem;
         overflow: hidden;
     }
 
-    .catalogue-scroll-area[data-catalogue-view="list"] .model-image-wrapper,
-    .catalogue-scroll-area[data-catalogue-view="list"] .model-image-wrapper--placeholder {
+    .catalogue-scroll-area .model-image-wrapper,
+    .catalogue-scroll-area .model-image-wrapper--placeholder {
         width: 80px;
         min-width: 80px;
         height: auto;
+        flex-shrink: 0;
         align-self: stretch;
-        border-right: 1px solid var(--border-image-sep);
         border-bottom: none;
+        border-right: 1px solid var(--border-image-sep);
         border-radius: 0.5rem 0 0 0.5rem;
         padding: 6px 0 6px 6px;
+        overflow: hidden;
+    }
+
+    .catalogue-scroll-area .model-image {
+        width: 100%;
+        height: 100%;
+        max-width: unset;
+        max-height: unset;
+        object-fit: contain;
     }
 
     /* Single-column grid: title → notes → tags → actions */
-    .catalogue-scroll-area[data-catalogue-view="list"] .card-body {
+    .catalogue-scroll-area .card-body {
+        flex: 1;
+        min-width: 0;
         display: grid !important;
         grid-template-columns: minmax(0, 1fr);
         grid-template-rows: auto auto auto auto;
         padding: 0.5rem 0;
         align-items: start;
-        min-width: 0;
     }
 
-    .catalogue-scroll-area[data-catalogue-view="list"] .model-nameline {
+    /* Reset desktop grid-view title border */
+    .catalogue-scroll-area .card-title,
+    .catalogue-scroll-area .model-meta-manufacturer {
+        border-bottom: none;
+        padding-bottom: 0;
+        margin-bottom: 0;
+    }
+
+    .catalogue-scroll-area .model-nameline {
+        display: flex;
+        align-items: baseline;
+        gap: 0.55rem;
         grid-column: 1;
         grid-row: 1;
         min-width: 0;
+        padding: 0 1rem;
     }
 
-    /* Manufacturer shrinks before the model name */
-    .catalogue-scroll-area[data-catalogue-view="list"] .model-meta-manufacturer {
+    .catalogue-scroll-area .card-title {
+        font-size: 1.15rem;
+        font-weight: 600;
+        margin-bottom: 0;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex-shrink: 1;
+    }
+
+    .catalogue-scroll-area .model-meta-manufacturer {
+        display: inline;
+        font-size: 0.95rem;
+        color: var(--muted);
+        white-space: nowrap;
         flex-shrink: 5;
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
     }
 
-    .catalogue-scroll-area[data-catalogue-view="list"] .card-text {
+    .catalogue-scroll-area .model-meta-manufacturer strong {
+        display: none;
+    }
+
+    .catalogue-scroll-area .card-text {
         grid-column: 1;
         grid-row: 2;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        margin-bottom: 0;
+        padding: 0.2rem 1rem 0.3rem;
         min-width: 0;
     }
 
-    .catalogue-scroll-area[data-catalogue-view="list"] .model-card-tags {
+    .catalogue-scroll-area .model-meta-notes {
+        color: var(--text);
+        font-size: 0.82rem;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+    }
+
+    .catalogue-scroll-area .model-card-tags {
         grid-column: 1;
         grid-row: 3;
+        padding: 0 1rem 0.55rem;
         min-width: 0;
     }
 
-    /* Actions row: availability left, form right; wraps to stack when narrow */
-    .catalogue-scroll-area[data-catalogue-view="list"] .model-card-right {
+    /* Actions row: availability left, form right */
+    .catalogue-scroll-area .model-card-right {
         grid-column: 1;
         grid-row: 4;
         display: flex !important;
@@ -4802,20 +4802,72 @@ body.page-catalogue {
         gap: 0.5rem;
     }
 
-    /* Availability counts: left side of the actions row */
-    .catalogue-scroll-area[data-catalogue-view="list"] .model-meta-availability {
+    .catalogue-scroll-area .model-meta-availability {
+        display: flex;
         flex-direction: row;
         flex-wrap: wrap;
         gap: 0.3rem 0.5rem;
         flex: 0 1 auto;
         min-width: 0;
+        margin-bottom: 0;
+        font-size: 0.8rem;
+        color: var(--muted);
+        text-align: left;
+        line-height: 1.5;
     }
 
-    /* Form: right side; shrinks but doesn't overflow */
-    .catalogue-scroll-area[data-catalogue-view="list"] .add-to-basket-form {
+    .catalogue-scroll-area .model-meta-requestable,
+    .catalogue-scroll-area .model-meta-available {
+        display: flex;
+        align-items: center;
+    }
+
+    .catalogue-scroll-area .add-to-basket-form {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 0.4rem;
+        margin-top: 0;
         flex: 0 1 auto;
         min-width: 0;
         flex-wrap: nowrap;
+    }
+
+    .catalogue-scroll-area .add-to-basket-form .row.g-2 {
+        flex: 0 0 auto;
+        display: block;
+        margin: 0;
+        padding: 0;
+        width: auto;
+        order: 2;
+    }
+
+    .catalogue-scroll-area .add-to-basket-form .col-6 {
+        flex: unset;
+        width: auto;
+        padding: 0;
+    }
+
+    .catalogue-scroll-area .add-to-basket-form label {
+        display: none;
+    }
+
+    .catalogue-scroll-area .add-to-basket-form input[name="quantity"] {
+        width: 58px;
+        text-align: center;
+    }
+
+    .catalogue-scroll-area .add-to-basket-form:not(:has(button:not([disabled]))) {
+        display: none !important;
+    }
+
+    .catalogue-scroll-area .add-to-basket-form .btn-success {
+        flex: 1;
+        width: auto !important;
+        order: 1;
+        padding: 0.4rem 0.8rem;
+        font-size: 0.85rem;
+        white-space: nowrap;
     }
 }
 
