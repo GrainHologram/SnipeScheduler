@@ -268,8 +268,9 @@
 
     /**
      * QR-only label (2" × 1", 203 dpi → 406 × 203 dots).
-     * Three QR codes of decreasing magnification (5/3/2) across the top
-     * with the asset_tag under each. No description, no Code 128.
+     * Three QR codes of decreasing magnification (4/3/2) with different
+     * error-correction levels (Q/Q/H) plus a DataMatrix code, and the
+     * asset_tag printed in four sizes across the label.
      */
     function buildQrOnlyZpl(asset) {
         var tag = sanitizeZpl(asset.asset_tag);
@@ -281,18 +282,22 @@
             '^CI28',
             '^BY2,2',
             '^ARN,',
-            '^FT10,176^AKN,36^FB126,1,0,C^FD' + tag + '\\&^FS',
-            '^FT200,112^AKN,22^FB74,1,0,C^FD' + tag + '\\&^FS',
-            '^FT340,82^AKN,16^FB52,1,0,C^FD' + tag + '\\&^FS',
+            '^FT10,168^AKN,36^FB120,1,0,C^FD' + tag + '\\&^FS',
+            '^FT160,120^AKN,22^FB86,1,0,C^FD' + tag + '\\&^FS',
+            '^FT314,74^AKB,14^FB62,1,0,C^FD' + tag + '\\&^FS',
+            '^FT200,190^AKB,14^FB52,1,0,C^FD' + tag + '\\&^FS',
             '^FO10,5',
-            '^BQN,2,5',
-            '^FDLA,https://wrapit.us/v/' + tag + '^FS',
-            '^FO200,5',
+            '^BQN,2,4',
+            '^FDQA,https://wrapit.us/v/' + tag + '^FS',
+            '^FO160,5',
             '^BQN,2,3',
-            '^FDLA,https://wrapit.us/v/' + tag + '^FS',
-            '^FO340,5',
+            '^FDQA,https://wrapit.us/v/' + tag + '^FS',
+            '^FO320,5',
             '^BQN,2,2',
-            '^FDLA,https://wrapit.us/v/' + tag + '^FS',
+            '^FDHA,https://wrapit.us/v/' + tag + '^FS',
+            '^FO210,146',
+            '^BXN,5,200,,,,,2',
+            '^FD' + tag + '^FS',
             '^PQ1^XZ'
         ].join('\n');
     }
