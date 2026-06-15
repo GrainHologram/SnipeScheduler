@@ -92,7 +92,15 @@ foreach ($files as $f) {
     if ($fid <= 0 || $fnameRaw === '') continue;
     $ext       = strtolower(pathinfo($fnameRaw, PATHINFO_EXTENSION));
     $isTxt     = $ext === 'txt';
-    $isLinksTxt = $isTxt && strcasecmp($fnameRaw, 'links.txt') === 0;
+
+    // Snipe-IT stores files as "model-{id}-{hash}-{originalName}". Strip
+    // that prefix BEFORE any filename comparison or display.
+    $cleanName = preg_replace('/^model-\d+-[A-Za-z0-9]{6,16}-/', '', $fnameRaw);
+    if ($cleanName === null || $cleanName === '') {
+        $cleanName = $fnameRaw;
+    }
+
+    $isLinksTxt = $isTxt && strcasecmp($cleanName, 'links.txt') === 0;
 
     $downloadHref = 'v_file.php?model_id=' . $modelId . '&file_id=' . $fid;
 
@@ -102,13 +110,7 @@ foreach ($files as $f) {
     }
 
     if (!$isLinksTxt) {
-        // Snipe-IT stores files as "model-{id}-{hash}-{originalName}". Strip
-        // that prefix so users see the human filename. Prefer the uploader's
-        // note when present.
-        $cleanName = preg_replace('/^model-\d+-[A-Za-z0-9]{6,16}-/', '', $fnameRaw);
-        if ($cleanName === null || $cleanName === '') {
-            $cleanName = $fnameRaw;
-        }
+        // Prefer the uploader's note when present, otherwise the clean filename.
         $note = (string)($f['note'] ?? $f['notes'] ?? '');
         $primary = $note !== '' ? $note : $cleanName;
         $secondary = $note !== '' ? $cleanName : '';
