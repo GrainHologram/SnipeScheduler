@@ -229,8 +229,8 @@
 
     /**
      * Generic 2" × 1" label (203 dpi → 406 × 203 dots).
-     * Layout: large asset tag centered top, QR top-left, description below
-     * the asset tag, footer line, vertical Code 128 of the asset tag right edge.
+     * Layout: large asset_tag top-center under a small QR, horizontal rule,
+     * description (auto-sized) in the middle band, footer text at bottom.
      */
     function buildGenericZpl(asset) {
         var tag = sanitizeZpl(asset.asset_tag);
@@ -238,53 +238,81 @@
         var descField = buildDescriptionField(description);
         return [
             '^XA~TA000~JSN^LT5^LS5^MNW^MTT^PON^PMN^LH0,0^JMA^PR3,3~SD25^JUS^LRN^CI28^PW406^LL203^XZ',
-            // Fonts live in RAM (R:) — re-uploaded once per browser session
-            // (sessionStorage flag) so flash doesn't fragment from writes.
             '^XA^CWL,r:SWISS^XZ',
             '^XA^CWK,r:JBM_RG^XZ',
             '^XA',
             '^CI28',
             '^BY2,2',
             '^ARN,',
-            '^FT138,56^AKN,56^FB220,1,0,C^FD' + tag + '\\&^FS',
+            '^FT110,72^AKN,56^FB320,1,0,C^FD' + tag + '\\&^FS',
+            '^FO13,110,2',
+            '^GB380,2,2,,^FS',
             descField,
-            '^FO10,15',
-            '^BQN,2,5',
-            '^FDLA,https://wrapit.us/v/' + tag + '^FS',
-            '^FT0,186^A0N,14,14^FB346,1,0,C^FDProperty of Southern Adventist University-SVAD\\&^FS',
-            '^BY2,2,20',
-            '^FT380,180^BCB^FD' + tag + '^FS',
+            '^FO30,0',
+            '^BQN,2,3',
+            '^FDQA,https://wrapit.us/v/' + tag + '^FS',
+            '^FT0,186^A0N,13,12^FB406,1,0,C^FDProperty of Southern Adventist University-SVAD\\&^FS',
             '^PQ1^XZ'
         ].join('\n');
     }
 
     /**
-     * Tiered font-size picker for the description block on the generic label.
-     * Pick font height + max-lines from the character count, then vertically
-     * center the block in the available area between asset tag and footer.
-     * Very long text is hard-truncated with an ellipsis at the last tier.
+     * Tiered font/position picker for the description block. Pick font
+     * height, max-line count, and the printed origin (x, y, width) from
+     * the character count. Very long text is hard-truncated with an
+     * ellipsis at the smallest tier.
+     *
+     * For multi-line tiers, balanceLineBreaks() inserts ZPL hard breaks
+     * (\&) at the word boundary closest to each ideal split point. This
+     * keeps lines roughly equal length and avoids a single trailing
+     * orphan word on the last line.
      */
     function buildDescriptionField(description) {
         var tiers = [
-            { max: 14,  size: 38, lines: 1 },
-            { max: 22,  size: 28, lines: 1 },
-            { max: 36,  size: 22, lines: 2 },
-            { max: 60,  size: 16, lines: 3 },
-            { max: 999, size: 14, lines: 4 }  // hard cap, truncate
+            { max: 19,  size: 38, lines: 1, x: 0,  y: 156, width: 406 },
+            { max: 32,  size: 28, lines: 1, x: 0,  y: 157, width: 406 },
+            { max: 50,  size: 24, lines: 2, x: 5,  y: 162, width: 396 },
+            { max: 75,  size: 18, lines: 3, x: 13, y: 168, width: 380 },
+            { max: 999, size: 14, lines: 4, x: 13, y: 179, width: 380 }
         ];
         var tier = tiers[tiers.length - 1];
         for (var i = 0; i < tiers.length; i++) {
             if (description.length <= tiers[i].max) { tier = tiers[i]; break; }
         }
-        if (tier.max === 999 && description.length > 80) {
-            description = description.substring(0, 79) + '…';
+        if (tier.max === 999 && description.length > 110) {
+            description = description.substring(0, 109) + '…';
         }
-        // Vertical-center the block at y=114 (midway between asset tag bottom
-        // y=56 and footer top y=172). First-line baseline = visualCenter +
-        // size/2 - (lines-1)*size/2.
-        var ftY = Math.round(114 + tier.size / 2 - (tier.lines - 1) * tier.size / 2);
-        return '^FT138,' + ftY + '^ALN,' + tier.size + ',' + tier.size
-             + '^FB220,' + tier.lines + ',0,C^FD' + description + '\\&^FS';
+        var text = balanceLineBreaks(description, tier.lines);
+        return '^FT' + tier.x + ',' + tier.y + '^ALN,' + tier.size + ',' + tier.size
+             + '^FB' + tier.width + ',' + tier.lines + ',0,C^FD' + text + '\\&^FS';
+    }
+
+    /**
+     * Insert ZPL hard breaks (\&) at word boundaries closest to the ideal
+     * even-split points. Greedy left-to-right: fill the current line until
+     * adding the next word would overshoot ~110% of the per-line target,
+     * then start a new line. Never produces more than numLines lines.
+     */
+    function balanceLineBreaks(text, numLines) {
+        if (numLines <= 1) return text;
+        var words = String(text).split(/\s+/).filter(Boolean);
+        if (words.length < 2) return text;
+        var target = text.length / numLines;
+        var lines = [];
+        var current = '';
+        for (var i = 0; i < words.length; i++) {
+            var w = words[i];
+            var stillNeedBreak = lines.length < numLines - 1;
+            var nextLen = current.length + (current ? 1 : 0) + w.length;
+            if (stillNeedBreak && current.length >= target * 0.7 && nextLen > target * 1.1) {
+                lines.push(current);
+                current = w;
+            } else {
+                current = current ? current + ' ' + w : w;
+            }
+        }
+        if (current) lines.push(current);
+        return lines.join('\\&');
     }
 
     /**
