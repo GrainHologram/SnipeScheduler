@@ -229,32 +229,91 @@
 
     /**
      * Generic 2" × 1" label (203 dpi → 406 × 203 dots).
-     * Layout: large asset tag centered top, QR top-left, description below
-     * the asset tag, footer line, vertical Code 128 of the asset tag right edge.
+     * Layout: large asset_tag top-center under a small QR, horizontal rule,
+     * description (auto-sized) in the middle band, footer text at bottom.
      */
     function buildGenericZpl(asset) {
         var tag = sanitizeZpl(asset.asset_tag);
         var description = sanitizeZpl(asset.description || asset.asset_name || asset.model_name || '');
+        var descField = buildDescriptionField(description);
         return [
             '^XA~TA000~JSN^LT5^LS5^MNW^MTT^PON^PMN^LH0,0^JMA^PR3,3~SD25^JUS^LRN^CI28^PW406^LL203^XZ',
-            // Fonts live in RAM (R:) — re-uploaded once per browser session
-            // (sessionStorage flag) so flash doesn't fragment from writes.
             '^XA^CWL,r:SWISS^XZ',
             '^XA^CWK,r:JBM_RG^XZ',
             '^XA',
             '^CI28',
             '^BY2,2',
             '^ARN,',
-            '^FT138,56^AKN,56^FB220,1,0,C^FD' + tag + '\\&^FS',
-            '^FT138,154^ALN,18,18^FB220,5,0,C^FD' + description + '\\&^FS',
-            '^FO10,15',
-            '^BQN,2,5',
-            '^FDLA,https://wrapit.us/v/' + tag + '^FS',
-            '^FT0,186^A0N,14,14^FB346,1,0,C^FDProperty of Southern Adventist University-SVAD\\&^FS',
-            '^BY2,2,20',
-            '^FT380,180^BCB^FD' + tag + '^FS',
+            '^FT110,72^AKN,56^FB320,1,0,C^FD' + tag + '\\&^FS',
+            '^FO13,110,2',
+            '^GB380,2,2,,^FS',
+            descField,
+            '^FO30,0',
+            '^BQN,2,3',
+            '^FDQA,https://wrapit.us/v/' + tag + '^FS',
+            '^FT0,186^A0N,13,12^FB406,1,0,C^FDProperty of Southern Adventist University-SVAD\\&^FS',
             '^PQ1^XZ'
         ].join('\n');
+    }
+
+    /**
+     * Tiered font/position picker for the description block. Pick font
+     * height, max-line count, and the printed origin (x, y, width) from
+     * the character count. Very long text is hard-truncated with an
+     * ellipsis at the smallest tier.
+     *
+     * For multi-line tiers, balanceLineBreaks() inserts ZPL hard breaks
+     * (\&) at the word boundary closest to each ideal split point. This
+     * keeps lines roughly equal length and avoids a single trailing
+     * orphan word on the last line.
+     */
+    function buildDescriptionField(description) {
+        var tiers = [
+            { max: 19,  size: 38, lines: 1, x: 0,  y: 156, width: 406 },
+            { max: 32,  size: 28, lines: 1, x: 0,  y: 157, width: 406 },
+            { max: 50,  size: 24, lines: 2, x: 5,  y: 162, width: 396 },
+            { max: 120, size: 18, lines: 3, x: 13, y: 168, width: 380 },
+            { max: 999, size: 14, lines: 4, x: 13, y: 170, width: 380 }
+        ];
+        var tier = tiers[tiers.length - 1];
+        for (var i = 0; i < tiers.length; i++) {
+            if (description.length <= tiers[i].max) { tier = tiers[i]; break; }
+        }
+        // Tier 5 character cap: 4 lines × ~49 chars/line at font 14 in 380 dots.
+        if (tier.max === 999 && description.length > 190) {
+            description = description.substring(0, 189) + '…';
+        }
+        var text = balanceLineBreaks(description, tier.lines);
+        return '^FT' + tier.x + ',' + tier.y + '^ALN,' + tier.size + ',' + tier.size
+             + '^FB' + tier.width + ',' + tier.lines + ',0,C^FD' + text + '\\&^FS';
+    }
+
+    /**
+     * Insert ZPL hard breaks (\&) at word boundaries closest to the ideal
+     * even-split points. Greedy left-to-right: fill the current line until
+     * adding the next word would overshoot ~110% of the per-line target,
+     * then start a new line. Never produces more than numLines lines.
+     */
+    function balanceLineBreaks(text, numLines) {
+        if (numLines <= 1) return text;
+        var words = String(text).split(/\s+/).filter(Boolean);
+        if (words.length < 2) return text;
+        var target = text.length / numLines;
+        var lines = [];
+        var current = '';
+        for (var i = 0; i < words.length; i++) {
+            var w = words[i];
+            var stillNeedBreak = lines.length < numLines - 1;
+            var nextLen = current.length + (current ? 1 : 0) + w.length;
+            if (stillNeedBreak && current.length >= target * 0.7 && nextLen > target * 1.1) {
+                lines.push(current);
+                current = w;
+            } else {
+                current = current ? current + ' ' + w : w;
+            }
+        }
+        if (current) lines.push(current);
+        return lines.join('\\&');
     }
 
     /**
