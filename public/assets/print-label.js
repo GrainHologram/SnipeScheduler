@@ -12,7 +12,9 @@
 (function () {
     'use strict';
 
-    var FONTS_SESSION_KEY = 'printLabel.fontsLoaded';
+    // Bump this when the fonts file or its drive letter changes so old
+    // sessionStorage flags from prior deploys don't block a needed re-upload.
+    var FONTS_SESSION_KEY = 'printLabel.fontsLoaded.r1';
 
     var _cfg = null;
     var _printerConfig = null;
