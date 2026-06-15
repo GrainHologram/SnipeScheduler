@@ -273,14 +273,15 @@
             { max: 32,  size: 28, lines: 1, x: 0,  y: 157, width: 406 },
             { max: 50,  size: 24, lines: 2, x: 5,  y: 162, width: 396 },
             { max: 75,  size: 18, lines: 3, x: 13, y: 168, width: 380 },
-            { max: 999, size: 14, lines: 4, x: 13, y: 179, width: 380 }
+            { max: 999, size: 14, lines: 4, x: 13, y: 170, width: 380 }
         ];
         var tier = tiers[tiers.length - 1];
         for (var i = 0; i < tiers.length; i++) {
             if (description.length <= tiers[i].max) { tier = tiers[i]; break; }
         }
-        if (tier.max === 999 && description.length > 110) {
-            description = description.substring(0, 109) + '…';
+        // Tier 5 character cap: 4 lines × ~49 chars/line at font 14 in 380 dots.
+        if (tier.max === 999 && description.length > 190) {
+            description = description.substring(0, 189) + '…';
         }
         var text = balanceLineBreaks(description, tier.lines);
         return '^FT' + tier.x + ',' + tier.y + '^ALN,' + tier.size + ',' + tier.size
