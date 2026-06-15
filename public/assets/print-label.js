@@ -235,6 +235,7 @@
     function buildGenericZpl(asset) {
         var tag = sanitizeZpl(asset.asset_tag);
         var description = sanitizeZpl(asset.description || asset.asset_name || asset.model_name || '');
+        var descField = buildDescriptionField(description);
         return [
             '^XA~TA000~JSN^LT5^LS5^MNW^MTT^PON^PMN^LH0,0^JMA^PR3,3~SD25^JUS^LRN^CI28^PW406^LL203^XZ',
             // Fonts live in RAM (R:) — re-uploaded once per browser session
@@ -246,7 +247,7 @@
             '^BY2,2',
             '^ARN,',
             '^FT138,56^AKN,56^FB220,1,0,C^FD' + tag + '\\&^FS',
-            '^FT138,154^ALN,18,18^FB220,5,0,C^FD' + description + '\\&^FS',
+            descField,
             '^FO10,15',
             '^BQN,2,5',
             '^FDLA,https://wrapit.us/v/' + tag + '^FS',
@@ -255,6 +256,35 @@
             '^FT380,180^BCB^FD' + tag + '^FS',
             '^PQ1^XZ'
         ].join('\n');
+    }
+
+    /**
+     * Tiered font-size picker for the description block on the generic label.
+     * Pick font height + max-lines from the character count, then vertically
+     * center the block in the available area between asset tag and footer.
+     * Very long text is hard-truncated with an ellipsis at the last tier.
+     */
+    function buildDescriptionField(description) {
+        var tiers = [
+            { max: 14,  size: 38, lines: 1 },
+            { max: 22,  size: 28, lines: 1 },
+            { max: 36,  size: 22, lines: 2 },
+            { max: 60,  size: 16, lines: 3 },
+            { max: 999, size: 14, lines: 4 }  // hard cap, truncate
+        ];
+        var tier = tiers[tiers.length - 1];
+        for (var i = 0; i < tiers.length; i++) {
+            if (description.length <= tiers[i].max) { tier = tiers[i]; break; }
+        }
+        if (tier.max === 999 && description.length > 80) {
+            description = description.substring(0, 79) + '…';
+        }
+        // Vertical-center the block at y=114 (midway between asset tag bottom
+        // y=56 and footer top y=172). First-line baseline = visualCenter +
+        // size/2 - (lines-1)*size/2.
+        var ftY = Math.round(114 + tier.size / 2 - (tier.lines - 1) * tier.size / 2);
+        return '^FT138,' + ftY + '^ALN,' + tier.size + ',' + tier.size
+             + '^FB220,' + tier.lines + ',0,C^FD' + description + '\\&^FS';
     }
 
     /**
