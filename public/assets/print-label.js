@@ -221,6 +221,9 @@
         if (labelType === 'cable') {
             return buildCableWrapZpl(asset);
         }
+        if (labelType === 'qronly') {
+            return buildQrOnlyZpl(asset);
+        }
         return buildGenericZpl(asset);
     }
 
@@ -261,6 +264,37 @@
     function buildCableWrapZpl(asset) {
         // TODO: bespoke 1"×2.25" wrap layout (^PW203^LL457 portrait, smaller text)
         return buildGenericZpl(asset);
+    }
+
+    /**
+     * QR-only label (2" × 1", 203 dpi → 406 × 203 dots).
+     * Three QR codes of decreasing magnification (5/3/2) across the top
+     * with the asset_tag under each. No description, no Code 128.
+     */
+    function buildQrOnlyZpl(asset) {
+        var tag = sanitizeZpl(asset.asset_tag);
+        return [
+            '^XA~TA000~JSN^LT5^LS5^MNW^MTT^PON^PMN^LH0,0^JMA^PR3,3~SD25^JUS^LRN^CI28^PW406^LL203^XZ',
+            '^XA^CWL,r:SWISS^XZ',
+            '^XA^CWK,r:JBM_RG^XZ',
+            '^XA',
+            '^CI28',
+            '^BY2,2',
+            '^ARN,',
+            '^FT10,176^AKN,36^FB126,1,0,C^FD' + tag + '\\&^FS',
+            '^FT200,112^AKN,22^FB74,1,0,C^FD' + tag + '\\&^FS',
+            '^FT340,82^AKN,16^FB52,1,0,C^FD' + tag + '\\&^FS',
+            '^FO10,5',
+            '^BQN,2,5',
+            '^FDLA,https://wrapit.us/v/' + tag + '^FS',
+            '^FO200,5',
+            '^BQN,2,3',
+            '^FDLA,https://wrapit.us/v/' + tag + '^FS',
+            '^FO340,5',
+            '^BQN,2,2',
+            '^FDLA,https://wrapit.us/v/' + tag + '^FS',
+            '^PQ1^XZ'
+        ].join('\n');
     }
 
     /**
