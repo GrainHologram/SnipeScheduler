@@ -84,6 +84,15 @@ layout_page_start([
     </div>
   </div>
 
+  <div class="card mb-3">
+    <div class="card-body">
+      <h6 class="card-title text-muted mb-2">Preview</h6>
+      <div id="label-preview" class="d-flex align-items-center justify-content-center" style="min-height:160px; background:#f6f7fb; border:1px solid #dee2e6; border-radius:6px; padding:8px;">
+        <span class="text-muted small">— rendering sample… —</span>
+      </div>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-body">
       <h6 class="card-title text-muted">Last printed</h6>

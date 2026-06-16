@@ -29,6 +29,7 @@
             if (typeof qz !== 'undefined') {
                 _printerConfig = null;
                 wireUI();
+                renderPreview(sampleAsset());
                 connectAndPrepare();
                 return;
             }
@@ -61,6 +62,40 @@
             });
         }
         return _printerConfig;
+    }
+
+    /**
+     * Render the current label type to an <img> via the Labelary API so
+     * the operator can see what they're printing. Direct GET with the
+     * URL-encoded ZPL in the path; no fetch / blob handling needed.
+     */
+    function renderPreview(asset) {
+        var el = document.getElementById('label-preview');
+        if (!el) return;
+        var zpl;
+        try {
+            zpl = buildLabelZpl(asset, _cfg.labelType);
+        } catch (e) {
+            el.innerHTML = '<span class="text-danger small">Preview failed: ' + escapeHtml(e.message || e) + '</span>';
+            return;
+        }
+        var dims = _cfg.labelType === 'cable' ? '1x2.25' : '2x1';
+        var url = 'https://api.labelary.com/v1/printers/8dpmm/labels/'
+                + dims + '/0/' + encodeURIComponent(zpl);
+        el.innerHTML = '<img src="' + url + '" alt="label preview" '
+                     + 'style="max-width:100%; max-height:300px;" '
+                     + 'onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),'
+                     + '{className:\'text-muted small\', textContent:\'(preview unavailable)\'}));">';
+    }
+
+    function sampleAsset() {
+        return {
+            asset_tag: '1234',
+            asset_name: '',
+            model_name: 'Sample Asset Description',
+            description: 'Sample Asset Description',
+            serial: ''
+        };
     }
 
     function wireUI() {
