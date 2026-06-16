@@ -334,17 +334,17 @@
     function buildQrOnlyZpl(asset) {
         var tag = sanitizeZpl(asset.asset_tag);
         return [
-            '^XA~TA000~JSN^LT5^LS5^MNW^MTT^PON^PMN^LH0,0^JMA^PR3,3~SD25^JUS^LRN^CI28^PW406^LL203^XZ',
+            '^XA~TA000~JSN^LT0^LS5^MNW^MTT^PON^PMN^LH0,0^JMA^PR3,3~SD25^JUS^LRN^CI28^PW406^LL203^XZ',
             '^XA^CWL,r:SWISS^XZ',
             '^XA^CWK,r:JBM_RG^XZ',
             '^XA',
             '^CI28',
             '^BY2,2',
             '^ARN,',
-            '^FT10,168^AKN,36^FB120,1,0,C^FD' + tag + '\\&^FS',
-            '^FT160,120^AKN,22^FB86,1,0,C^FD' + tag + '\\&^FS',
-            '^FT314,74^AKB,14^FB62,1,0,C^FD' + tag + '\\&^FS',
-            '^FT200,190^AKB,14^FB52,1,0,C^FD' + tag + '\\&^FS',
+            '^FT10,172^AKN,36,38^FB120,1,0,C^FD' + tag + '\\&^FS',
+            '^FT160,128^AKN,22,24^FB86,1,0,C^FD' + tag + '\\&^FS',
+            '^FT314,82^AKB,14,16^FB62,1,0,C^FD' + tag + '\\&^FS',
+            '^FT200,192^AKB,14,16^FB52,1,0,C^FD' + tag + '\\&^FS',
             '^FO10,5',
             '^BQN,2,4',
             '^FDQA,https://wrapit.us/v/' + tag + '^FS',
