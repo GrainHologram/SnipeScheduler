@@ -115,7 +115,8 @@
             .then(function (blob) {
                 var url = URL.createObjectURL(blob);
                 el.innerHTML = '<img src="' + url + '" alt="label preview" '
-                             + 'style="max-width:100%; max-height:300px;">';
+                             + 'style="max-width:100%; max-height:300px; '
+                             + 'box-shadow:0 4px 12px rgba(0,0,0,0.5); border-radius:2px;">';
             })
             .catch(function (err) {
                 console.error('[print-label] preview failed:', err);
