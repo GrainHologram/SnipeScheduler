@@ -237,21 +237,21 @@
         var description = sanitizeZpl(asset.description || asset.asset_name || asset.model_name || '');
         var descField = buildDescriptionField(description);
         return [
-            '^XA~TA000~JSN^LT5^LS5^MNW^MTT^PON^PMN^LH0,0^JMA^PR3,3~SD25^JUS^LRN^CI28^PW406^LL203^XZ',
+            '^XA~TA000~JSN^LT0^LS5^MNW^MTT^PON^PMN^LH0,0^JMA^PR3,3~SD25^JUS^LRN^CI28^PW406^LL203^XZ',
             '^XA^CWL,r:SWISS^XZ',
             '^XA^CWK,r:JBM_RG^XZ',
             '^XA',
             '^CI28',
             '^BY2,2',
             '^ARN,',
-            '^FT110,72^AKN,56^FB320,1,0,C^FD' + tag + '\\&^FS',
-            '^FO13,110,2',
+            '^FT110,77^AKN,56^FB320,1,0,C^FD' + tag + '\\&^FS',
+            '^FO13,115,2',
             '^GB380,2,2,,^FS',
             descField,
             '^FO30,0',
             '^BQN,2,3',
             '^FDQA,https://wrapit.us/v/' + tag + '^FS',
-            '^FT0,186^A0N,13,12^FB406,1,0,C^FDProperty of Southern Adventist University-SVAD\\&^FS',
+            '^FT0,194^A0N,14,15^FB406,1,0,C^FDProperty of Southern Adventist University-SVAD\\&^FS',
             '^PQ1^XZ'
         ].join('\n');
     }
@@ -269,11 +269,11 @@
      */
     function buildDescriptionField(description) {
         var tiers = [
-            { max: 19,  size: 38, lines: 1, x: 0,  y: 156, width: 406 },
-            { max: 32,  size: 28, lines: 1, x: 0,  y: 157, width: 406 },
-            { max: 50,  size: 24, lines: 2, x: 5,  y: 162, width: 396 },
-            { max: 120, size: 18, lines: 3, x: 13, y: 168, width: 380 },
-            { max: 999, size: 14, lines: 4, x: 13, y: 170, width: 380 }
+            { max: 19,  size: 38, lines: 1, x: 0,  y: 161, width: 406 },
+            { max: 32,  size: 28, lines: 1, x: 0,  y: 162, width: 406 },
+            { max: 50,  size: 24, lines: 2, x: 5,  y: 167, width: 396 },
+            { max: 120, size: 18, lines: 3, x: 13, y: 173, width: 380 },
+            { max: 999, size: 14, lines: 4, x: 13, y: 175, width: 380 }
         ];
         var tier = tiers[tiers.length - 1];
         for (var i = 0; i < tiers.length; i++) {
