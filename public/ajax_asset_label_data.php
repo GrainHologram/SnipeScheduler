@@ -47,6 +47,7 @@ $decode = static function ($value): string {
 $assetTag  = $decode($asset['asset_tag'] ?? $tag);
 $assetName = $decode($asset['name'] ?? '');
 $modelName = $decode($asset['model']['name'] ?? '');
+$serial    = trim($decode($asset['serial'] ?? ''));
 
 // custom_fields is keyed by friendly field name; each value is
 // { field, value, field_format, element }.
@@ -66,4 +67,5 @@ echo json_encode([
     'model_name'  => $modelName,
     'svad_name'   => $svadName,
     'description' => $description,
+    'serial'      => $serial,
 ]);
