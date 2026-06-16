@@ -94,14 +94,22 @@
 
         fontsPromise
             .then(function (fontsZpl) {
+                console.log('[print-label] preview: fonts loaded (' + fontsZpl.length + ' bytes), POSTing to Labelary');
                 return fetch(labelaryUrl, {
                     method: 'POST',
                     body: fontsZpl + '\n' + labelZpl,
-                    headers: { 'Accept': 'image/png' }
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Accept': 'image/png'
+                    }
                 });
             })
             .then(function (r) {
-                if (!r.ok) throw new Error('HTTP ' + r.status);
+                if (!r.ok) {
+                    return r.text().then(function (body) {
+                        throw new Error('Labelary HTTP ' + r.status + ': ' + body.slice(0, 200));
+                    });
+                }
                 return r.blob();
             })
             .then(function (blob) {
@@ -109,8 +117,10 @@
                 el.innerHTML = '<img src="' + url + '" alt="label preview" '
                              + 'style="max-width:100%; max-height:300px;">';
             })
-            .catch(function () {
-                el.innerHTML = '<span class="text-muted small">(preview unavailable)</span>';
+            .catch(function (err) {
+                console.error('[print-label] preview failed:', err);
+                el.innerHTML = '<span class="text-muted small">(preview unavailable: '
+                             + escapeHtml(err.message || String(err)) + ')</span>';
             });
     }
 
