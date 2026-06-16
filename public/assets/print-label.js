@@ -224,6 +224,9 @@
         if (labelType === 'qronly') {
             return buildQrOnlyZpl(asset);
         }
+        if (labelType === 'barcode') {
+            return buildBarcodeOnlyZpl(asset);
+        }
         return buildGenericZpl(asset);
     }
 
@@ -323,6 +326,28 @@
     function buildCableWrapZpl(asset) {
         // TODO: bespoke 1"×2.25" wrap layout (^PW203^LL457 portrait, smaller text)
         return buildGenericZpl(asset);
+    }
+
+    /**
+     * Barcode-only label (2" × 1", 203 dpi → 406 × 203 dots).
+     * Two Code 128 barcodes: a large horizontal one with human-readable
+     * digits centered, plus a small vertical one at the right edge.
+     */
+    function buildBarcodeOnlyZpl(asset) {
+        var tag = sanitizeZpl(asset.asset_tag);
+        return [
+            '^XA~TA000~JSN^LT0^LS5^MNW^MTT^PON^PMN^LH0,0^JMA^PR3,3~SD25^JUS^LRN^CI28^PW406^LL203^XZ',
+            '^XA^CWL,r:SWISS^XZ',
+            '^XA^CWK,r:JBM_RG^XZ',
+            '^XA',
+            '^CI28',
+            '^BY3,2,90',
+            '^FT60,130^BCN^FD' + tag + '^FS',
+            '^BY2,2,20',
+            '^FT380,180^BCB^FD' + tag + '^FS',
+            '^FT0,194^A0N,12,13^FB350,1,0,C^FDProperty of Southern Adventist University-SVAD\\&^FS',
+            '^PQ1^XZ'
+        ].join('\n');
     }
 
     /**
