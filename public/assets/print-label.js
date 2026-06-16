@@ -238,7 +238,11 @@
     function buildGenericZpl(asset) {
         var tag = sanitizeZpl(asset.asset_tag);
         var description = sanitizeZpl(asset.description || asset.asset_name || asset.model_name || '');
+        var serial = sanitizeZpl(asset.serial || '');
         var descField = buildDescriptionField(description);
+        var snField = serial !== ''
+            ? '^FT110,96^AKN,14^FB320,1,0,C^FDS/N: ' + serial + '\\&^FS'
+            : '';
         return [
             '^XA~TA000~JSN^LT0^LS5^MNW^MTT^PON^PMN^LH0,0^JMA^PR3,3~SD25^JUS^LRN^CI28^PW406^LL203^XZ',
             '^XA^CWL,r:SWISS^XZ',
@@ -248,6 +252,7 @@
             '^BY2,2',
             '^ARN,',
             '^FT110,77^AKN,56^FB320,1,0,C^FD' + tag + '\\&^FS',
+            snField,
             '^FO13,115,2',
             '^GB380,2,2,,^FS',
             descField,
@@ -256,7 +261,7 @@
             '^FDQA,https://wrapit.us/v/' + tag + '^FS',
             '^FT0,194^A0N,14,15^FB406,1,0,C^FDProperty of Southern Adventist University-SVAD\\&^FS',
             '^PQ1^XZ'
-        ].join('\n');
+        ].filter(Boolean).join('\n');
     }
 
     /**
