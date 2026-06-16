@@ -64,28 +64,54 @@
         return _printerConfig;
     }
 
+    var _fontsZplCache = null;
+
     /**
-     * Render the current label type to an <img> via the Labelary API so
-     * the operator can see what they're printing. Direct GET with the
-     * URL-encoded ZPL in the path; no fetch / blob handling needed.
+     * Render the current label type via Labelary so the operator can see
+     * what they're printing. Labelary doesn't have our SWISS/JBM_RG
+     * fonts, so we POST the full fonts ZPL + label ZPL together. Cached
+     * in memory so we only fetch the 412 KB fonts file once.
      */
     function renderPreview(asset) {
         var el = document.getElementById('label-preview');
         if (!el) return;
-        var zpl;
+        var labelZpl;
         try {
-            zpl = buildLabelZpl(asset, _cfg.labelType);
+            labelZpl = buildLabelZpl(asset, _cfg.labelType);
         } catch (e) {
-            el.innerHTML = '<span class="text-danger small">Preview failed: ' + escapeHtml(e.message || e) + '</span>';
+            el.innerHTML = '<span class="text-danger small">Preview failed: '
+                         + escapeHtml(e.message || e) + '</span>';
             return;
         }
         var dims = _cfg.labelType === 'cable' ? '1x2.25' : '2x1';
-        var url = 'https://api.labelary.com/v1/printers/8dpmm/labels/'
-                + dims + '/0/' + encodeURIComponent(zpl);
-        el.innerHTML = '<img src="' + url + '" alt="label preview" '
-                     + 'style="max-width:100%; max-height:300px;" '
-                     + 'onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),'
-                     + '{className:\'text-muted small\', textContent:\'(preview unavailable)\'}));">';
+        var labelaryUrl = 'https://api.labelary.com/v1/printers/8dpmm/labels/' + dims + '/0/';
+
+        var fontsPromise = _fontsZplCache
+            ? Promise.resolve(_fontsZplCache)
+            : fetch(_cfg.fontsUrl, { credentials: 'same-origin' })
+                .then(function (r) { return r.text(); })
+                .then(function (txt) { _fontsZplCache = txt; return txt; });
+
+        fontsPromise
+            .then(function (fontsZpl) {
+                return fetch(labelaryUrl, {
+                    method: 'POST',
+                    body: fontsZpl + '\n' + labelZpl,
+                    headers: { 'Accept': 'image/png' }
+                });
+            })
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.blob();
+            })
+            .then(function (blob) {
+                var url = URL.createObjectURL(blob);
+                el.innerHTML = '<img src="' + url + '" alt="label preview" '
+                             + 'style="max-width:100%; max-height:300px;">';
+            })
+            .catch(function () {
+                el.innerHTML = '<span class="text-muted small">(preview unavailable)</span>';
+            });
     }
 
     function sampleAsset() {
