@@ -25,7 +25,7 @@ if (empty($currentUser['is_admin'])) {
 }
 
 $labelType = $_GET['type'] ?? '';
-$labelType = in_array($labelType, ['generic', 'qronly', 'cable'], true) ? $labelType : '';
+$labelType = in_array($labelType, ['generic', 'qronly', 'barcode', 'cable'], true) ? $labelType : '';
 
 layout_page_start([
     'active'          => 'print_label.php',
@@ -42,6 +42,7 @@ layout_page_start([
       <div class="d-flex flex-wrap gap-2">
         <a class="btn btn-primary" href="print_label.php?type=generic">Generic (2&Prime; &times; 1&Prime;)</a>
         <a class="btn btn-outline-primary" href="print_label.php?type=qronly">QR Only (2&Prime; &times; 1&Prime;)</a>
+        <a class="btn btn-outline-primary" href="print_label.php?type=barcode">Barcode Only (2&Prime; &times; 1&Prime;)</a>
         <a class="btn btn-outline-primary" href="print_label.php?type=cable">Cable wrap (1&Prime; &times; 2.25&Prime;)</a>
       </div>
     </div>
@@ -52,7 +53,12 @@ layout_page_start([
       <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <div>
           <span class="text-muted small">Label type</span>
-          <strong class="ms-1"><?= h($labelType === 'cable' ? 'Cable wrap (1″ × 2.25″)' : ($labelType === 'qronly' ? 'QR Only (2″ × 1″)' : 'Generic (2″ × 1″)')) ?></strong>
+          <strong class="ms-1"><?= h(
+              $labelType === 'cable'   ? 'Cable wrap (1″ × 2.25″)'
+            : ($labelType === 'qronly'  ? 'QR Only (2″ × 1″)'
+            : ($labelType === 'barcode' ? 'Barcode Only (2″ × 1″)'
+            : 'Generic (2″ × 1″)'))
+          ) ?></strong>
           <a class="ms-3 small" href="print_label.php">switch</a>
         </div>
         <div id="printer-status" class="small text-muted">
