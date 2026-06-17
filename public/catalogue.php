@@ -25,31 +25,192 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['prefetch']) && !isset(
     $query = $_GET;
     $query['prefetch'] = 1;
     $fullUrl = 'catalogue.php' . (empty($query) ? '' : '?' . http_build_query($query));
+
+    // --- Parse filter state from GET + session (no API needed) ---
+    $sk_tab    = ($_GET['tab'] ?? '') === 'equipment' ? 'equipment' : 'kits';
+    $sk_search = trim($_GET['q'] ?? '');
+    $sk_sort   = trim($_GET['sort'] ?? '');
+    $sk_winS   = trim($_GET['start_datetime'] ?? '');
+    $sk_winE   = trim($_GET['end_datetime'] ?? '');
+    if ($sk_winS === '' && $sk_winE === '') {
+        $sk_winS = trim((string)($_SESSION['reservation_window_start'] ?? ''));
+        $sk_winE = trim((string)($_SESSION['reservation_window_end']   ?? ''));
+    }
+    $_catIn  = $_GET['category'] ?? null;
+    $sk_cats = [];
+    if (is_array($_catIn)) {
+        $sk_cats = array_values(array_filter(array_map('intval', $_catIn)));
+    } elseif (ctype_digit(trim((string)$_catIn)) && trim((string)$_catIn) !== '') {
+        $sk_cats = [(int)$_catIn];
+    }
+    unset($_catIn);
+    $sk_basketCount = (int)array_sum(array_map('intval', $_SESSION['basket'] ?? []));
+    $sk_catN        = count($sk_cats);
+    $sk_tz          = app_get_timezone($config);
+
+    // --- Fetch categories: single cached API call, degrades to empty ---
+    $sk_categories = [];
+    try {
+        $sk_categories = get_model_categories();
+    } catch (Throwable $e) { /* show skeleton sidebar without categories */ }
+    $sk_allowedCfg = $config['catalogue']['allowed_categories'] ?? [];
+    $sk_allowedMap = [];
+    foreach ($sk_allowedCfg as $_cid) {
+        if (ctype_digit((string)$_cid) || is_int($_cid)) {
+            $sk_allowedMap[(int)$_cid] = true;
+        }
+    }
+    if (!empty($sk_allowedMap) && !empty($sk_categories)) {
+        $sk_categories = array_values(array_filter(
+            $sk_categories, fn($c) => isset($sk_allowedMap[(int)($c['id'] ?? 0)])
+        ));
+    }
     ?>
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Catalogue – Book Equipment</title>
-        <link rel="stylesheet"
-              href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-        <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
-        <?= layout_theme_styles() ?>
-    </head>
-    <body class="p-4">
-        <div class="loading-overlay">
-            <div class="loading-card">
-                <div class="loading-spinner" aria-hidden="true"></div>
-                <div class="loading-text">Fetching assets...</div>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Catalogue – Book Equipment</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="<?= layout_stylesheet_url() ?>">
+    <?= layout_theme_styles() ?>
+</head>
+<body class="p-4 page-catalogue">
+
+<?= layout_render_nav('catalogue.php', $isStaff, $isAdmin) ?>
+<?= layout_render_topbar('catalogue.php', $sk_tab === 'equipment' ? 'Equipment' : 'Kits', $sk_basketCount) ?>
+
+<aside class="catalogue-filter-sidebar" aria-label="Equipment filters" aria-busy="true">
+
+    <?php if ($isStaff): ?>
+    <div class="cat-sidebar-user-card">
+        <div class="cat-sidebar-user-header">
+            <div class="cat-sidebar-section-label">Selected User</div>
+        </div>
+        <hr class="cat-sidebar-user-divider" aria-hidden="true">
+        <div class="cat-sidebar-user-body">
+            <input type="text" class="form-control form-control-sm cat-sidebar-user-search"
+                   placeholder="Search name or email" disabled aria-label="User lookup">
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <button type="button" class="cat-sidebar-window-display" disabled>
+        <?php if ($sk_winS !== '' && $sk_winE !== ''): ?>
+            <div class="cat-sidebar-window-row">
+                <span class="cat-sidebar-window-label">Pick-up</span>
+                <span class="cat-sidebar-window-value"><?= h(app_format_datetime_local($sk_winS, $config, $sk_tz)) ?></span>
+            </div>
+            <div class="cat-sidebar-window-row">
+                <span class="cat-sidebar-window-label">Return</span>
+                <span class="cat-sidebar-window-value"><?= h(app_format_datetime_local($sk_winE, $config, $sk_tz)) ?></span>
+            </div>
+        <?php else: ?>
+            <span class="cat-sidebar-window-placeholder">Set booking window</span>
+        <?php endif; ?>
+    </button>
+
+    <hr class="cat-sidebar-section-divider">
+
+    <div class="filter-panel mb-4">
+        <div class="filter-panel__header d-flex align-items-center gap-3">
+            <span class="filter-panel__dot"></span>
+            <div class="filter-panel__title">FILTERS</div>
+        </div>
+        <div class="row g-3 align-items-end mt-0">
+            <div class="col-12">
+                <div class="cat-sort-view-row">
+                    <div class="cat-sort-item">
+                        <label class="form-label mb-1 fw-semibold" for="sk-sort">Sort</label>
+                        <select id="sk-sort" class="form-select cat-rounded-select" disabled>
+                            <option <?= ($sk_sort === '' || $sk_sort === 'name_asc')  ? 'selected' : '' ?>>Name (A–Z)</option>
+                            <option <?= $sk_sort === 'name_desc'  ? 'selected' : '' ?>>Name (Z–A)</option>
+                            <option <?= $sk_sort === 'manu_asc'   ? 'selected' : '' ?>>Manufacturer (A–Z)</option>
+                            <option <?= $sk_sort === 'manu_desc'  ? 'selected' : '' ?>>Manufacturer (Z–A)</option>
+                            <option <?= $sk_sort === 'units_asc'  ? 'selected' : '' ?>>Units (low–high)</option>
+                            <option <?= $sk_sort === 'units_desc' ? 'selected' : '' ?>>Units (high–low)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <?php if (!empty($sk_categories)): ?>
+            <div class="col-12">
+                <p class="form-label mb-1 fw-semibold">Category</p>
+                <button type="button" class="cat-toggle-btn" disabled aria-expanded="false">
+                    <span class="cat-toggle-label"><?= $sk_catN === 0 ? 'All categories' : ($sk_catN === 1 ? '1 category' : "$sk_catN categories") ?></span>
+                    <svg class="cat-toggle-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                        <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+                <div class="cat-dropdown" hidden>
+                    <?php foreach ($sk_categories as $cat): ?>
+                        <?php $cid = (int)($cat['id'] ?? 0); $cname = $cat['name'] ?? ''; ?>
+                        <label class="cat-option">
+                            <input class="cat-checkbox" type="checkbox" value="<?= $cid ?>" disabled
+                                   <?= in_array($cid, $sk_cats) ? 'checked' : '' ?>>
+                            <span><?= h(html_entity_decode($cname, ENT_QUOTES | ENT_HTML5, 'UTF-8')) ?></span>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+            <div class="col-12">
+                <button class="btn btn-primary btn-lg" type="button" disabled>Filter results</button>
             </div>
         </div>
-        <script>
-            window.location.replace("<?= h($fullUrl) ?>");
-        </script>
-    </body>
-    </html>
-    <?php
+    </div>
+
+</aside>
+
+<div class="catalogue-main" aria-busy="true">
+    <div class="catalogue-search-bar">
+        <div class="catalogue-search-row">
+            <div class="catalogue-search-capsule">
+                <span class="search-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+                        <line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </span>
+                <input type="text" placeholder="Search by model name or manufacturer"
+                       value="<?= h($sk_search) ?>" disabled aria-label="Search by model name or manufacturer">
+            </div>
+        </div>
+    </div>
+    <div class="catalogue-scroll-area">
+        <div class="catalogue-tab-nav">
+            <ul class="nav nav-tabs mb-3">
+                <li class="nav-item">
+                    <a class="nav-link <?= $sk_tab === 'equipment' ? 'active' : '' ?>" href="#" tabindex="-1">Equipment</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link <?= $sk_tab === 'kits' ? 'active' : '' ?>" href="#" tabindex="-1">Kits</a>
+                </li>
+            </ul>
+        </div>
+        <div class="row g-3">
+            <?php for ($i = 0; $i < 6; $i++): ?>
+            <div class="col-md-4">
+                <div class="card h-100 model-card model-card-v2">
+                    <div class="card-img-area"><span class="cat-skel cat-skel-img"></span></div>
+                    <div class="card-body d-flex flex-column gap-2">
+                        <div class="cat-skel cat-skel-line" style="width:70%"></div>
+                        <div class="cat-skel cat-skel-line" style="width:44%"></div>
+                        <div class="cat-skel cat-skel-line" style="width:28%; margin-top:4px"></div>
+                        <div class="cat-skel cat-skel-btn"></div>
+                    </div>
+                </div>
+            </div>
+            <?php endfor; ?>
+        </div>
+    </div>
+</div>
+
+<script>window.location.replace("<?= h($fullUrl) ?>");</script>
+</body>
+</html>
+<?php
     exit;
 }
 
@@ -636,6 +797,54 @@ if ($windowActive) {
 $windowStartIso = $windowActive ? $windowStartDt->format('Y-m-d H:i:s') : '';
 $windowEndIso   = $windowActive ? $windowEndDt->format('Y-m-d H:i:s') : '';
 $checkedOutCounts = [];
+
+function pagination_page_range(int $current, int $total): array {
+    if ($total <= 7) {
+        return range(1, $total);
+    }
+    $always = [1, $total];
+    $window = range(max(2, $current - 1), min($total - 1, $current + 1));
+    $all    = array_unique(array_merge($always, $window));
+    sort($all);
+    $result = [];
+    $prev   = null;
+    foreach ($all as $p) {
+        if ($prev !== null && $p - $prev > 1) {
+            $result[] = null;
+        }
+        $result[] = $p;
+        $prev = $p;
+    }
+    return $result;
+}
+
+// Load categories before the initial flush so the skeleton sidebar can show real data.
+// get_bookable_models() stays after the flush — it's the slow part.
+try {
+    $categories = get_model_categories();
+} catch (Throwable $e) {
+    $categories  = [];
+    $categoryErr = $e->getMessage();
+}
+$allowedCfg = $config['catalogue']['allowed_categories'] ?? [];
+if (is_array($allowedCfg)) {
+    foreach ($allowedCfg as $cid) {
+        if (ctype_digit((string)$cid) || is_int($cid)) {
+            $cid = (int)$cid;
+            $allowedCategoryMap[$cid] = true;
+            $allowedCategoryIds[]     = $cid;
+        }
+    }
+}
+if (!empty($allowedCategoryMap) && !empty($categories)) {
+    $categories = array_values(array_filter($categories, function ($cat) use ($allowedCategoryMap) {
+        $id = isset($cat['id']) ? (int)$cat['id'] : 0;
+        return $id > 0 && isset($allowedCategoryMap[$id]);
+    }));
+}
+$_sk_overrideName  = $bookingOverride ? (trim(($bookingOverride['first_name'] ?? '') . ' ' . ($bookingOverride['last_name'] ?? '')) ?: ($bookingOverride['email'] ?? '')) : '';
+$_sk_overrideEmail = $bookingOverride ? ($bookingOverride['email'] ?? '') : '';
+$_sk_catN          = count($categoriesSelected);
 ?>
 <!DOCTYPE html>
 <html>
@@ -653,12 +862,126 @@ $checkedOutCounts = [];
       data-catalogue-overdue="<?= $blockCatalogueOverdue ? '1' : '0' ?>"
       data-date-format="<?= h(app_get_date_format()) ?>"
       data-time-format="<?= h(app_get_time_format()) ?>">
-<div id="catalogue-loading" class="loading-overlay" aria-live="polite" aria-busy="true">
-    <div class="loading-card">
-        <div class="loading-spinner" aria-hidden="true"></div>
-        <div class="loading-text">Fetching assets...</div>
+<div id="cat-skeleton">
+<?= layout_render_nav($active, $isStaff, $isAdmin) ?>
+<?= layout_render_topbar($active, $tab === 'equipment' ? 'Equipment' : 'Kits', $basketCount) ?>
+<aside class="catalogue-filter-sidebar" aria-label="<?= $tab === 'equipment' ? 'Equipment' : 'Kit' ?> filters">
+    <?php if ($isStaff): ?>
+    <div class="cat-sidebar-user-card">
+        <div class="cat-sidebar-user-header">
+            <div class="cat-sidebar-section-label">Selected User</div>
+        </div>
+        <hr class="cat-sidebar-user-divider" aria-hidden="true">
+        <div class="cat-sidebar-user-body position-relative">
+            <input type="search" class="form-control form-control-sm cat-sidebar-user-search"
+                   placeholder="Search name or email" autocomplete="off"
+                   value="<?= h($_sk_overrideName) ?>" disabled aria-label="User lookup">
+        </div>
+    </div>
+    <?php endif; ?>
+    <button type="button" class="cat-sidebar-window-display" disabled>
+        <?php if ($windowStartRaw !== '' && $windowEndRaw !== ''): ?>
+            <div class="cat-sidebar-window-row">
+                <span class="cat-sidebar-window-label">Pick-up</span>
+                <span class="cat-sidebar-window-value"><?= h(app_format_datetime_local($windowStartRaw, $config, $appTz)) ?></span>
+            </div>
+            <div class="cat-sidebar-window-row">
+                <span class="cat-sidebar-window-label">Return</span>
+                <span class="cat-sidebar-window-value"><?= h(app_format_datetime_local($windowEndRaw, $config, $appTz)) ?></span>
+            </div>
+        <?php else: ?>
+            <span class="cat-sidebar-window-placeholder">Set booking window</span>
+        <?php endif; ?>
+    </button>
+    <hr class="cat-sidebar-section-divider">
+    <div class="filter-panel mb-4">
+        <div class="filter-panel__header d-flex align-items-center gap-3">
+            <span class="filter-panel__dot"></span>
+            <div class="filter-panel__title">FILTERS</div>
+        </div>
+        <div class="row g-3 align-items-end mt-0">
+            <div class="col-12">
+                <div class="cat-sort-view-row">
+                    <div class="cat-sort-item">
+                        <label class="form-label mb-1 fw-semibold">Sort</label>
+                        <select class="form-select cat-rounded-select" disabled>
+                            <option <?= ($sortRaw === '' || $sortRaw === 'name_asc') ? 'selected' : '' ?>>Name (A–Z)</option>
+                            <option <?= $sortRaw === 'name_desc'  ? 'selected' : '' ?>>Name (Z–A)</option>
+                            <option <?= $sortRaw === 'manu_asc'   ? 'selected' : '' ?>>Manufacturer (A–Z)</option>
+                            <option <?= $sortRaw === 'manu_desc'  ? 'selected' : '' ?>>Manufacturer (Z–A)</option>
+                            <option <?= $sortRaw === 'units_asc'  ? 'selected' : '' ?>>Units (low–high)</option>
+                            <option <?= $sortRaw === 'units_desc' ? 'selected' : '' ?>>Units (high–low)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <?php if (!empty($categories)): ?>
+            <div class="col-12">
+                <p class="form-label mb-1 fw-semibold">Category</p>
+                <button type="button" class="cat-toggle-btn" disabled aria-expanded="false">
+                    <span class="cat-toggle-label"><?= $_sk_catN === 0 ? 'All categories' : ($_sk_catN === 1 ? '1 category' : "$_sk_catN categories") ?></span>
+                    <svg class="cat-toggle-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                        <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+                <div class="cat-dropdown" hidden>
+                    <?php foreach ($categories as $cat): ?>
+                        <?php $cid = (int)($cat['id'] ?? 0); $cname = $cat['name'] ?? ''; ?>
+                        <label class="cat-option">
+                            <input class="cat-checkbox" type="checkbox" value="<?= $cid ?>" disabled
+                                   <?= in_array($cid, $categoriesSelected) ? 'checked' : '' ?>>
+                            <span><?= label_safe($cname) ?></span>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+            <div class="col-12">
+                <button class="btn btn-primary btn-lg" type="button" disabled>Filter results</button>
+            </div>
+        </div>
+    </div>
+</aside>
+<div class="catalogue-main">
+    <div class="catalogue-search-bar">
+        <div class="catalogue-search-row">
+            <div class="catalogue-search-capsule">
+                <span class="search-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+                        <line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </span>
+                <input type="text" placeholder="Search by model name or manufacturer"
+                       value="<?= h($searchRaw) ?>" disabled aria-label="Search by model name or manufacturer">
+            </div>
+        </div>
+    </div>
+    <div class="catalogue-scroll-area">
+        <div class="catalogue-tab-nav">
+            <ul class="nav nav-tabs mb-3">
+                <li class="nav-item"><a class="nav-link <?= $tab === 'equipment' ? 'active' : '' ?>" href="#" tabindex="-1">Equipment</a></li>
+                <li class="nav-item"><a class="nav-link <?= $tab === 'kits' ? 'active' : '' ?>" href="#" tabindex="-1">Kits</a></li>
+            </ul>
+        </div>
+        <div class="row g-3">
+            <?php for ($i = 0; $i < 6; $i++): ?>
+            <div class="col-md-4">
+                <div class="card h-100 model-card model-card-v2">
+                    <div class="card-img-area"><span class="cat-skel cat-skel-img"></span></div>
+                    <div class="card-body d-flex flex-column gap-2">
+                        <div class="cat-skel cat-skel-line" style="width:70%"></div>
+                        <div class="cat-skel cat-skel-line" style="width:44%"></div>
+                        <div class="cat-skel cat-skel-line" style="width:28%; margin-top:4px"></div>
+                        <div class="cat-skel cat-skel-btn"></div>
+                    </div>
+                </div>
+            </div>
+            <?php endfor; ?>
+        </div>
     </div>
 </div>
+</div><!-- #cat-skeleton -->
 <?php
 @ini_set('output_buffering', 'off');
 @ini_set('zlib.output_compression', '0');
@@ -666,28 +989,6 @@ if (function_exists('ob_flush')) {
     @ob_flush();
 }
 @flush();
-
-// ---------------------------------------------------------------------
-// Load categories from Snipe-IT (deferred so loader shows immediately)
-// ---------------------------------------------------------------------
-try {
-    $categories = get_model_categories();
-} catch (Throwable $e) {
-    $categories  = [];
-    $categoryErr = $e->getMessage();
-}
-
-// Optional admin-controlled allowlist for categories shown in the filter
-$allowedCfg = $config['catalogue']['allowed_categories'] ?? [];
-if (is_array($allowedCfg)) {
-    foreach ($allowedCfg as $cid) {
-        if (ctype_digit((string)$cid) || is_int($cid)) {
-            $cid = (int)$cid;
-            $allowedCategoryMap[$cid] = true;
-            $allowedCategoryIds[]     = $cid;
-        }
-    }
-}
 
 // ---------------------------------------------------------------------
 // Load models from Snipe-IT (deferred so loader shows immediately)
@@ -751,14 +1052,8 @@ if (!empty($models)) {
     }
 }
 
-// Apply allowlist if configured; otherwise show all categories returned by Snipe-IT
-if (!empty($allowedCategoryMap) && !empty($categories)) {
-    $categories = array_values(array_filter($categories, function ($cat) use ($allowedCategoryMap) {
-        $id = isset($cat['id']) ? (int)$cat['id'] : 0;
-        return $id > 0 && isset($allowedCategoryMap[$id]);
-    }));
-}
 ?>
+<div hidden id="cat-real-body">
 <div class="container">
     <div class="page-shell">
         <?= layout_logo_tag() ?>
@@ -771,7 +1066,7 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
 
         <!-- App navigation -->
         <?= layout_render_nav($active, $isStaff, $isAdmin) ?>
-        <?= layout_render_topbar($active, $tab === 'equipment' ? 'Equipment' : 'Kits') ?>
+        <?= layout_render_topbar($active, $tab === 'equipment' ? 'Equipment' : 'Kits', $basketCount) ?>
 
         <?php if ($blockCatalogueOverdue): ?>
             <div id="overdue-warning" class="alert alert-warning<?= $overdueErr ? '' : ' d-none' ?>">
@@ -787,11 +1082,8 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
                 (<?= htmlspecialchars($currentUser['email']) ?>)
             </div>
             <div class="top-bar-actions d-flex gap-2">
-                <a href="basket.php"
-                   class="btn btn-lg btn-primary fw-semibold shadow-sm px-4"
-                   style="font-size:16px;"
-                   id="view-basket-btn">
-                    View basket<?= $basketCount > 0 ? ' (' . $basketCount . ')' : '' ?>
+                <a href="basket.php" class="catalogue-basket-btn">
+                    Basket<?= $basketCount > 0 ? ' (' . $basketCount . ')' : '' ?>
                 </a>
                 <a href="logout.php" class="btn btn-link btn-sm">Log out</a>
             </div>
@@ -1352,29 +1644,52 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
 
             <!-- Pagination -->
             <?php if ($totalPages > 1): ?>
-                <nav class="mt-4">
+                <?php
+                $baseQuery = array_filter([
+                    'tab'            => $tab,
+                    'q'              => $searchRaw,
+                    'sort'           => $sortRaw,
+                    'start_datetime' => $windowStartRaw,
+                    'end_datetime'   => $windowEndRaw,
+                    'prefetch'       => '1',
+                ], 'strlen');
+                if (!empty($categoriesSelected)) {
+                    $baseQuery['category'] = $categoriesSelected;
+                }
+                ?>
+                <nav class="catalogue-pagination mt-4" aria-label="Equipment pages">
+                    <span class="catalogue-pagination-label">Showing <?= $page ?> of <?= $totalPages ?></span>
                     <ul class="pagination">
-                        <?php
-                        $baseQuery = array_filter([
-                            'tab'            => $tab,
-                            'q'              => $searchRaw,
-                            'sort'           => $sortRaw,
-                            'start_datetime' => $windowStartRaw,
-                            'end_datetime'   => $windowEndRaw,
-                            'prefetch'       => '1',
-                        ], 'strlen');
-                        if (!empty($categoriesSelected)) {
-                            $baseQuery['category'] = $categoriesSelected;
-                        }
-                        ?>
-                        <?php for ($p = 1; $p <= $totalPages; $p++): ?>
-                            <?php $q = http_build_query(array_merge($baseQuery, ['page' => $p])); ?>
-                            <li class="page-item <?= $p === $page ? 'active' : '' ?>">
-                                <a class="page-link" href="catalogue.php?<?= $q ?>">
-                                    <?= $p ?>
+                        <?php if ($page > 1): ?>
+                            <?php $q = http_build_query(array_merge($baseQuery, ['page' => $page - 1])); ?>
+                            <li class="page-item">
+                                <a class="page-link page-link-nav" href="catalogue.php?<?= $q ?>" aria-label="Previous page">
+                                    <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                                    <span>Previous</span>
                                 </a>
                             </li>
-                        <?php endfor; ?>
+                        <?php endif; ?>
+                        <?php foreach (pagination_page_range($page, $totalPages) as $p): ?>
+                            <?php if ($p === null): ?>
+                                <li class="page-item disabled" aria-hidden="true">
+                                    <span class="page-link page-ellipsis">&hellip;</span>
+                                </li>
+                            <?php else: ?>
+                                <?php $q = http_build_query(array_merge($baseQuery, ['page' => $p])); ?>
+                                <li class="page-item <?= $p === $page ? 'active' : '' ?>">
+                                    <a class="page-link" href="catalogue.php?<?= $q ?>"><?= $p ?></a>
+                                </li>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                        <?php if ($page < $totalPages): ?>
+                            <?php $q = http_build_query(array_merge($baseQuery, ['page' => $page + 1])); ?>
+                            <li class="page-item">
+                                <a class="page-link page-link-nav" href="catalogue.php?<?= $q ?>" aria-label="Next page">
+                                    <span>Next</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                                </a>
+                            </li>
+                        <?php endif; ?>
                     </ul>
                 </nav>
             <?php endif; ?>
@@ -1884,25 +2199,48 @@ if (!empty($allowedCategoryMap) && !empty($categories)) {
 
             <!-- Kit Pagination -->
             <?php if ($totalKitPages > 1): ?>
-                <nav class="mt-4">
+                <?php
+                $kitBaseQuery = [
+                    'tab'            => 'kits',
+                    'q'              => $searchRaw,
+                    'start_datetime' => $windowStartRaw,
+                    'end_datetime'   => $windowEndRaw,
+                    'prefetch'       => 1,
+                ];
+                ?>
+                <nav class="catalogue-pagination mt-4" aria-label="Kit pages">
+                    <span class="catalogue-pagination-label">Showing <?= $kitPage ?> of <?= $totalKitPages ?></span>
                     <ul class="pagination">
-                        <?php
-                        $kitBaseQuery = [
-                            'tab'      => 'kits',
-                            'q'        => $searchRaw,
-                            'start_datetime' => $windowStartRaw,
-                            'end_datetime' => $windowEndRaw,
-                            'prefetch' => 1,
-                        ];
-                        ?>
-                        <?php for ($p = 1; $p <= $totalKitPages; $p++): ?>
-                            <?php $q = http_build_query(array_merge($kitBaseQuery, ['page' => $p])); ?>
-                            <li class="page-item <?= $p === $kitPage ? 'active' : '' ?>">
-                                <a class="page-link" href="catalogue.php?<?= $q ?>">
-                                    <?= $p ?>
+                        <?php if ($kitPage > 1): ?>
+                            <?php $q = http_build_query(array_merge($kitBaseQuery, ['page' => $kitPage - 1])); ?>
+                            <li class="page-item">
+                                <a class="page-link page-link-nav" href="catalogue.php?<?= $q ?>" aria-label="Previous page">
+                                    <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                                    <span>Previous</span>
                                 </a>
                             </li>
-                        <?php endfor; ?>
+                        <?php endif; ?>
+                        <?php foreach (pagination_page_range($kitPage, $totalKitPages) as $p): ?>
+                            <?php if ($p === null): ?>
+                                <li class="page-item disabled" aria-hidden="true">
+                                    <span class="page-link page-ellipsis">&hellip;</span>
+                                </li>
+                            <?php else: ?>
+                                <?php $q = http_build_query(array_merge($kitBaseQuery, ['page' => $p])); ?>
+                                <li class="page-item <?= $p === $kitPage ? 'active' : '' ?>">
+                                    <a class="page-link" href="catalogue.php?<?= $q ?>"><?= $p ?></a>
+                                </li>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                        <?php if ($kitPage < $totalKitPages): ?>
+                            <?php $q = http_build_query(array_merge($kitBaseQuery, ['page' => $kitPage + 1])); ?>
+                            <li class="page-item">
+                                <a class="page-link page-link-nav" href="catalogue.php?<?= $q ?>" aria-label="Next page">
+                                    <span>Next</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                                </a>
+                            </li>
+                        <?php endif; ?>
                     </ul>
                 </nav>
             <?php endif; ?>
@@ -2080,6 +2418,11 @@ function closeWindowModal() {
      aria-live="polite"
      aria-hidden="true"></div>
 
+</div><!-- end #cat-real-body -->
+<script>
+document.getElementById('cat-skeleton').remove();
+document.getElementById('cat-real-body').removeAttribute('hidden');
+</script>
 
 <!-- Quantity stepper arrows for split Add-to-Basket pill -->
 <script>
@@ -2501,10 +2844,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     if (data && typeof data.basket_count !== 'undefined') {
                         const count = parseInt(data.basket_count, 10) || 0;
-                        if (count > 0) {
-                            viewBasketBtn.textContent = 'View basket (' + count + ')';
-                        } else {
-                            viewBasketBtn.textContent = 'View basket';
+                        const badge = document.getElementById('basket-item-count');
+                        if (badge) {
+                            badge.textContent = count;
+                            badge.classList.toggle('empty', count === 0);
                         }
                         showBasketToast('Added to basket');
                     }

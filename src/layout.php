@@ -278,7 +278,7 @@ if (!function_exists('layout_render_topbar')) {
     /**
      * Render the fixed top bar showing the current page title.
      */
-    function layout_render_topbar(string $active, string $subtitle = ''): string
+    function layout_render_topbar(string $active, string $subtitle = '', int $basketCount = 0): string
     {
         $titles = [
             'index.php'              => 'Dashboard',
@@ -317,7 +317,12 @@ if (!function_exists('layout_render_topbar')) {
         $html .= '</span>';
 
         if ($active === 'catalogue.php') {
-            $html .= '<a href="basket.php" class="app-topbar-basket"><i class="bi bi-basket" aria-hidden="true"></i> View Basket</a>';
+            $emptyClass = $basketCount > 0 ? '' : ' empty';
+            $html .= '<a href="basket.php" class="catalogue-basket-btn" id="view-basket-btn">'
+                   . '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M1 2h1.5l1.8 6.5h6.4L12.5 4H4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="12" r="1" fill="currentColor"/><circle cx="11" cy="12" r="1" fill="currentColor"/></svg>'
+                   . 'Basket'
+                   . '<span class="catalogue-basket-count' . htmlspecialchars($emptyClass, ENT_QUOTES, 'UTF-8') . '" id="basket-item-count">' . (int)$basketCount . '</span>'
+                   . '</a>';
         }
         $html .= '</div>';
         return $html;
