@@ -317,7 +317,7 @@
             ? '^FT110,96^AKN,14^FB320,1,0,C^FDS/N: ' + serial + '\\&^FS'
             : '';
         return [
-            '^XA~TA000~JSN^LT' + lt + '^LS5^MNW^MTT^PON^PMN^LH0,0^JMA^PR3,3~SD25^JUS^LRN^CI28^PW406^LL203^XZ',
+            '^XA~TA000~JSN^LT' + lt + '^LS5^MNW^MTT^PON^PMN^LH0,0^JMA^PR3,3^JUS^LRN^CI28^PW406^LL203^XZ',
             '^XA^CWL,r:SWISS^XZ',
             '^XA^CWK,r:JBM_RG^XZ',
             '^XA',
@@ -415,7 +415,7 @@
         var tag = sanitizeZpl(asset.asset_tag);
         var lt = String(_cfg.labelTopOffset || 0);
         return [
-            '^XA~TA000~JSN^LT' + lt + '^LS5^MNW^MTT^PON^PMN^LH0,0^JMA^PR3,3~SD25^JUS^LRN^CI28^PW406^LL203^XZ',
+            '^XA~TA000~JSN^LT' + lt + '^LS5^MNW^MTT^PON^PMN^LH0,0^JMA^PR3,3^JUS^LRN^CI28^PW406^LL203^XZ',
             '^XA^CWL,r:SWISS^XZ',
             '^XA^CWK,r:JBM_RG^XZ',
             '^XA',
@@ -439,7 +439,7 @@
         var tag = sanitizeZpl(asset.asset_tag);
         var lt = String(_cfg.labelTopOffset || 0);
         return [
-            '^XA~TA000~JSN^LT' + lt + '^LS5^MNW^MTT^PON^PMN^LH0,0^JMA^PR3,3~SD25^JUS^LRN^CI28^PW406^LL203^XZ',
+            '^XA~TA000~JSN^LT' + lt + '^LS5^MNW^MTT^PON^PMN^LH0,0^JMA^PR3,3^JUS^LRN^CI28^PW406^LL203^XZ',
             '^XA^CWL,r:SWISS^XZ',
             '^XA^CWK,r:JBM_RG^XZ',
             '^XA',
