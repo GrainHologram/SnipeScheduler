@@ -351,7 +351,7 @@
     function buildDescriptionField(description) {
         var tiers = [
             { max: 19,  size: 38, lines: 1, x: 0,  y: 161, width: 406 },
-            { max: 32,  size: 28, lines: 1, x: 0,  y: 162, width: 406 },
+            { max: 24,  size: 28, lines: 1, x: 0,  y: 162, width: 406 },
             { max: 50,  size: 24, lines: 2, x: 5,  y: 167, width: 396 },
             { max: 120, size: 18, lines: 3, x: 13, y: 173, width: 380 },
             { max: 999, size: 14, lines: 4, x: 13, y: 175, width: 380 }
