@@ -37,6 +37,7 @@
      Catalogue sidebar — Booking Window
      Window modal
      Slot picker (merged from slot-picker.css)
+     Catalogue skeleton
 ================================================== */
 
 /* --------------------------------------------------
@@ -53,6 +54,7 @@
     --surface-card: #1c1c1c;
     --border: #262626;
     --border-subtle: #262626;
+    --border-strong: #3d3d3d;
     --border-image-sep: rgba(var(--black-rgb), 0.05);
 
     /* Typography */
@@ -1012,6 +1014,56 @@ button.app-topbar-crumb--link {
     display: none !important;
 }
 
+/* Catalogue basket button — icon + count pill style */
+.catalogue-basket-btn {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface-card);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 6px 14px;
+    color: var(--text);
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: border-color 0.15s;
+    white-space: nowrap;
+}
+
+.catalogue-basket-btn:visited {
+    color: var(--text);
+    text-decoration: none;
+}
+
+.catalogue-basket-btn:hover,
+.catalogue-basket-btn:focus-visible {
+    color: var(--text);
+    text-decoration: none;
+    border-color: var(--border-strong);
+}
+
+.catalogue-basket-count {
+    background: var(--status-info);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 99px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px;
+    line-height: 1;
+}
+
+.catalogue-basket-count.empty {
+    background: var(--border);
+    color: var(--muted);
+}
+
 
 /* --------------------------------------------------
    Tables / badges
@@ -1190,6 +1242,10 @@ button.app-topbar-crumb--link {
     transition: border-color 0.2s;
 }
 
+.model-card-v2 .card-body {
+    background: var(--surface-card);
+}
+
 .model-card-v2:hover {
     border-color: rgba(var(--text-rgb), 0.5) !important;
 }
@@ -1230,7 +1286,7 @@ button.app-topbar-crumb--link {
 .model-card-v2 .card-img-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
+    background: rgba(var(--black-rgb), 0.55);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1307,8 +1363,8 @@ button.app-topbar-crumb--link {
 /* Footer */
 .model-card-v2 .card-footer-v2 {
     padding: 10px 14px 12px;
-    background: var(--surface);
-    border-top: 1px solid var(--border);
+    background: var(--surface-card);
+    border-top: 1px solid var(--border-strong);
     flex-shrink: 0;
 }
 
@@ -1872,6 +1928,45 @@ form .form-select {
     }
 }
 
+/* --------------------------------------------------
+   Catalogue skeleton
+-------------------------------------------------- */
+@keyframes cat-skel-shimmer {
+    0%   { background-position: -600px 0; }
+    100% { background-position:  600px 0; }
+}
+
+.cat-skel {
+    background: linear-gradient(
+        90deg,
+        rgba(var(--white-rgb), 0.06) 25%,
+        rgba(var(--white-rgb), 0.13) 50%,
+        rgba(var(--white-rgb), 0.06) 75%
+    );
+    background-size: 600px 100%;
+    animation: cat-skel-shimmer 1.4s ease-in-out infinite;
+}
+
+.cat-skel-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.cat-skel-line {
+    display: block;
+    height: 13px;
+    border-radius: 3px;
+    margin-bottom: 7px;
+}
+
+.cat-skel-btn {
+    display: block;
+    height: 36px;
+    border-radius: 0.5rem;
+    margin-top: auto;
+}
+
 .filter-panel::after {
     content: "";
     position: absolute;
@@ -2007,29 +2102,87 @@ form .form-select {
    Pagination
 -------------------------------------------------- */
 
+.catalogue-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.catalogue-pagination-label {
+    font-size: 0.8125rem;
+    color: rgba(var(--text-rgb), 0.55);
+    white-space: nowrap;
+}
+
+.pagination {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.25rem;
+    padding-left: 0;
+    list-style: none;
+    margin: 0;
+}
+
+.pagination .page-item {
+    display: flex;
+}
+
 .pagination .page-link {
-    font-size: 0.9rem;
-    color: var(--primary-strong);
-    border-color: rgba(var(--primary-rgb), 0.25);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    cursor: pointer;
 }
 
 .pagination .page-link:hover,
 .pagination .page-link:focus {
-    color: var(--primary-strong);
-    background: rgba(var(--primary-rgb), 0.12);
-    border-color: rgba(var(--primary-rgb), 0.4);
-    box-shadow: 0 0 0 0.2rem rgba(var(--primary-rgb), 0.18);
+    color: var(--text);
+    background: var(--surface-card);
+    border-color: transparent;
+    box-shadow: none;
+    outline: none;
 }
 
 .pagination .page-item.active .page-link {
-    color: var(--white);
-    background: linear-gradient(120deg, var(--primary-strong), var(--primary-soft));
-    border-color: rgba(var(--primary-rgb), 0.55);
+    color: var(--text);
+    background: transparent;
+    border-color: rgba(var(--text-rgb), 0.45);
+    font-weight: 600;
 }
 
-.pagination .page-item.disabled .page-link {
-    color: rgba(var(--primary-rgb), 0.5);
-    border-color: rgba(var(--primary-rgb), 0.2);
+.pagination .page-item.active .page-link:hover,
+.pagination .page-item.active .page-link:focus {
+    background: var(--surface-card);
+    border-color: rgba(var(--text-rgb), 0.45);
+}
+
+.pagination .page-item.disabled .page-link,
+.pagination .page-link.page-ellipsis {
+    color: rgba(var(--text-rgb), 0.35);
+    background: transparent;
+    border-color: transparent;
+    cursor: default;
+    pointer-events: none;
+}
+
+.pagination .page-link.page-link-nav {
+    width: auto;
+    padding: 0 0.625rem;
+    gap: 0.25rem;
+    font-size: 0.8125rem;
 }
 
 /* --------------------------------------------------
