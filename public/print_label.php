@@ -84,10 +84,21 @@ layout_page_start([
     </div>
   </div>
 
+  <style>
+    /* Preview pane — dark backdrop so the white label pops. Scoped to this
+       page only; not worth a global :root variable. */
+    #label-preview {
+      min-height: 160px;
+      background: #2a2a2a;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 16px;
+    }
+  </style>
   <div class="card mb-3">
     <div class="card-body">
       <h6 class="card-title text-muted mb-2">Preview</h6>
-      <div id="label-preview" class="d-flex align-items-center justify-content-center" style="min-height:160px; background:#2a2a2a; border:1px solid #444; border-radius:6px; padding:16px;">
+      <div id="label-preview" class="d-flex align-items-center justify-content-center">
         <span class="text-muted small">— rendering sample… —</span>
       </div>
     </div>
