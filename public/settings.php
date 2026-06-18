@@ -484,6 +484,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $pwRaw = $post('qz_paper_width', $qzTray['paper_width'] ?? 42);
     $qzTray['paper_width']         = in_array((int)$pwRaw, [30, 42], true) ? (int)$pwRaw : 42;
     $qzTray['auto_print_checkout'] = isset($_POST['qz_auto_print']);
+    $offsetRaw = $post('qz_label_top_offset', $qzTray['label_top_offset'] ?? 0);
+    $offset    = (int)$offsetRaw;
+    if ($offset < -120) { $offset = -120; }
+    if ($offset >  120) { $offset =  120; }
+    $qzTray['label_top_offset']    = $offset;
 
     // Notifications
     $notifications = $config['notifications'] ?? [];
@@ -1307,6 +1312,11 @@ layout_page_start([
                                     <option value="42" <?= $qzPaperWidth === 42 ? 'selected' : '' ?>>80mm (42 chars)</option>
                                     <option value="30" <?= $qzPaperWidth === 30 ? 'selected' : '' ?>>58mm (30 chars)</option>
                                 </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Label printer offset (dots)</label>
+                                <input type="number" name="qz_label_top_offset" class="form-control" min="-120" max="120" step="1" value="<?= (int)$cfg(['qz_tray', 'label_top_offset'], 0) ?>">
+                                <div class="form-text">Shifts every label vertically to compensate for stock-alignment drift. Positive = content down, negative = up. Range −120 to 120 dots.</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Certificate path (PEM)</label>

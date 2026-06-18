@@ -186,6 +186,7 @@ return [
         'private_key_path'     => '',       // Absolute path to private key PEM (outside web root)
         'paper_width'          => 42,       // Chars per line: 42 for 80mm, 30 for 58mm
         'auto_print_checkout'  => false,    // Auto-print receipt on successful checkout
+        'label_top_offset'     => 0,        // ZPL ^LT offset in dots, range -120 to 120. Shifts every label vertically to compensate for stock-alignment drift. Positive = content moves down, negative = up.
     ],
 
     'smtp' => [

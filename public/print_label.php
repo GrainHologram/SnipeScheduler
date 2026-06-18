@@ -133,7 +133,8 @@ layout_page_start([
       certUrl: 'ajax_qz_cert.php',
       signUrl: 'ajax_qz_sign.php',
       fontsUrl: 'assets/label_fonts.zpl',
-      assetLookupUrl: 'ajax_asset_label_data.php'
+      assetLookupUrl: 'ajax_asset_label_data.php',
+      labelTopOffset: <?= (int)($qzCfg['label_top_offset'] ?? 0) ?>
     });
   </script>
 <?php endif; ?>
