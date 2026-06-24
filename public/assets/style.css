@@ -1046,7 +1046,7 @@ button.app-topbar-crumb--link {
 
 .catalogue-basket-count {
     background: var(--status-info);
-    color: #fff;
+    color: var(--white);
     font-size: 10px;
     font-weight: 700;
     min-width: 18px;
